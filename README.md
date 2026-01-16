@@ -18,7 +18,7 @@ AI destekli yemek tanıma, segmentasyon ve kalori tahmini sistemi.
 ## 🎯 Genel Bakış
 
 Bu sistem, yemek fotoğraflarından otomatik olarak:
-- **Yemek türünü** tanır (200+ sınıf)
+- **Yemek türünü** tanır (201+ sınıf)
 - **Porsiyon boyutunu** tahmin eder (gram)
 - **Kalori miktarını** hesaplar (kcal)
 
@@ -26,7 +26,7 @@ Bu sistem, yemek fotoğraflarından otomatik olarak:
 
 | Özellik | Açıklama |
 |---------|----------|
-| 🔍 Yemek Sınıflandırma | EfficientNet-B0 ile 200+ yemek sınıfı tanıma |
+| 🔍 Yemek Sınıflandırma | EfficientNet-B0 ile 201+ yemek sınıfı tanıma |
 | 🎨 Segmentasyon | FoodSeg103 veya YOLOv8 ile piksel düzeyinde segmentasyon |
 | ⚖️ Porsiyon Tahmini | Geometrik hesaplama ile gram cinsinden ağırlık |
 | 🔥 Kalori Hesaplama | Besin değeri veritabanı ile kalori tahmini |
