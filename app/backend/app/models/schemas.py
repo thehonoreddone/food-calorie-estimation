@@ -1,0 +1,101 @@
+"""Pydantic models for API requests and responses"""
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+
+# ============== Prediction Models ==============
+
+class PredictionRequest(BaseModel):
+    """Request model for URL-based prediction"""
+    image_url: str = Field(..., description="URL of the image to analyze")
+
+
+class PredictionResponse(BaseModel):
+    """Response model for food prediction"""
+    class_name: str = Field(..., description="Predicted food class name")
+    confidence: float = Field(..., ge=0, le=1, description="Prediction confidence (0-1)")
+    estimated_weight_grams: float = Field(..., ge=0, description="Estimated portion weight in grams")
+    estimated_calories: float = Field(..., ge=0, description="Estimated calories")
+    mask_base64: Optional[str] = Field(None, description="Base64-encoded segmentation mask")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "class_name": "pizza",
+                "confidence": 0.92,
+                "estimated_weight_grams": 150,
+                "estimated_calories": 285,
+                "mask_base64": "iVBORw0KGgo...",
+            }
+        }
+
+
+class SegmentationResult(BaseModel):
+    """Segmentation result for a single food item"""
+    class_id: int
+    class_name: str
+    confidence: float
+    bbox: List[float]  # [x1, y1, x2, y2]
+    mask_base64: Optional[str] = None
+    area_pixels: int = 0
+
+
+class DetailedPredictionResponse(BaseModel):
+    """Detailed prediction response with multiple segments"""
+    primary_class: str
+    segments: List[SegmentationResult]
+    total_calories: float
+    total_weight_grams: float
+    processing_time_ms: float
+
+
+# ============== Food Models ==============
+
+class FoodBase(BaseModel):
+    """Base food model"""
+    class_name: str = Field(..., min_length=1, max_length=100)
+    calories_per_100g: float = Field(..., ge=0, le=1000)
+    default_portion_grams: float = Field(default=100, ge=0, le=2000)
+    image_url: Optional[str] = None
+
+
+class FoodCreate(FoodBase):
+    """Model for creating a new food"""
+    pass
+
+
+class FoodUpdate(BaseModel):
+    """Model for updating a food"""
+    class_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    calories_per_100g: Optional[float] = Field(None, ge=0, le=1000)
+    default_portion_grams: Optional[float] = Field(None, ge=0, le=2000)
+    image_url: Optional[str] = None
+
+
+class FoodResponse(FoodBase):
+    """Food response model"""
+    id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class FoodListResponse(BaseModel):
+    """Paginated food list response"""
+    items: List[FoodResponse]
+    total: int
+    page: int = 1
+    page_size: int = 50
+
+
+# ============== Health Models ==============
+
+class HealthResponse(BaseModel):
+    """Health check response"""
+    status: str = "healthy"
+    version: str
+    models_loaded: bool
+    timestamp: datetime

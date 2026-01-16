@@ -1,0 +1,178 @@
+# ===========================================
+# Food Calorie Estimation - .gitignore
+# ===========================================
+
+# =============== Python ===============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# =============== Virtual Environments ===============
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# =============== IDE ===============
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# =============== Jupyter Notebooks ===============
+.ipynb_checkpoints/
+*.ipynb
+
+# =============== Node.js / Frontend ===============
+node_modules/
+.next/
+out/
+.nuxt/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============== Dataset & Models (Large Files) ===============
+# Datasets
+merged_datasetf/
+food_calorie_estimation/seg_dataset/dataset/
+*.tar.gz
+*.zip
+
+# Model files (too large for git)
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.h5
+*.pkl
+*.joblib
+
+# Training outputs
+outputs/
+runs/
+checkpoints/
+food_calorie_estimation/outputs/
+food_calorie_estimation/seg_dataset/runs/
+
+# =============== Logs & Temporary Files ===============
+logs/
+*.log
+backend.log
+backend_err.log
+
+# =============== Uploads & Results ===============
+uploads/
+results/
+
+# =============== Config & Secrets ===============
+# Firebase credentials (NEVER commit!)
+**/firebase_service_account.json
+**/firebase-adminsdk*.json
+*.pem
+*.key
+
+# Environment files with secrets
+.env.local
+.env.*.local
+.env.production
+
+# Keep example env files
+!.env.example
+!.env.local.example
+
+# =============== JSON Config Files ===============
+# These should be in Firebase, not in repo
+app/backend/config/class_names.json
+app/backend/config/densities.json
+app/backend/config/kcal_per_gram.json
+food_calorie_estimation/utils/densities.json
+food_calorie_estimation/utils/kcal_per_gram.json
+food_calorie_estimation/utils/food_types.json
+
+# =============== Test & Debug Scripts ===============
+check_*.py
+test_*.py
+verify_*.py
+inspect_*.py
+*_test.py
+*_debug.py
+
+# =============== Demo & Upload Scripts ===============
+run_demo.bat
+run_demo.ps1
+run_upload.bat
+
+# =============== Temporary Documentation ===============
+# Keep main READMEs, ignore others
+ISSUES_AND_NOTES.md
+SUNMA_SUNUMU.md
+CALISTIR_VE_DEPLOY.txt
+yapılacaklar.txt
+tez.txt
+classes.txt
+*.docx
+
+# =============== OS Generated Files ===============
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============== Docker ===============
+.docker/
+docker-compose.override.yml
+
+# =============== Misc ===============
+*.bak
+*.tmp
+*.temp
+*.cache
+.sass-cache/
+
+# =============== Coverage & Testing ===============
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/

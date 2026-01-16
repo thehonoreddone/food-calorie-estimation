@@ -1,0 +1,41 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if file is an image
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // Check file size (max 10MB)
+    function isValidSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    // Food images - public read, authenticated write
+    match /foods/{foodId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isImage() && isValidSize();
+    }
+    
+    // User uploads - private to each user
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && 
+                           request.auth.uid == userId &&
+                           isImage() && 
+                           isValidSize();
+    }
+    
+    // Prediction images - temporary storage
+    match /predictions/{predictionId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isImage() && isValidSize();
+      // Auto-delete after 24 hours via Cloud Functions
+    }
+  }
+}
