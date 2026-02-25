@@ -32,7 +32,7 @@ class PredictionService:
     def __init__(self):
         self.default_plate_diameter_cm = 25.0
         self.default_pixels_per_cm = 10.0
-        self.use_legacy = LEGACY_AVAILABLE
+        self.use_legacy = LEGACY_AVAILABLE  # Use legacy for better accuracy (YOLO model needs more training)
     
     async def initialize_legacy(self) -> bool:
         """Initialize legacy pipeline if available"""
@@ -43,7 +43,7 @@ class PredictionService:
         try:
             success = await legacy_pipeline.load()
             if success:
-                self.use_legacy = True
+                self.use_legacy = True  # Enable legacy for better accuracy
                 logger.info("✅ Using legacy pipeline for better accuracy")
             return success
         except Exception as e:

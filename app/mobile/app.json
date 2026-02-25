@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "Nutrino",
+    "slug": "nutrino",
+    "scheme": "nutrino",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#22c55e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nutrino.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs camera access to take photos of food for calorie analysis.",
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select food images for calorie analysis."
+      }
+    },
+    "android": {
+      "package": "com.nutrino.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#22c55e"
+      },
+      "edgeToEdgeEnabled": false,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photos to analyze food images.",
+          "cameraPermission": "This app needs access to your camera to take photos of food."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "This app needs access to your camera to take photos of food for analysis."
+        }
+      ],
+      "expo-router",
+      "expo-secure-store",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "nutrino",
+          "project": "nutrino-mobile"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

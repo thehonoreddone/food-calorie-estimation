@@ -64,6 +64,7 @@ class CalorieService:
         self.food_data: Dict[str, Dict[str, Any]] = {}
         self.densities: Dict[str, float] = {}
         self.kcal_per_100g: Dict[str, float] = {}
+        self.typical_portions: Dict[str, Any] = {}
         # Load defaults immediately
         self.densities = FOODSEG103_DENSITIES.copy()
         self.kcal_per_100g = FOODSEG103_KCAL.copy()
@@ -71,6 +72,7 @@ class CalorieService:
     async def initialize(self) -> None:
         """Initialize service by loading data from Firebase/Config"""
         await self._load_data()
+        self._load_typical_portions()
 
     async def _load_data(self) -> None:
         """Load food data from Firebase, JSON files or use FoodSeg103 defaults"""
@@ -140,6 +142,27 @@ class CalorieService:
         # Build combined food data
         self._build_food_data()
     
+    def _load_typical_portions(self) -> None:
+        """Load typical portion weights from config"""
+        portions_paths = [
+            Path("config/typical_portions.json"),
+            Path("../infrastructure/shared/typical_portions.json"),
+            Path("../../food_calorie_estimation/utils/typical_portions.json"),
+        ]
+        
+        for path in portions_paths:
+            if path.exists():
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded_portions = json.load(f)
+                    # Remove comment keys
+                    loaded_portions = {k: v for k, v in loaded_portions.items() if not k.startswith('_')}
+                    self.typical_portions.update(loaded_portions)
+                    logger.info(f"Loaded {len(loaded_portions)} typical portions from {path}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to load {path}: {e}")
+    
     def _build_food_data(self) -> None:
         """Build combined food data dictionary"""
         # Combine all food classes
@@ -196,6 +219,46 @@ class CalorieService:
         """Get food density in g/cm³"""
         info = self.get_food_info(class_name)
         return info.get("density", 0.85)
+    
+    def get_typical_portion(self, class_name: str) -> Dict[str, Any]:
+        """Get typical portion info for a food class"""
+        class_name_lower = class_name.lower().replace(' ', '_').replace('-', '_')
+        
+        if class_name_lower in self.typical_portions:
+            return self.typical_portions[class_name_lower]
+        
+        # Try partial match
+        for key in self.typical_portions:
+            if key in class_name_lower or class_name_lower in key:
+                return self.typical_portions[key]
+        
+        # Default portion
+        return {"typical": 150, "min": 75, "max": 300}
+    
+    def validate_weight(self, class_name: str, weight_grams: float) -> float:
+        """Validate and adjust weight based on typical portions"""
+        portion_info = self.get_typical_portion(class_name)
+        
+        if isinstance(portion_info, dict):
+            typical = portion_info.get("typical", 150)
+            min_w = portion_info.get("min", typical * 0.5)
+            max_w = portion_info.get("max", typical * 1.5)
+        else:
+            typical = portion_info
+            min_w = typical * 0.5
+            max_w = typical * 1.5
+        
+        # If weight is outside reasonable range, use typical
+        if weight_grams < min_w * 0.5 or weight_grams > max_w * 2:
+            logger.warning(
+                f"Weight {weight_grams:.1f}g outside typical range "
+                f"[{min_w:.1f}, {max_w:.1f}]g for {class_name}. "
+                f"Using typical: {typical:.1f}g"
+            )
+            return typical
+        
+        # Clip to reasonable range
+        return max(min_w, min(weight_grams, max_w))
     
     def add_food(
         self,

@@ -63,10 +63,16 @@ yarn-error.log*
 
 # =============== Dataset & Models (Large Files) ===============
 # Datasets
+datasets/
 merged_datasetf/
+manual_annotations_dataset_v3/
 food_calorie_estimation/seg_dataset/dataset/
+food_calorie_estimation/seg_dataset/sam_annotation/
 *.tar.gz
 *.zip
+
+# Label Studio exports
+project-3-at-*.json
 
 # Model files (too large for git)
 *.pt
