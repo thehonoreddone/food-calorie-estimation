@@ -46,6 +46,7 @@ export default function RootLayout() {
             <Stack.Screen name="auth" />
             <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
             <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+            <Stack.Screen name="diet-recommendation" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="notifications" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="help" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           </Stack>

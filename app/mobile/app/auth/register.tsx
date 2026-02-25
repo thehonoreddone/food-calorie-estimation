@@ -42,11 +42,20 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      const success = await register(name, email, password);
-      if (success) {
-        router.replace('/(tabs)');
+      const result = await register(name, email, password);
+      if (result.success) {
+        Alert.alert(
+          'Kayıt Başarılı! 🎉',
+          'Hesabınız oluşturuldu. E-posta adresinize bir doğrulama bağlantısı gönderdik. Lütfen e-postanızı kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın.',
+          [
+            {
+              text: 'Tamam',
+              onPress: () => router.replace('/(tabs)'),
+            },
+          ],
+        );
       } else {
-        Alert.alert('Hata', 'Kayıt başarısız. Tekrar deneyin.');
+        Alert.alert('Kayıt Başarısız', result.error ?? 'Tekrar deneyin.');
       }
     } catch {
       Alert.alert('Hata', 'Bir sorun oluştu. Tekrar deneyin.');

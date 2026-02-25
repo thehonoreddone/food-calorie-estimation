@@ -1,5 +1,6 @@
 // ─── Firebase Auth Service ──────────────────────────────────────────────────
 // Email/Password authentication via Firebase Auth
+// Email doğrulama + şifre sıfırlama dahil
 // ────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -9,6 +10,7 @@ import {
   updateProfile,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  sendEmailVerification,
   User,
   UserCredential,
 } from 'firebase/auth';
@@ -38,8 +40,36 @@ export interface FirebaseUserProfile {
 // ─── Auth Functions ──────────────────────────────────────────────────────────
 
 /**
+ * Firebase hata kodlarını kullanıcı dostu Türkçe mesajlara çevirir
+ */
+export function getFirebaseErrorMessage(error: unknown): string {
+  const code = (error as { code?: string })?.code ?? '';
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'Bu e-posta adresi zaten kullanımda.';
+    case 'auth/invalid-email':
+      return 'Geçersiz e-posta adresi.';
+    case 'auth/weak-password':
+      return 'Şifre çok zayıf. En az 6 karakter kullanın.';
+    case 'auth/user-not-found':
+    case 'auth/invalid-credential':
+      return 'E-posta veya şifre hatalı.';
+    case 'auth/wrong-password':
+      return 'Şifre hatalı.';
+    case 'auth/too-many-requests':
+      return 'Çok fazla deneme yapıldı. Lütfen biraz bekleyin.';
+    case 'auth/user-disabled':
+      return 'Bu hesap devre dışı bırakılmış.';
+    case 'auth/network-request-failed':
+      return 'İnternet bağlantınızı kontrol edin.';
+    default:
+      return 'Bir hata oluştu. Lütfen tekrar deneyin.';
+  }
+}
+
+/**
  * Register a new user with email/password
- * Also creates a Firestore user profile document
+ * Sends email verification and creates Firestore profile
  */
 export async function firebaseRegister(
   name: string,
@@ -52,14 +82,26 @@ export async function firebaseRegister(
   // Set display name
   await updateProfile(user, { displayName: name });
 
-  // Create user profile in Firestore
-  await setDoc(doc(db, 'users', user.uid), {
-    uid: user.uid,
-    name,
-    email,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  // Send verification email
+  try {
+    await sendEmailVerification(user);
+  } catch (verifyErr) {
+    console.warn('Email verification could not be sent:', verifyErr);
+  }
+
+  // Create user profile in Firestore (wrapped in try-catch so auth user isn't lost)
+  try {
+    await setDoc(doc(db, 'users', user.uid), {
+      uid: user.uid,
+      name,
+      email,
+      emailVerified: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (firestoreErr) {
+    console.warn('Firestore profile creation failed (will retry on next login):', firestoreErr);
+  }
 
   return user;
 }
@@ -72,7 +114,33 @@ export async function firebaseLogin(
   password: string
 ): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  return credential.user;
+  const user = credential.user;
+
+  // Sync email verification status to Firestore
+  try {
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        emailVerified: user.emailVerified,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch {
+    // Non-critical — ignore
+  }
+
+  return user;
+}
+
+/**
+ * Resend verification email (e.g. if user didn't receive it)
+ */
+export async function resendVerificationEmail(): Promise<void> {
+  const user = auth.currentUser;
+  if (user && !user.emailVerified) {
+    await sendEmailVerification(user);
+  }
 }
 
 /**

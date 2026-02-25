@@ -52,19 +52,18 @@
         }
       ],
       "expo-router",
-      "expo-secure-store",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "nutrino",
-          "project": "nutrino-mobile"
-        }
-      ]
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {
         "projectId": "YOUR_EAS_PROJECT_ID"
       }
+    },
+    "updates": {
+      "enabled": false
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     }
   }
 }

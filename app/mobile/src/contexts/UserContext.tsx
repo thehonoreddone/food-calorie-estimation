@@ -8,6 +8,7 @@ import {
   getUserProfile,
   updateUserProfile,
   onAuthChanged,
+  getFirebaseErrorMessage,
 } from '../services/firebaseAuth';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -45,8 +46,8 @@ interface UserState {
 interface UserContextType extends UserState {
   updateProfile: (updates: Partial<UserProfile>) => void;
   completeOnboarding: () => Promise<void>;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   calculateDailyCalories: () => number;
   initializeState: () => Promise<void>;
@@ -83,8 +84,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const firebaseUser = getCurrentUser();
 
       if (firebaseUser) {
-        // User is signed in — load profile from Firestore
-        const firestoreProfile = await getUserProfile(firebaseUser.uid);
+        // User is signed in — try to load profile from Firestore
+        let firestoreProfile = null;
+        try {
+          firestoreProfile = await getUserProfile(firebaseUser.uid);
+        } catch (fsErr) {
+          console.warn('Firestore profile load failed (using local only):', fsErr);
+        }
+
         const localProfileRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
         const localProfile: UserProfile = localProfileRaw
           ? (JSON.parse(localProfileRaw) as UserProfile)
@@ -175,12 +182,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, hasCompletedOnboarding: true }));
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const user = await firebaseLogin(email, password);
 
-      // Load Firestore profile
-      const firestoreProfile = await getUserProfile(user.uid);
+      // Load Firestore profile (non-critical if it fails)
+      let firestoreProfile = null;
+      try {
+        firestoreProfile = await getUserProfile(user.uid);
+      } catch (fsErr) {
+        console.warn('Firestore profile load after login failed:', fsErr);
+      }
+
       const localRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
       const localProfile: UserProfile = localRaw ? (JSON.parse(localRaw) as UserProfile) : {};
 
@@ -201,19 +214,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
         isAuthenticated: true,
         profile: mergedProfile,
       }));
-      return true;
+      return { success: true };
     } catch (error) {
-      console.error('Firebase login error:', error);
-      return false;
+      console.warn('Firebase login error:', (error as {code?: string})?.code);
+      return { success: false, error: getFirebaseErrorMessage(error) };
     }
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string): Promise<boolean> => {
+  const register = useCallback(async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const user = await firebaseRegister(name, email, password);
 
-      // Load full profile from Firestore and merge with local
-      const firestoreProfile = await getUserProfile(user.uid);
+      // Load full profile from Firestore and merge with local (non-critical)
+      let firestoreProfile = null;
+      try {
+        firestoreProfile = await getUserProfile(user.uid);
+      } catch (fsErr) {
+        console.warn('Firestore profile load after register failed:', fsErr);
+      }
+
       const existingRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
       const existing: UserProfile = existingRaw ? (JSON.parse(existingRaw) as UserProfile) : {};
 
@@ -236,10 +255,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         profile: mergedProfile,
       }));
 
-      return true;
+      return { success: true };
     } catch (error) {
-      console.error('Firebase register error:', error);
-      return false;
+      console.warn('Firebase register error:', (error as {code?: string})?.code);
+      return { success: false, error: getFirebaseErrorMessage(error) };
     }
   }, []);
 

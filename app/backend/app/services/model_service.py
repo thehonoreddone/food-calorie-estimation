@@ -103,10 +103,11 @@ class ModelService:
             # Try primary model path first
             model_path = Path(settings.YOLO_MODEL_PATH)
             
-            # Check alternative paths for models (prioritize food201_seg_best.pt)
+            # Check alternative paths for models (prioritize food_seg_best.pt)
             possible_paths = [
                 model_path,
-                Path("models") / "food201_seg_best.pt",  # NEW: 201-class SAM-annotated model
+                Path("models") / "food_seg_best.pt",  # NEW: Training output model
+                Path("models") / "food201_seg_best.pt", # Legacy model fallback
                 Path("models") / "foodseg103_seg.pt",
                 Path("..") / "foodseg103_seg.pt",
                 Path(settings.YOLO_FALLBACK_MODEL),

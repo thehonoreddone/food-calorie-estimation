@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     
     # ML Models
-    YOLO_MODEL_PATH: str = "models/food201_seg_best.pt"
+    YOLO_MODEL_PATH: str = "models/food_seg_best.pt"
     YOLO_FALLBACK_MODEL: str = "yolov8n-seg.pt"
     CONFIDENCE_THRESHOLD: float = 0.25
     IOU_THRESHOLD: float = 0.45

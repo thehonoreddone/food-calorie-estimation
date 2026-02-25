@@ -72,7 +72,9 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  Uygulama emulator'de acilacak!" -ForegroundColor Green
 Write-Host "  Ctrl+C ile durdurabilirsiniz." -ForegroundColor Gray
+Write-Host "  Dosya kaydettiginizde otomatik yenilenir (Fast Refresh)" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-npx expo start --android
+# --clear: eski cache'i temizle, her zaman guncel kodu yukle
+npx expo start --android --clear

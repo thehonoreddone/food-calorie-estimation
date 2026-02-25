@@ -66,7 +66,7 @@ export default function HelpScreen() {
   };
 
   const handleContact = () => {
-    Linking.openURL('mailto:support@nutrino.app?subject=Nutrino Destek').catch(() => {
+    Linking.openURL('mailto:nutrinooapp@gmail.com?subject=Nutrino Destek').catch(() => {
       Alert.alert('Hata', 'E-posta uygulaması açılamadı.');
     });
   };
@@ -159,7 +159,7 @@ export default function HelpScreen() {
           </Text>
           <TouchableOpacity onPress={handleContact} style={styles.contactButton}>
             <Text style={styles.contactIcon}>✉️</Text>
-            <Text style={styles.contactLabel}>support@nutrino.app</Text>
+            <Text style={styles.contactLabel}>nutrinooapp@gmail.com</Text>
           </TouchableOpacity>
         </View>
 

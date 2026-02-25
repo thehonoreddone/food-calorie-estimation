@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,149 @@ import {
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ─── Food calorie database (kcal per gram) ──────────────────────────────────
+const FOOD_KCAL_PER_GRAM: Record<string, number> = {
+  "apple_pie": 2.37, "baby_back_ribs": 2.9, "baklava": 4.3, "beef_carpaccio": 1.5,
+  "beef_tartare": 1.5, "beet_salad": 0.6, "beignets": 3.5, "bibimbap": 1.3,
+  "bread_pudding": 2.5, "breakfast_burrito": 1.8, "bruschetta": 1.5, "caesar_salad": 1.2,
+  "cannoli": 3.2, "caprese_salad": 1.5, "carrot_cake": 3.1, "ceviche": 0.9,
+  "cheese_plate": 3.5, "cheesecake": 3.2, "chicken_curry": 1.5, "chicken_quesadilla": 2.2,
+  "chicken_wings": 2.5, "chocolate_cake": 3.7, "chocolate_mousse": 2.5, "churros": 3.8,
+  "clam_chowder": 0.8, "club_sandwich": 1.8, "crab_cakes": 1.9, "creme_brulee": 2.8,
+  "croque_madame": 2.5, "cup_cakes": 3.0, "deviled_eggs": 1.9, "donuts": 4.0,
+  "dumplings": 1.6, "edamame": 1.2, "eggs_benedict": 2.2, "escargots": 1.8,
+  "falafel": 2.8, "filet_mignon": 2.7, "fish_and_chips": 2.4, "foie_gras": 4.6,
+  "french_fries": 3.1, "french_onion_soup": 0.5, "french_toast": 2.2,
+  "fried_calamari": 2.0, "fried_rice": 1.6, "frozen_yogurt": 1.2, "garlic_bread": 3.5,
+  "gnocchi": 1.3, "greek_salad": 0.9, "grilled_cheese_sandwich": 2.8,
+  "grilled_salmon": 2.0, "guacamole": 1.6, "gyoza": 1.8, "hamburger": 2.5,
+  "hot_and_sour_soup": 0.4, "hot_dog": 2.9, "huevos_rancheros": 1.4, "hummus": 1.7,
+  "ice_cream": 2.1, "lasagna": 1.7, "lobster_bisque": 1.0, "lobster_roll_sandwich": 1.9,
+  "macaroni_and_cheese": 2.0, "macarons": 4.0, "miso_soup": 0.2, "mussels": 1.0,
+  "nachos": 2.8, "omelette": 1.6, "onion_rings": 3.2, "oysters": 0.7,
+  "pad_thai": 1.4, "paella": 1.4, "pancakes": 2.3, "panna_cotta": 2.5,
+  "peking_duck": 2.5, "pho": 0.4, "pizza": 2.7, "pork_chop": 2.5, "poutine": 2.0,
+  "prime_rib": 2.9, "pulled_pork_sandwich": 2.0, "ramen": 0.9, "ravioli": 1.5,
+  "red_velvet_cake": 3.5, "risotto": 1.3, "samosa": 2.6, "sashimi": 1.3,
+  "scallops": 1.0, "seaweed_salad": 0.7, "shrimp_and_grits": 1.2,
+  "spaghetti_bolognese": 1.3, "spaghetti_carbonara": 1.6, "spring_rolls": 2.2,
+  "steak": 2.5, "strawberry_shortcake": 2.4, "sushi": 1.4, "tacos": 1.8,
+  "takoyaki": 1.8, "tiramisu": 2.9, "tuna_tartare": 1.2, "waffles": 3.0,
+  // Turkish foods
+  "çay": 0.01, "cay": 0.01, "tea": 0.01, "coffee": 0.02, "türk kahvesi": 0.1,
+  "turk_kahvesi": 0.1, "espresso": 0.03, "ayran": 0.4, "milk": 0.6,
+  "orange_juice": 0.45, "water": 0.0, "soup": 0.4, "lokma": 3.8, "sarma": 1.2,
+  "dolma": 1.4, "köfte": 2.5, "kofte": 2.5, "lahmacun": 2.2, "pide": 2.0,
+  "börek": 3.0, "borek": 3.0, "künefe": 3.5, "kunefe": 3.5, "simit": 2.8,
+  "menemen": 1.2, "mercimek çorbası": 0.6, "mercimek_corbasi": 0.6, "iskender": 2.0,
+  "döner": 2.2, "doner": 2.2, "adana kebap": 2.3, "adana_kebab": 2.3,
+  "urfa kebap": 2.3, "urfa_kebab": 2.3,
+  // General
+  "candy": 3.8, "egg_tart": 2.8, "chocolate": 5.46, "biscuit": 4.6, "popcorn": 3.87,
+  "pudding": 1.3, "bread": 2.65, "cake": 3.47, "pancake": 2.27, "pastry": 3.8,
+  "peach": 0.39, "pear": 0.57, "strawberry": 0.32, "apple": 0.52, "grape": 0.69,
+  "orange": 0.47, "kiwi": 0.61, "watermelon": 0.3, "banana": 0.89, "cherry": 0.5,
+  "blueberry": 0.57, "raspberry": 0.52, "mango": 0.6, "pineapple": 0.5,
+  "bean": 0.31, "pea": 0.81, "lentil": 1.16, "peanut": 5.67, "cashew": 5.53,
+  "walnut": 6.54, "almond": 5.79, "hazelnut": 6.28, "pistachio": 5.6,
+  "rice": 1.3, "beef": 2.5, "pork": 2.42, "chicken": 2.39, "ham": 1.45,
+  "duck": 3.37, "fish": 2.06, "shrimp": 0.99, "seafood": 1.2, "vegetable": 0.25,
+  "lettuce": 0.14, "spinach": 0.23, "broccoli": 0.34, "pasta": 1.31, "noodles": 1.38,
+  "egg": 1.55, "yogurt": 0.59, "cheese": 4.02, "butter": 7.17, "honey": 3.04,
+  "pilav": 1.3, "salata": 0.6, "tavuk": 2.39, "et": 2.5, "balık": 2.06,
+  "makarna": 1.31, "çorba": 0.4, "ekmek": 2.65, "yumurta": 1.55, "peynir": 4.02,
+  "süt": 0.42, "yoğurt": 0.59, "tereyağı": 7.17, "bal": 3.04, "reçel": 2.78,
+  "patates kızartması": 3.1, "kuru fasulye": 1.2, "nohut": 1.6, "bulgur": 3.42,
+  "pirinç": 1.3, "sebze": 0.25, "meyve": 0.5, "kabak": 0.26, "domates": 0.18,
+  "salatalık": 0.15, "biber": 0.31, "soğan": 0.4, "havuç": 0.41, "mantar": 0.22,
+  "mısır": 0.96, "patates": 0.77, "tost": 2.5, "sandviç": 2.5, "hamburger_tr": 2.95,
+  "tantuni": 2.0, "çiğ köfte": 1.5, "gözleme": 2.2, "karnıyarık": 1.3,
+  "imam bayıldı": 1.1, "mantı": 1.8, "pilav üstü döner": 2.0,
+};
+
+// Turkish display names for food database
+const FOOD_DISPLAY_NAMES: Record<string, string> = {
+  "apple_pie": "Elmalı Turta", "baklava": "Baklava", "bibimbap": "Bibimbap",
+  "caesar_salad": "Sezar Salata", "cheesecake": "Cheesecake", "chicken_curry": "Tavuk Köri",
+  "chicken_wings": "Tavuk Kanat", "chocolate_cake": "Çikolatalı Kek",
+  "churros": "Churros", "donuts": "Donut", "falafel": "Falafel",
+  "french_fries": "Patates Kızartması", "fried_rice": "Kızarmış Pilav",
+  "greek_salad": "Yunan Salatası", "hamburger": "Hamburger", "hot_dog": "Sosisli",
+  "ice_cream": "Dondurma", "lasagna": "Lazanya", "nachos": "Nachos",
+  "omelette": "Omlet", "pad_thai": "Pad Thai", "pancakes": "Pankek",
+  "pizza": "Pizza", "ramen": "Ramen", "risotto": "Risotto",
+  "spaghetti_bolognese": "Bolonez Makarna", "steak": "Biftek", "sushi": "Suşi",
+  "tacos": "Taco", "tiramisu": "Tiramisu", "waffles": "Waffle",
+  "çay": "Çay", "coffee": "Kahve", "türk kahvesi": "Türk Kahvesi",
+  "ayran": "Ayran", "lokma": "Lokma", "sarma": "Sarma", "dolma": "Dolma",
+  "köfte": "Köfte", "lahmacun": "Lahmacun", "pide": "Pide",
+  "börek": "Börek", "künefe": "Künefe", "simit": "Simit", "menemen": "Menemen",
+  "mercimek çorbası": "Mercimek Çorbası", "iskender": "İskender",
+  "döner": "Döner", "adana kebap": "Adana Kebap", "urfa kebap": "Urfa Kebap",
+  "rice": "Pilav", "chicken": "Tavuk", "beef": "Et", "fish": "Balık",
+  "pasta": "Makarna", "bread": "Ekmek", "egg": "Yumurta", "cheese": "Peynir",
+  "yogurt": "Yoğurt", "honey": "Bal", "banana": "Muz", "apple": "Elma",
+  "orange": "Portakal", "strawberry": "Çilek", "watermelon": "Karpuz",
+  "grape": "Üzüm", "cherry": "Kiraz", "pear": "Armut", "peach": "Şeftali",
+  "mango": "Mango", "pineapple": "Ananas", "kiwi": "Kivi",
+  "spinach": "Ispanak", "broccoli": "Brokoli", "lettuce": "Marul",
+  "pilav": "Pilav", "salata": "Salata", "tavuk": "Tavuk", "et": "Et",
+  "balık": "Balık", "makarna": "Makarna", "çorba": "Çorba", "ekmek": "Ekmek",
+  "yumurta": "Yumurta", "peynir": "Peynir", "süt": "Süt", "yoğurt": "Yoğurt",
+  "tereyağı": "Tereyağı", "bal": "Bal", "reçel": "Reçel",
+  "patates kızartması": "Patates Kızartması", "kuru fasulye": "Kuru Fasulye",
+  "nohut": "Nohut", "bulgur": "Bulgur", "pirinç": "Pirinç",
+  "sebze": "Sebze", "meyve": "Meyve", "salatalık": "Salatalık",
+  "domates": "Domates", "biber": "Biber", "soğan": "Soğan", "havuç": "Havuç",
+  "mantar": "Mantar", "mısır": "Mısır", "patates": "Patates",
+  "tost": "Tost", "sandviç": "Sandviç", "tantuni": "Tantuni",
+  "çiğ köfte": "Çiğ Köfte", "gözleme": "Gözleme", "karnıyarık": "Karnıyarık",
+  "imam bayıldı": "İmam Bayıldı", "mantı": "Mantı",
+  "pilav üstü döner": "Pilav Üstü Döner",
+  "chocolate": "Çikolata", "candy": "Şeker", "popcorn": "Patlamış Mısır",
+  "pudding": "Puding", "cake": "Kek", "pastry": "Pasta/Börek",
+  "walnut": "Ceviz", "hazelnut": "Fındık", "almond": "Badem",
+  "pistachio": "Antep Fıstığı", "peanut": "Yer Fıstığı",
+};
+
+/** Return kcal/g for a food name (case-insensitive fuzzy match) */
+function findFoodKcal(name: string): { key: string; kcalPerGram: number } | null {
+  const lower = name.toLowerCase().trim();
+  if (!lower) return null;
+  // Direct match
+  if (FOOD_KCAL_PER_GRAM[lower] !== undefined) {
+    return { key: lower, kcalPerGram: FOOD_KCAL_PER_GRAM[lower] };
+  }
+  // Partial match (food key contains input or input contains food key)
+  const entries = Object.entries(FOOD_KCAL_PER_GRAM);
+  for (const [key, val] of entries) {
+    const keyNorm = key.replace(/_/g, ' ').toLowerCase();
+    if (keyNorm.includes(lower) || lower.includes(keyNorm)) {
+      return { key, kcalPerGram: val };
+    }
+  }
+  return null;
+}
+
+/** Get food suggestions for autocomplete */
+function getFoodSuggestions(query: string): { key: string; display: string; kcalPerGram: number }[] {
+  const lower = query.toLowerCase().trim();
+  if (!lower || lower.length < 2) return [];
+  const results: { key: string; display: string; kcalPerGram: number }[] = [];
+  for (const [key, val] of Object.entries(FOOD_KCAL_PER_GRAM)) {
+    const keyNorm = key.replace(/_/g, ' ').toLowerCase();
+    const display = FOOD_DISPLAY_NAMES[key] ?? key.replace(/_/g, ' ');
+    if (keyNorm.includes(lower) || display.toLowerCase().includes(lower)) {
+      // Avoid duplicates (same display)
+      if (!results.find(r => r.display === display)) {
+        results.push({ key, display, kcalPerGram: val });
+      }
+    }
+    if (results.length >= 8) break;
+  }
+  return results;
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -95,8 +238,9 @@ export default function HomeTab() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualMealType, setManualMealType] = useState<MealType>('lunch');
   const [manualFoodName, setManualFoodName] = useState('');
-  const [manualCalories, setManualCalories] = useState('');
   const [manualWeight, setManualWeight] = useState('');
+  const [showFoodSuggestions, setShowFoodSuggestions] = useState(false);
+  const [selectedFoodKcal, setSelectedFoodKcal] = useState<number | null>(null);
 
   // Exercise modal state
   const [showExerciseModal, setShowExerciseModal] = useState(false);
@@ -105,6 +249,17 @@ export default function HomeTab() {
   const [exerciseCalories, setExerciseCalories] = useState('');
 
   const calendarRef = useRef<FlatList>(null);
+
+  // ─── Computed meal calorie ────────────────────────────────────────
+  const manualCaloriesComputed = useMemo(() => {
+    const w = parseInt(manualWeight) || 0;
+    if (!selectedFoodKcal || w <= 0) return 0;
+    return Math.round(selectedFoodKcal * w);
+  }, [selectedFoodKcal, manualWeight]);
+
+  const foodSuggestions = useMemo(() => {
+    return getFoodSuggestions(manualFoodName);
+  }, [manualFoodName]);
 
   // ─── Load data ──────────────────────────────────────────────────────
   const loadData = useCallback(async (date: Date) => {
@@ -188,8 +343,23 @@ export default function HomeTab() {
       Alert.alert('Hata', 'Yemek adı girmelisiniz.');
       return;
     }
-    const cal = parseInt(manualCalories) || 0;
     const weight = parseInt(manualWeight) || 0;
+    if (weight <= 0) {
+      Alert.alert('Hata', 'Lütfen porsiyon ağırlığını (gram) girin.');
+      return;
+    }
+    // Auto-calc calories from food database
+    let cal = manualCaloriesComputed;
+    if (cal <= 0) {
+      // Fallback: try finding kcal/g for the entered food name
+      const found = findFoodKcal(manualFoodName);
+      if (found) {
+        cal = Math.round(found.kcalPerGram * weight);
+      } else {
+        // Use default 1.5 kcal/g if food not found
+        cal = Math.round(1.5 * weight);
+      }
+    }
     try {
       const id = await logMeal(profile.uid, {
         date: formatDateKey(selectedDate),
@@ -204,8 +374,8 @@ export default function HomeTab() {
       setMeals(prev => [{ id, uid: profile.uid!, date: formatDateKey(selectedDate), mealType: manualMealType, foodName: manualFoodName.trim(), calories: cal, protein: Math.round(cal * 0.25 / 4), carbs: Math.round(cal * 0.45 / 4), fat: Math.round(cal * 0.30 / 9), weight }, ...prev]);
       setShowManualModal(false);
       setManualFoodName('');
-      setManualCalories('');
       setManualWeight('');
+      setSelectedFoodKcal(null);
     } catch (err) {
       console.error('Manual add error:', err);
       Alert.alert('Hata', 'Kayıt eklenemedi.');
@@ -240,8 +410,9 @@ export default function HomeTab() {
   const openManualModal = (mealType: MealType) => {
     setManualMealType(mealType);
     setManualFoodName('');
-    setManualCalories('');
     setManualWeight('');
+    setSelectedFoodKcal(null);
+    setShowFoodSuggestions(false);
     setShowManualModal(true);
   };
 
@@ -356,6 +527,20 @@ export default function HomeTab() {
             {consumedCalories} / {dailyTarget} kcal ({Math.round(calorieProgress * 100)}%)
           </Text>
         </View>
+
+        {/* Diet Plan & Weekly Report shortcut */}
+        <TouchableOpacity
+          style={[styles.dietPlanBtn, Shadows.sm]}
+          onPress={() => router.push('/diet-recommendation')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.dietPlanBtnIcon}>🥗</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dietPlanBtnText}>Diyet Önerisi & Haftalık Rapor</Text>
+            <Text style={styles.dietPlanBtnSub}>Kişisel yemek planı ve analiz</Text>
+          </View>
+          <Text style={{ fontSize: 16, color: Colors.text.light }}>›</Text>
+        </TouchableOpacity>
 
         {isLoading && !dataLoaded ? (
           <View style={styles.loadingContainer}>
@@ -500,27 +685,67 @@ export default function HomeTab() {
 
             <TextInput
               style={styles.input}
-              placeholder="Yemek adı"
+              placeholder="Yemek adı (ör: pizza, döner, pilav)"
               placeholderTextColor={Colors.text.light}
               value={manualFoodName}
-              onChangeText={setManualFoodName}
+              onChangeText={(text) => {
+                setManualFoodName(text);
+                setShowFoodSuggestions(true);
+                // Auto-detect kcal/g
+                const found = findFoodKcal(text);
+                if (found) {
+                  setSelectedFoodKcal(found.kcalPerGram);
+                } else {
+                  setSelectedFoodKcal(null);
+                }
+              }}
             />
+
+            {/* Food suggestions */}
+            {showFoodSuggestions && foodSuggestions.length > 0 && (
+              <ScrollView style={styles.suggestionsContainer} nestedScrollEnabled>
+                {foodSuggestions.map((item) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={styles.suggestionItem}
+                    onPress={() => {
+                      setManualFoodName(item.display);
+                      setSelectedFoodKcal(item.kcalPerGram);
+                      setShowFoodSuggestions(false);
+                    }}
+                  >
+                    <Text style={styles.suggestionText}>{item.display}</Text>
+                    <Text style={styles.suggestionKcal}>{item.kcalPerGram} kcal/g</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
             <TextInput
               style={styles.input}
-              placeholder="Kalori (kcal)"
-              placeholderTextColor={Colors.text.light}
-              keyboardType="numeric"
-              value={manualCalories}
-              onChangeText={setManualCalories}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Ağırlık (gram) - opsiyonel"
+              placeholder="Porsiyon ağırlığı (gram)"
               placeholderTextColor={Colors.text.light}
               keyboardType="numeric"
               value={manualWeight}
               onChangeText={setManualWeight}
             />
+
+            {/* Auto-calculated calorie display */}
+            <View style={styles.calorieDisplay}>
+              <Text style={styles.calorieDisplayLabel}>Tahmini Kalori:</Text>
+              <Text style={styles.calorieDisplayValue}>
+                {manualCaloriesComputed > 0
+                  ? `${manualCaloriesComputed} kcal`
+                  : selectedFoodKcal
+                    ? 'Gram girin'
+                    : 'Yemek seçin'}
+              </Text>
+              {selectedFoodKcal !== null && (
+                <Text style={styles.calorieDisplayHint}>
+                  ({selectedFoodKcal} kcal/g)
+                </Text>
+              )}
+            </View>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -594,13 +819,18 @@ export default function HomeTab() {
               }}
             />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: Colors.neutral[100], color: Colors.text.secondary }]}
               placeholder="Yakılan kalori (kcal)"
               placeholderTextColor={Colors.text.light}
               keyboardType="numeric"
               value={exerciseCalories}
-              onChangeText={setExerciseCalories}
+              editable={false}
             />
+            {!exerciseCalories && (
+              <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+                Egzersiz türü ve süre seçin, kalori otomatik hesaplanır
+              </Text>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -986,5 +1216,86 @@ const styles = StyleSheet.create({
   },
   exerciseChipTextActive: {
     color: '#fff',
+  },
+  // Diet plan shortcut
+  dietPlanBtn: {
+    backgroundColor: Colors.primary[50],
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+    gap: Spacing.md,
+  },
+  dietPlanBtnIcon: {
+    fontSize: 28,
+  },
+  dietPlanBtnText: {
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    color: Colors.primary[700],
+  },
+  dietPlanBtnSub: {
+    fontSize: FontSize.xs,
+    color: Colors.primary[500],
+    marginTop: 1,
+  },
+  // Food suggestions
+  suggestionsContainer: {
+    maxHeight: 160,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.neutral[100],
+  },
+  suggestionText: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    flex: 1,
+  },
+  suggestionKcal: {
+    fontSize: FontSize.xs,
+    color: Colors.primary[600],
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  // Calorie display
+  calorieDisplay: {
+    backgroundColor: Colors.primary[50],
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+    alignItems: 'center',
+  },
+  calorieDisplayLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: '500',
+  },
+  calorieDisplayValue: {
+    fontSize: FontSize.xl,
+    fontWeight: '800',
+    color: Colors.primary[700],
+    marginTop: 4,
+  },
+  calorieDisplayHint: {
+    fontSize: FontSize.xs,
+    color: Colors.text.light,
+    marginTop: 2,
   },
 });

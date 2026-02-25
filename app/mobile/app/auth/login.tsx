@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { PrimaryButton } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
-import { firebaseResetPassword } from '@/services/firebaseAuth';
+import { firebaseResetPassword, getFirebaseErrorMessage } from '@/services/firebaseAuth';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
 export default function LoginScreen() {
@@ -40,9 +40,12 @@ export default function LoginScreen() {
           onPress: async () => {
             try {
               await firebaseResetPassword(email);
-              Alert.alert('Başarılı', 'Şifre sıfırlama bağlantısı e-postanıza gönderildi.');
-            } catch {
-              Alert.alert('Hata', 'E-posta gönderilemedi. Adresinizi kontrol edin.');
+              Alert.alert(
+                'Başarılı',
+                'Şifre sıfırlama bağlantısı e-postanıza gönderildi. E-postanızdaki bağlantıya tıklayarak yeni şifrenizi belirleyebilirsiniz.',
+              );
+            } catch (err) {
+              Alert.alert('Hata', getFirebaseErrorMessage(err));
             }
           },
         },
@@ -58,11 +61,11 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.success) {
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Hata', 'Giriş başarısız. Bilgilerinizi kontrol edin.');
+        Alert.alert('Giriş Başarısız', result.error ?? 'Bilgilerinizi kontrol edin.');
       }
     } catch {
       Alert.alert('Hata', 'Bir sorun oluştu. Tekrar deneyin.');

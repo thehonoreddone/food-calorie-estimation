@@ -1,138 +1,98 @@
-# 🍽️ Food Calorie Analyzer - Mobile App
+# Nutrino - AI Destekli Beslenme Takip Uygulaması
 
-A React Native (Expo) mobile application for food classification and calorie estimation using AI.
+Yapay zeka ile yemek tanıma, kalori hesaplama ve kişisel beslenme takibi yapan React Native mobil uygulama.
 
-## 📋 Prerequisites
+## Gereksinimler
 
 - Node.js 18+
-- npm or yarn
-- Expo CLI (`npm install -g expo-cli`)
-- Expo Go app on your phone (for testing)
-- Backend server running on port 8001
+- npm
+- Android Studio + Emulator veya fiziksel cihaz
+- Firebase hesabı (Auth, Firestore, Storage)
 
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+## Hızlı Başlangıç
 
 ```bash
 cd app/mobile
 npm install
+npm run dev          # Android emulator ile başlat (cache temizleyerek)
+npm run clean        # Sadece cache temizle ve başlat
+npx expo start       # Normal başlat
 ```
 
-### 2. Start the Development Server
-
-```bash
-npm start
-# or
-npx expo start
-```
-
-### 3. Run on Device
-
-- **Android Emulator:** Press `a` in the terminal
-- **iOS Simulator:** Press `i` in the terminal (macOS only)
-- **Physical Device:** Scan the QR code with Expo Go app
-
-## 📁 Project Structure
+## Proje Yapısı
 
 ```
 mobile/
-├── App.tsx                 # Main entry point
-├── global.css              # Tailwind CSS imports
-├── tailwind.config.js      # Tailwind/NativeWind config
-├── babel.config.js         # Babel config for NativeWind
-├── metro.config.js         # Metro bundler config
-└── src/
-    ├── components/         # Reusable UI components
-    │   ├── ImagePickerButtons.tsx
-    │   └── ResultsCard.tsx
-    ├── screens/            # Screen components
-    │   └── HomeScreen.tsx
-    ├── services/           # API services
-    │   ├── apiClient.ts    # Axios instance with interceptors
-    │   └── predictionService.ts
-    └── types/              # TypeScript type definitions
-        └── prediction.ts
+├── app/                        # Expo Router - Sayfa dosyaları
+│   ├── _layout.tsx             # Root layout (Stack navigator)
+│   ├── index.tsx               # Giriş yönlendirme
+│   ├── edit-profile.tsx        # Profil düzenleme
+│   ├── diet-recommendation.tsx # Diyet önerileri & haftalık rapor
+│   ├── notifications.tsx       # Bildirimler
+│   ├── help.tsx                # Yardım & destek
+│   ├── auth/                   # Giriş / Kayıt sayfaları
+│   ├── onboarding/             # İlk kurulum adımları (12 ekran)
+│   └── (tabs)/                 # Ana sekmeler
+│       ├── index.tsx           # Ana sayfa (takvim, öğünler, egzersiz)
+│       ├── scan.tsx            # Kamera ile yemek tarama
+│       ├── history.tsx         # Geçmiş taramalar
+│       └── profile.tsx         # Profil & ayarlar
+├── src/
+│   ├── components/             # Yeniden kullanılabilir bileşenler
+│   │   ├── ErrorBoundary.tsx   # Hata yakalayıcı
+│   │   └── ui/                 # UI bileşenleri (Button, Select, Layout)
+│   ├── config/
+│   │   ├── firebase.ts         # Firebase yapılandırması
+│   │   └── sentry.ts           # Sentry hata takibi
+│   ├── constants/
+│   │   └── theme.ts            # Renk, font, spacing sabitleri
+│   ├── contexts/
+│   │   └── UserContext.tsx      # Kullanıcı state yönetimi
+│   ├── screens/
+│   │   ├── ScanScreen.tsx      # Kamera / galeri tarama ekranı
+│   │   └── HistoryScreen.tsx   # Geçmiş sonuçlar
+│   ├── services/
+│   │   ├── apiClient.ts        # Backend API istemcisi (Axios)
+│   │   ├── firebaseAuth.ts     # Firebase kimlik doğrulama
+│   │   ├── firestoreService.ts # Firestore CRUD işlemleri
+│   │   ├── predictionService.ts# ML tahmin servisi
+│   │   ├── secureStorage.ts    # Güvenli token depolama
+│   │   └── dietRecommendationService.ts # Diyet öneri motoru
+│   └── types/
+│       └── prediction.ts       # TypeScript tipleri
+├── global.css                  # Tailwind CSS
+├── tailwind.config.js          # NativeWind yapılandırması
+├── metro.config.js             # Metro bundler yapılandırması
+└── app.json                    # Expo yapılandırması
 ```
 
-## 🔧 Configuration
+## Özellikler
 
-### Backend URL
+- AI ile yemek tanıma (201 kategori)
+- Otomatik kalori hesaplama (200+ yiyecek veritabanı)
+- Günlük öğün takibi (kahvaltı, öğle, akşam, atıştırma)
+- Egzersiz takibi ve kalori yakma hesaplama
+- Kişisel diyet önerileri ve haftalık rapor
+- Onboarding ile kişiselleştirilmiş profil
+- E-posta doğrulama, şifre sıfırlama
+- Firebase ile bulut senkronizasyon
 
-Edit `src/services/apiClient.ts` to change the backend URL:
+## Teknolojiler
 
-```typescript
-// For production
-const IS_PRODUCTION = true;
-return "https://your-backend-url.onrender.com";
+- **Expo SDK 54** / React Native 0.81
+- **Expo Router 6** - Dosya tabanlı navigasyon
+- **NativeWind** - Tailwind CSS for React Native
+- **Firebase** - Auth, Firestore, Storage
+- **TypeScript** - Tip güvenliği
+- **Sentry** - Hata takibi
 
-// For local development
-// Android Emulator: 10.0.2.2:8001
-// iOS Simulator: localhost:8001
-// Physical Device: Your computer's IP (e.g., 192.168.1.100:8001)
-```
-
-### Physical Device Testing
-
-To test on a physical device with local backend:
-
-1. Find your computer's local IP: `ipconfig` (Windows) or `ifconfig` (Mac/Linux)
-2. Update `apiClient.ts` to use your IP instead of localhost
-3. Ensure your phone and computer are on the same network
-
-## 📱 Features
-
-- 📸 Take photos with camera
-- 🖼️ Select images from gallery
-- 🤖 AI-powered food classification (201 food types)
-- ⚖️ Weight estimation
-- 🔥 Calorie calculation
-- 🎭 Segmentation mask visualization
-
-## 🛠️ Tech Stack
-
-- **Framework:** React Native with Expo
-- **Language:** TypeScript
-- **Styling:** NativeWind (Tailwind CSS for React Native)
-- **HTTP Client:** Axios
-- **Camera/Gallery:** expo-image-picker
-- **Storage:** @react-native-async-storage/async-storage
-
-## 📦 Building for Production
-
-### Android APK
+## Derleme
 
 ```bash
-npx expo build:android -t apk
-# or for modern build
-npx eas build --platform android
+npx eas build --platform android --profile preview   # APK
+npx eas build --platform android --profile production # AAB (Play Store)
 ```
 
-### iOS IPA
+## Destek
 
-```bash
-npx eas build --platform ios
-```
-
-> Note: iOS builds require an Apple Developer account.
-
-## 🐛 Troubleshooting
-
-### "Network Error" on Android Emulator
-
-- Use `10.0.2.2` instead of `localhost` for the backend URL
-
-### "Network Error" on Physical Device
-
-- Ensure phone and computer are on the same WiFi network
-- Use your computer's local IP address (not localhost)
-- Check if your firewall allows connections on port 8001
-
-### Camera not working
-
-- Ensure you've granted camera permissions
-- Try restarting the Expo app
-
-## 📄 License
-
-MIT
+nutrinooapp@gmail.com

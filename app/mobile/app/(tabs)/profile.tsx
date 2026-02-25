@@ -116,6 +116,15 @@ export default function ProfileTab() {
           {/* Actions */}
           <View style={styles.actionsSection}>
             <TouchableOpacity
+              onPress={() => router.push('/diet-recommendation')}
+              style={[styles.actionButton, Shadows.sm]}
+            >
+              <Text style={styles.actionIcon}>🥗</Text>
+              <Text style={styles.actionText}>Diyet Önerisi & Haftalık Rapor</Text>
+              <Text style={styles.actionArrow}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={() => router.push('/edit-profile')}
               style={[styles.actionButton, Shadows.sm]}
             >

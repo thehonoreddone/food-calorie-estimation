@@ -149,10 +149,10 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Age */}
-        <View style={styles.section}>
+        {/* Age (read-only) */}
+        <View style={[styles.section, { opacity: 0.6 }]}>
           <View style={styles.sliderHeader}>
-            <Text style={styles.label}>Yaş</Text>
+            <Text style={styles.label}>Yaş 🔒</Text>
             <Text style={styles.sliderValue}>{age}</Text>
           </View>
           <Slider
@@ -160,17 +160,18 @@ export default function EditProfileScreen() {
             maximumValue={80}
             step={1}
             value={age}
-            onValueChange={setAge}
-            minimumTrackTintColor={Colors.primary[500]}
+            disabled={true}
+            minimumTrackTintColor={Colors.neutral[300]}
             maximumTrackTintColor={Colors.neutral[200]}
-            thumbTintColor={Colors.primary[600]}
+            thumbTintColor={Colors.neutral[400]}
           />
+          <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: 2 }}>Yaş değiştirilemez</Text>
         </View>
 
-        {/* Height */}
-        <View style={styles.section}>
+        {/* Height (read-only) */}
+        <View style={[styles.section, { opacity: 0.6 }]}>
           <View style={styles.sliderHeader}>
-            <Text style={styles.label}>Boy</Text>
+            <Text style={styles.label}>Boy 🔒</Text>
             <Text style={styles.sliderValue}>{height} cm</Text>
           </View>
           <Slider
@@ -178,11 +179,12 @@ export default function EditProfileScreen() {
             maximumValue={220}
             step={1}
             value={height}
-            onValueChange={setHeight}
-            minimumTrackTintColor={Colors.primary[500]}
+            disabled={true}
+            minimumTrackTintColor={Colors.neutral[300]}
             maximumTrackTintColor={Colors.neutral[200]}
-            thumbTintColor={Colors.primary[600]}
+            thumbTintColor={Colors.neutral[400]}
           />
+          <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: 2 }}>Boy değiştirilemez</Text>
         </View>
 
         {/* Weight */}

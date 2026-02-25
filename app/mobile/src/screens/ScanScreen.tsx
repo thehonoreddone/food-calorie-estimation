@@ -100,7 +100,7 @@ export const ScanScreen: React.FC = () => {
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.4,
-        skipProcessing: true,
+        skipProcessing: false,
       });
       if (!photo) {
         detectingRef.current = false;
