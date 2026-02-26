@@ -6,7 +6,8 @@ import { getAuthToken, removeAuthToken } from "./secureStorage";
  * API Configuration
  *
  * URL'ler .env dosyasından okunur (EXPO_PUBLIC_API_URL).
- * Dev: Local IP veya 10.0.2.2 (emulator)
+ * Dev (USB + ADB reverse): localhost:8000
+ * Dev (Emulator): 10.0.2.2:8000
  * Prod: Render/Railway deploy URL'si
  */
 const getBaseUrl = (): string => {
@@ -18,11 +19,8 @@ const getBaseUrl = (): string => {
   }
 
   // Fallback: local development
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:8000"; // Android emulator → host localhost
-  } else if (Platform.OS === "ios") {
-    return "http://localhost:8000";
-  }
+  // USB + ADB reverse kullanıldığında localhost çalışır (fiziksel telefon)
+  // Emülatör kullanıyorsan 10.0.2.2 gerekir → .env'de EXPO_PUBLIC_API_URL=http://10.0.2.2:8000 ayarla
   return "http://localhost:8000";
 };
 

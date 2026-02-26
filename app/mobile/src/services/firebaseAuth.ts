@@ -24,6 +24,7 @@ export interface FirebaseUserProfile {
   avatarUri?: string;
   gender?: string;
   age?: number;
+  birthDate?: string; // ISO date YYYY-MM-DD
   height?: number;
   weight?: number;
   goal?: string;
@@ -192,9 +193,18 @@ export async function updateUserProfile(
   uid: string,
   updates: Partial<FirebaseUserProfile>
 ): Promise<void> {
+  // Firestore does not accept undefined values - filter them out
+  const cleanUpdates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      cleanUpdates[key] = value;
+    }
+  }
+  cleanUpdates.updatedAt = serverTimestamp();
+
   await setDoc(
     doc(db, 'users', uid),
-    { ...updates, updatedAt: serverTimestamp() },
+    cleanUpdates,
     { merge: true }
   );
 }

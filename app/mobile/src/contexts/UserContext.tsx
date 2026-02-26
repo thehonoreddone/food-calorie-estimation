@@ -25,6 +25,7 @@ export interface UserProfile {
   avatarUri?: string;
   gender?: Gender;
   age?: number;
+  birthDate?: string; // ISO date string YYYY-MM-DD
   height?: number; // cm
   weight?: number; // kg
   goal?: Goal;
@@ -272,14 +273,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const calculateDailyCalories = useCallback((): number => {
-    const { gender, age, height, weight, goal, activityLevel } = state.profile;
-    if (!gender || !age || !height || !weight) return 2000;
+    const { gender, age, birthDate, height, weight, goal, activityLevel } = state.profile;
+    // Derive age from birthDate if available, fallback to stored age
+    let effectiveAge = age;
+    if (birthDate) {
+      const bd = new Date(birthDate);
+      const today = new Date();
+      let calcAge = today.getFullYear() - bd.getFullYear();
+      const monthDiff = today.getMonth() - bd.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bd.getDate())) {
+        calcAge--;
+      }
+      effectiveAge = calcAge;
+    }
+    if (!gender || !effectiveAge || !height || !weight) return 2000;
 
     let bmr: number;
     if (gender === 'male') {
-      bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+      bmr = 10 * weight + 6.25 * height - 5 * effectiveAge + 5;
     } else {
-      bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+      bmr = 10 * weight + 6.25 * height - 5 * effectiveAge - 161;
     }
 
     const multipliers: Record<ActivityLevel, number> = {

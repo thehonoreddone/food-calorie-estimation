@@ -13,8 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { File as ExpoFile, Paths } from 'expo-file-system';
 import Slider from '@react-native-community/slider';
-import { useUser, Gender, Goal, ActivityLevel } from '@/contexts/UserContext';
+import { useUser, Goal, ActivityLevel } from '@/contexts/UserContext';
 import { PrimaryButton } from '@/components/ui';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
@@ -23,34 +24,56 @@ export default function EditProfileScreen() {
 
   const [name, setName] = useState(profile.name ?? '');
   const [avatarUri, setAvatarUri] = useState(profile.avatarUri ?? '');
-  const [age, setAge] = useState(profile.age ?? 25);
-  const [height, setHeight] = useState(profile.height ?? 170);
   const [weight, setWeight] = useState(profile.weight ?? 70);
-  const [gender, setGender] = useState<Gender>(profile.gender ?? 'male');
   const [goal, setGoal] = useState<Goal>(profile.goal ?? 'maintain');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel ?? 'moderate');
 
-  const handlePickAvatar = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+  // Derive display info from profile
+  const displayHeight = profile.height ?? 170;
+  const displayAge = (() => {
+    if (profile.birthDate) {
+      const bd = new Date(profile.birthDate);
+      const today = new Date();
+      let a = today.getFullYear() - bd.getFullYear();
+      const m = today.getMonth() - bd.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) a--;
+      return a;
+    }
+    return profile.age ?? null;
+  })();
 
-    if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+  const handlePickAvatar = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // Copy image to persistent document directory
+        const sourceUri = result.assets[0].uri;
+        const fileName = `avatar_${Date.now()}.jpg`;
+        try {
+          const sourceFile = new ExpoFile(sourceUri);
+          const destFile = new ExpoFile(Paths.document, fileName);
+          sourceFile.copy(destFile);
+          setAvatarUri(destFile.uri);
+        } catch {
+          // Fallback to original URI if copy fails
+          setAvatarUri(sourceUri);
+        }
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
     }
   };
 
   const handleSave = () => {
     updateProfile({
       name,
-      avatarUri: avatarUri || undefined,
-      age,
-      height,
+      avatarUri,
       weight,
-      gender,
       goal,
       activityLevel,
     });
@@ -59,23 +82,17 @@ export default function EditProfileScreen() {
     ]);
   };
 
-  const genderOptions: { value: Gender; label: string; icon: string }[] = [
-    { value: 'male', label: 'Erkek', icon: '👨' },
-    { value: 'female', label: 'Kadın', icon: '👩' },
-    { value: 'other', label: 'Diğer', icon: '🧑' },
-  ];
-
   const goalOptions: { value: Goal; label: string; icon: string }[] = [
     { value: 'lose', label: 'Kilo Ver', icon: '🔥' },
     { value: 'maintain', label: 'Koru', icon: '⚖️' },
     { value: 'gain', label: 'Kilo Al', icon: '💪' },
   ];
 
-  const activityOptions: { value: ActivityLevel; label: string }[] = [
-    { value: 'sedentary', label: 'Hareketsiz' },
-    { value: 'light', label: 'Az Hareketli' },
-    { value: 'moderate', label: 'Orta Düzey' },
-    { value: 'active', label: 'Çok Aktif' },
+  const activityOptions: { value: ActivityLevel; label: string; icon: string }[] = [
+    { value: 'sedentary', label: 'Hareketsiz', icon: '🛋️' },
+    { value: 'light', label: 'Az Hareketli', icon: '🚶' },
+    { value: 'moderate', label: 'Orta Düzey', icon: '🏃' },
+    { value: 'active', label: 'Çok Aktif', icon: '🏋️' },
   ];
 
   return (
@@ -122,75 +139,35 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Gender */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Cinsiyet</Text>
-          <View style={styles.chipRow}>
-            {genderOptions.map(opt => (
-              <TouchableOpacity
-                key={opt.value}
-                onPress={() => setGender(opt.value)}
-                style={[
-                  styles.chip,
-                  gender === opt.value && styles.chipActive,
-                ]}
-              >
-                <Text style={styles.chipIcon}>{opt.icon}</Text>
-                <Text
-                  style={[
-                    styles.chipLabel,
-                    gender === opt.value && styles.chipLabelActive,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        {/* Read-only Info Card: Height & Age */}
+        <View style={[styles.readOnlyCard, Shadows.sm]}>
+          <Text style={styles.readOnlyTitle}>📋 Kayıtlı Bilgiler</Text>
+          <View style={styles.readOnlyRow}>
+            <View style={styles.readOnlyItem}>
+              <Text style={styles.readOnlyIcon}>📏</Text>
+              <Text style={styles.readOnlyValue}>{displayHeight} cm</Text>
+              <Text style={styles.readOnlyLabel}>Boy</Text>
+            </View>
+            {displayAge !== null && (
+              <View style={styles.readOnlyItem}>
+                <Text style={styles.readOnlyIcon}>🎂</Text>
+                <Text style={styles.readOnlyValue}>{displayAge}</Text>
+                <Text style={styles.readOnlyLabel}>Yaş</Text>
+              </View>
+            )}
+            <View style={styles.readOnlyItem}>
+              <Text style={styles.readOnlyIcon}>⚖️</Text>
+              <Text style={styles.readOnlyValue}>{weight} kg</Text>
+              <Text style={styles.readOnlyLabel}>Kilo</Text>
+            </View>
           </View>
+          <Text style={styles.readOnlyHint}>Boy ve yaş ilk kayıtta belirlenir</Text>
         </View>
 
-        {/* Age (read-only) */}
-        <View style={[styles.section, { opacity: 0.6 }]}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.label}>Yaş 🔒</Text>
-            <Text style={styles.sliderValue}>{age}</Text>
-          </View>
-          <Slider
-            minimumValue={14}
-            maximumValue={80}
-            step={1}
-            value={age}
-            disabled={true}
-            minimumTrackTintColor={Colors.neutral[300]}
-            maximumTrackTintColor={Colors.neutral[200]}
-            thumbTintColor={Colors.neutral[400]}
-          />
-          <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: 2 }}>Yaş değiştirilemez</Text>
-        </View>
-
-        {/* Height (read-only) */}
-        <View style={[styles.section, { opacity: 0.6 }]}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.label}>Boy 🔒</Text>
-            <Text style={styles.sliderValue}>{height} cm</Text>
-          </View>
-          <Slider
-            minimumValue={120}
-            maximumValue={220}
-            step={1}
-            value={height}
-            disabled={true}
-            minimumTrackTintColor={Colors.neutral[300]}
-            maximumTrackTintColor={Colors.neutral[200]}
-            thumbTintColor={Colors.neutral[400]}
-          />
-          <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: 2 }}>Boy değiştirilemez</Text>
-        </View>
-
-        {/* Weight */}
+        {/* Weight Slider */}
         <View style={styles.section}>
           <View style={styles.sliderHeader}>
-            <Text style={styles.label}>Kilo</Text>
+            <Text style={styles.label}>⚖️ Kilo</Text>
             <Text style={styles.sliderValue}>{weight} kg</Text>
           </View>
           <Slider
@@ -207,24 +184,16 @@ export default function EditProfileScreen() {
 
         {/* Goal */}
         <View style={styles.section}>
-          <Text style={styles.label}>Hedef</Text>
+          <Text style={styles.label}>🎯 Hedef</Text>
           <View style={styles.chipRow}>
             {goalOptions.map(opt => (
               <TouchableOpacity
                 key={opt.value}
                 onPress={() => setGoal(opt.value)}
-                style={[
-                  styles.chip,
-                  goal === opt.value && styles.chipActive,
-                ]}
+                style={[styles.chip, goal === opt.value && styles.chipActive]}
               >
                 <Text style={styles.chipIcon}>{opt.icon}</Text>
-                <Text
-                  style={[
-                    styles.chipLabel,
-                    goal === opt.value && styles.chipLabelActive,
-                  ]}
-                >
+                <Text style={[styles.chipLabel, goal === opt.value && styles.chipLabelActive]}>
                   {opt.label}
                 </Text>
               </TouchableOpacity>
@@ -234,21 +203,22 @@ export default function EditProfileScreen() {
 
         {/* Activity */}
         <View style={styles.section}>
-          <Text style={styles.label}>Aktivite Seviyesi</Text>
-          <View style={styles.chipRow}>
+          <Text style={styles.label}>🏃 Aktivite Seviyesi</Text>
+          <View style={styles.activityGrid}>
             {activityOptions.map(opt => (
               <TouchableOpacity
                 key={opt.value}
                 onPress={() => setActivityLevel(opt.value)}
                 style={[
-                  styles.chipSmall,
-                  activityLevel === opt.value && styles.chipActive,
+                  styles.activityCard,
+                  activityLevel === opt.value && styles.activityCardActive,
                 ]}
               >
+                <Text style={styles.activityEmoji}>{opt.icon}</Text>
                 <Text
                   style={[
-                    styles.chipLabel,
-                    activityLevel === opt.value && styles.chipLabelActive,
+                    styles.activityLabel,
+                    activityLevel === opt.value && styles.activityLabelActive,
                   ]}
                 >
                   {opt.label}
@@ -260,7 +230,7 @@ export default function EditProfileScreen() {
 
         {/* Save Button */}
         <View style={styles.saveSection}>
-          <PrimaryButton title="Kaydet" onPress={handleSave} />
+          <PrimaryButton title="💾 Kaydet" onPress={handleSave} />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -301,30 +271,32 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: Colors.primary[200],
   },
   avatarPlaceholder: {
-    fontSize: 42,
+    fontSize: 46,
   },
   cameraOverlay: {
     position: 'absolute',
-    bottom: 24,
-    right: '35%',
+    bottom: 28,
+    right: '33%',
     backgroundColor: Colors.primary[500],
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#fff',
   },
   cameraIcon: {
-    fontSize: 14,
+    fontSize: 16,
   },
   changePhotoText: {
     marginTop: Spacing.sm,
@@ -354,6 +326,48 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.text.primary,
   },
+  // Read-only info card
+  readOnlyCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.primary[100],
+  },
+  readOnlyTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
+  },
+  readOnlyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  readOnlyItem: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  readOnlyIcon: {
+    fontSize: 24,
+  },
+  readOnlyValue: {
+    fontSize: FontSize.xl,
+    fontWeight: '800',
+    color: Colors.primary[700],
+  },
+  readOnlyLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+  },
+  readOnlyHint: {
+    fontSize: FontSize.xs,
+    color: Colors.text.light,
+    textAlign: 'center',
+    marginTop: Spacing.md,
+    fontStyle: 'italic',
+  },
   sliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -381,14 +395,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     gap: Spacing.xs,
   },
-  chipSmall: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-  },
   chipActive: {
     borderColor: Colors.primary[500],
     backgroundColor: Colors.primary[50],
@@ -402,6 +408,41 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   chipLabelActive: {
+    color: Colors.primary[700],
+    fontWeight: '700',
+  },
+  // Activity grid (2x2)
+  activityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  activityCard: {
+    width: '48%',
+    flexGrow: 1,
+    flexBasis: '45%',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    gap: Spacing.xs,
+  },
+  activityCardActive: {
+    borderColor: Colors.primary[500],
+    backgroundColor: Colors.primary[50],
+  },
+  activityEmoji: {
+    fontSize: 28,
+  },
+  activityLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  activityLabelActive: {
     color: Colors.primary[700],
     fontWeight: '700',
   },

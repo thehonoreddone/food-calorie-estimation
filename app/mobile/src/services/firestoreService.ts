@@ -8,6 +8,7 @@ import {
   addDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   query,
   where,
   orderBy,
@@ -110,6 +111,9 @@ export interface MealEntry {
   carbs: number;
   fat: number;
   weight: number;
+  quantity?: number;   // porsiyon miktarı (adet, kase, vb.)
+  unit?: string;       // 'gram' | 'adet' | 'ml' | 'kase'
+  foodKey?: string;    // class_names.json key
   confidence?: number;
   imageUri?: string;
   createdAt?: Timestamp;
@@ -156,6 +160,16 @@ export async function getMealsForDate(
  */
 export async function deleteMeal(mealId: string): Promise<void> {
   await deleteDoc(doc(db, MEALS_COLLECTION, mealId));
+}
+
+/**
+ * Update a meal entry (for quantity adjustments, etc.)
+ */
+export async function updateMeal(
+  mealId: string,
+  updates: Partial<Omit<MealEntry, 'id' | 'uid' | 'createdAt'>>
+): Promise<void> {
+  await updateDoc(doc(db, MEALS_COLLECTION, mealId), updates);
 }
 
 // ─── Exercise Tracking ──────────────────────────────────────────────────────

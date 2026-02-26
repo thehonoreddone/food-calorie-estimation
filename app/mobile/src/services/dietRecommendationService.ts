@@ -2,9 +2,17 @@
  * Diyet Öneri Sistemi
  * Kullanıcının hedefi, diyet tercihleri ve profil bilgilerine göre
  * günlük yemek önerileri ve haftalık analiz raporu üretir.
+ * 201-sınıf FOOD_DATABASE'den beslenme verisi çeker.
  */
 
 import { Goal, ActivityLevel, DietPreference } from '../contexts/UserContext';
+import {
+  FOOD_DATABASE,
+  FoodInfo,
+  calculateCalories,
+  calculateWeightGrams,
+  getUnitLabel,
+} from '../constants/foodDatabase';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -14,8 +22,9 @@ export interface MealRecommendation {
   protein: number; // gram
   carbs: number;   // gram
   fat: number;     // gram
-  portion: string; // e.g. "200g", "1 porsiyon"
+  portion: string; // e.g. "200g", "1 adet"
   emoji: string;
+  foodKey?: string; // FOOD_DATABASE key for tracking
 }
 
 export interface DailyMealPlan {
@@ -42,92 +51,169 @@ export interface WeeklySummary {
   tips: string[];
 }
 
-// ─── Meal Database ──────────────────────────────────────────────────────────
+// ─── Macro Estimation by Category ───────────────────────────────────────────
+// Since FOOD_DATABASE only has kcalPer100g, we estimate macro split by category
 
-const BREAKFAST_OPTIONS: MealRecommendation[] = [
-  { name: 'Yulaf ezmesi & meyve', calories: 300, protein: 10, carbs: 50, fat: 6, portion: '200g', emoji: '🥣' },
-  { name: 'Menemen', calories: 250, protein: 14, carbs: 8, fat: 18, portion: '200g', emoji: '🍳' },
-  { name: 'Peynirli tost', calories: 320, protein: 15, carbs: 30, fat: 16, portion: '1 adet', emoji: '🧀' },
-  { name: 'Yumurta & tam buğday ekmek', calories: 280, protein: 16, carbs: 28, fat: 12, portion: '2 yumurta + 1 dilim', emoji: '🥚' },
-  { name: 'Simit & peynir & çay', calories: 370, protein: 14, carbs: 55, fat: 10, portion: '1 simit', emoji: '🥯' },
-  { name: 'Smoothie bowl', calories: 260, protein: 8, carbs: 45, fat: 5, portion: '300ml', emoji: '🥤' },
-  { name: 'Protein pancake', calories: 290, protein: 22, carbs: 35, fat: 8, portion: '3 adet', emoji: '🥞' },
-  { name: 'Avokadolu tam buğday tost', calories: 310, protein: 10, carbs: 32, fat: 16, portion: '2 dilim', emoji: '🥑' },
-  { name: 'Yoğurt & granola & meyve', calories: 270, protein: 12, carbs: 40, fat: 8, portion: '250g', emoji: '🫐' },
-  { name: 'Kaşarlı gözleme', calories: 340, protein: 16, carbs: 38, fat: 14, portion: '1 adet', emoji: '🫓' },
-];
+type MacroProfile = { proteinRatio: number; carbRatio: number; fatRatio: number };
 
-const LUNCH_OPTIONS: MealRecommendation[] = [
-  { name: 'Izgara tavuk & pilav', calories: 450, protein: 35, carbs: 45, fat: 12, portion: '300g', emoji: '🍗' },
-  { name: 'Mercimek çorbası & ekmek', calories: 320, protein: 16, carbs: 48, fat: 6, portion: '1 kase', emoji: '🍲' },
-  { name: 'Tavuk salata', calories: 350, protein: 30, carbs: 15, fat: 18, portion: '300g', emoji: '🥗' },
-  { name: 'Kuru fasulye & pilav', calories: 420, protein: 18, carbs: 60, fat: 10, portion: '1 porsiyon', emoji: '🫘' },
-  { name: 'Izgara balık & sebze', calories: 380, protein: 32, carbs: 20, fat: 16, portion: '250g', emoji: '🐟' },
-  { name: 'Zeytinyağlı dolma', calories: 300, protein: 8, carbs: 42, fat: 12, portion: '6 adet', emoji: '🫑' },
-  { name: 'Tavuk döner wrap', calories: 430, protein: 28, carbs: 40, fat: 16, portion: '1 adet', emoji: '🌯' },
-  { name: 'Makarna (sebzeli)', calories: 400, protein: 14, carbs: 58, fat: 12, portion: '250g', emoji: '🍝' },
-  { name: 'Nohutlu pilav', calories: 380, protein: 14, carbs: 55, fat: 10, portion: '300g', emoji: '🍚' },
-  { name: 'Etli ekmek', calories: 460, protein: 25, carbs: 48, fat: 18, portion: '1 porsiyon', emoji: '🥖' },
-];
+const MACRO_PROFILES: Record<FoodInfo['category'], MacroProfile> = {
+  meal:      { proteinRatio: 0.30, carbRatio: 0.40, fatRatio: 0.30 },
+  soup:      { proteinRatio: 0.15, carbRatio: 0.55, fatRatio: 0.30 },
+  drink:     { proteinRatio: 0.15, carbRatio: 0.70, fatRatio: 0.15 },
+  fruit:     { proteinRatio: 0.05, carbRatio: 0.90, fatRatio: 0.05 },
+  vegetable: { proteinRatio: 0.20, carbRatio: 0.65, fatRatio: 0.15 },
+  dessert:   { proteinRatio: 0.05, carbRatio: 0.55, fatRatio: 0.40 },
+  snack:     { proteinRatio: 0.15, carbRatio: 0.45, fatRatio: 0.40 },
+  bread:     { proteinRatio: 0.10, carbRatio: 0.55, fatRatio: 0.35 },
+  salad:     { proteinRatio: 0.15, carbRatio: 0.55, fatRatio: 0.30 },
+};
 
-const DINNER_OPTIONS: MealRecommendation[] = [
-  { name: 'Izgara köfte & salata', calories: 400, protein: 30, carbs: 15, fat: 24, portion: '200g', emoji: '🥩' },
-  { name: 'Sebze yemeği & yoğurt', calories: 280, protein: 12, carbs: 35, fat: 10, portion: '300g', emoji: '🥦' },
-  { name: 'Fırında tavuk & patates', calories: 420, protein: 35, carbs: 30, fat: 16, portion: '300g', emoji: '🍗' },
-  { name: 'Çorba & salata', calories: 250, protein: 10, carbs: 30, fat: 8, portion: '1 porsiyon', emoji: '🍜' },
-  { name: 'Karnıyarık', calories: 380, protein: 18, carbs: 28, fat: 22, portion: '2 adet', emoji: '🍆' },
-  { name: 'Izgara somon & bulgur', calories: 440, protein: 35, carbs: 35, fat: 16, portion: '250g', emoji: '🐠' },
-  { name: 'Mantı', calories: 400, protein: 20, carbs: 45, fat: 16, portion: '1 porsiyon', emoji: '🥟' },
-  { name: 'Sebzeli omlet', calories: 260, protein: 18, carbs: 8, fat: 18, portion: '3 yumurta', emoji: '🍳' },
-  { name: 'Zeytinyağlı fasulye & pilav', calories: 350, protein: 12, carbs: 50, fat: 10, portion: '1 porsiyon', emoji: '🫘' },
-  { name: 'Tavuk sote', calories: 370, protein: 30, carbs: 20, fat: 18, portion: '250g', emoji: '🍲' },
-];
-
-const SNACK_OPTIONS: MealRecommendation[] = [
-  { name: 'Meyve tabağı', calories: 120, protein: 2, carbs: 28, fat: 1, portion: '200g', emoji: '🍎' },
-  { name: 'Yoğurt', calories: 100, protein: 8, carbs: 12, fat: 3, portion: '200g', emoji: '🥛' },
-  { name: 'Bir avuç badem', calories: 160, protein: 6, carbs: 6, fat: 14, portion: '30g', emoji: '🥜' },
-  { name: 'Havuç & humus', calories: 140, protein: 5, carbs: 18, fat: 6, portion: '150g', emoji: '🥕' },
-  { name: 'Protein bar', calories: 200, protein: 20, carbs: 22, fat: 6, portion: '1 adet', emoji: '🍫' },
-  { name: 'Peynir & ceviz', calories: 180, protein: 10, carbs: 4, fat: 14, portion: '50g', emoji: '🧀' },
-  { name: 'Muz & fıstık ezmesi', calories: 220, protein: 6, carbs: 30, fat: 10, portion: '1 muz + 1 çk', emoji: '🍌' },
-  { name: 'Ayran', calories: 70, protein: 4, carbs: 6, fat: 3, portion: '300ml', emoji: '🥛' },
-  { name: 'Kuru meyve karışımı', calories: 150, protein: 3, carbs: 35, fat: 1, portion: '40g', emoji: '🍇' },
-  { name: 'Tam buğday kraker & peynir', calories: 170, protein: 8, carbs: 20, fat: 7, portion: '4 adet', emoji: '🧈' },
-];
-
-// Vegetarian-friendly filters
-const VEGETARIAN_EXCLUDE_KEYWORDS = ['tavuk', 'et', 'balık', 'köfte', 'döner', 'somon', 'chicken', 'beef', 'fish', 'köfte', 'mantı', 'karnıyarık', 'sote'];
-const VEGAN_EXCLUDE_KEYWORDS = [...VEGETARIAN_EXCLUDE_KEYWORDS, 'yumurta', 'peynir', 'yoğurt', 'süt', 'kaşar', 'ayran', 'bal', 'tereyağ'];
-
-// ─── Recommendation Engine ──────────────────────────────────────────────────
-
-function filterByDiet(meals: MealRecommendation[], diet: DietPreference): MealRecommendation[] {
-  if (diet === 'standard') return meals;
-  const excludes = diet === 'vegan' ? VEGAN_EXCLUDE_KEYWORDS : 
-                   diet === 'vegetarian' ? VEGETARIAN_EXCLUDE_KEYWORDS : [];
-  if (excludes.length === 0) return meals;
-  return meals.filter(m => !excludes.some(kw => m.name.toLowerCase().includes(kw)));
+function estimateMacros(food: FoodInfo, calories: number): { protein: number; carbs: number; fat: number } {
+  const profile = MACRO_PROFILES[food.category];
+  // protein & carbs = 4 kcal/g, fat = 9 kcal/g
+  const proteinCals = calories * profile.proteinRatio;
+  const carbsCals = calories * profile.carbRatio;
+  const fatCals = calories * profile.fatRatio;
+  return {
+    protein: Math.round(proteinCals / 4),
+    carbs: Math.round(carbsCals / 4),
+    fat: Math.round(fatCals / 9),
+  };
 }
 
-function adjustCalories(meal: MealRecommendation, factor: number): MealRecommendation {
+// ─── Meal Type Pools from FOOD_DATABASE ─────────────────────────────────────
+// Categorize 201 classes into breakfast / lunch / dinner / snack pools
+
+// Keys that are appropriate for breakfast
+const BREAKFAST_KEYS = new Set([
+  'menemen', 'omlet', 'sucuklu-yumurta', 'haslanmis-yumurta', 'ekmek', 'sandvic',
+  'simit', 'pogaca', 'peynirli-borek', 'su-boregi', 'kiymali-borek',
+  'cay', 'turk-kahvesi', 'sahlep', 'ayran', 'yogurt',
+  'siyah-zeytin', 'yesil-zeytin', 'domates', 'salatalik', 'havuc',
+  'pancakes', 'waffles', 'french_toast', 'eggs_benedict', 'breakfast_burrito',
+  'croque_madame', 'grilled_cheese_sandwich',
+]);
+
+// Categories that belong in lunch/dinner
+const MAIN_MEAL_CATEGORIES = new Set<FoodInfo['category']>(['meal', 'soup', 'salad']);
+
+// Snack-worthy categories
+const SNACK_CATEGORIES = new Set<FoodInfo['category']>(['fruit', 'snack', 'dessert', 'drink']);
+
+function getBreakfastPool(): FoodInfo[] {
+  return FOOD_DATABASE.filter(f =>
+    BREAKFAST_KEYS.has(f.key) ||
+    (f.category === 'bread') ||
+    (f.category === 'drink')
+  );
+}
+
+function getLunchPool(): FoodInfo[] {
+  return FOOD_DATABASE.filter(f =>
+    MAIN_MEAL_CATEGORIES.has(f.category) && !BREAKFAST_KEYS.has(f.key)
+  );
+}
+
+function getDinnerPool(): FoodInfo[] {
+  // Dinner = main meals + soups + vegetables
+  return FOOD_DATABASE.filter(f =>
+    f.category === 'meal' || f.category === 'soup' || f.category === 'vegetable' || f.category === 'salad'
+  ).filter(f => !BREAKFAST_KEYS.has(f.key));
+}
+
+function getSnackPool(): FoodInfo[] {
+  return FOOD_DATABASE.filter(f =>
+    SNACK_CATEGORIES.has(f.category) ||
+    f.category === 'vegetable' // veggies can be snacks too
+  );
+}
+
+// ─── Vegetarian / Vegan Filters ─────────────────────────────────────────────
+
+const MEAT_KEYWORDS = [
+  'kebap', 'kofte', 'köfte', 'doner', 'döner', 'tavuk', 'chicken', 'et-sote',
+  'iskender', 'kokorec', 'tantuni', 'sucuk', 'sote', 'kaburga', 'beef', 'pork',
+  'steak', 'biftek', 'filet', 'pirzola', 'ribs', 'pulled_pork', 'hot_dog',
+  'hamburger', 'lahmacun', 'kiymali', 'karniyarik', 'mumbar', 'mantı', 'manti',
+  'balık', 'balik', 'salmon', 'somon', 'hamsi', 'levrek', 'cipura',
+  'midye', 'mussels', 'lobster', 'crab', 'shrimp', 'karides', 'tuna',
+  'sashimi', 'fish', 'duck', 'peking', 'escargots', 'oysters', 'scallops',
+  'ceviche', 'gyoza', 'dumplings', 'carpaccio', 'tartare', 'foie_gras',
+];
+
+const DAIRY_KEYWORDS = [
+  'peynir', 'cheese', 'yogurt', 'yoğurt', 'ayran', 'cacık', 'sahlep',
+  'süt', 'kaşar', 'tereyağ', 'ricotta', 'mozzarella',
+];
+
+function filterByDiet(foods: FoodInfo[], diet: DietPreference): FoodInfo[] {
+  if (diet === 'standard') return foods;
+
+  const excluded = diet === 'vegan'
+    ? [...MEAT_KEYWORDS, ...DAIRY_KEYWORDS]
+    : diet === 'vegetarian'
+      ? MEAT_KEYWORDS
+      : [];
+
+  if (excluded.length === 0) return foods;
+
+  return foods.filter(f => {
+    const name = (f.key + ' ' + f.displayName).toLowerCase();
+    return !excluded.some(kw => name.includes(kw.toLowerCase()));
+  });
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function foodToRecommendation(food: FoodInfo, portionFactor = 1): MealRecommendation {
+  const amount = food.defaultPortion * portionFactor;
+  const cal = calculateCalories(food, amount, food.unit);
+  const macros = estimateMacros(food, cal);
+  const grams = calculateWeightGrams(food, amount, food.unit);
+
+  let portion: string;
+  if (food.unit === 'adet') {
+    portion = `${Math.round(amount * 10) / 10} adet (~${grams}g)`;
+  } else if (food.unit === 'kase') {
+    portion = `${Math.round(amount * 10) / 10} kase (~${grams}ml)`;
+  } else if (food.unit === 'ml') {
+    portion = `${Math.round(amount)}ml`;
+  } else {
+    portion = `${Math.round(amount)}g`;
+  }
+
   return {
-    ...meal,
-    calories: Math.round(meal.calories * factor),
-    protein: Math.round(meal.protein * factor),
-    carbs: Math.round(meal.carbs * factor),
-    fat: Math.round(meal.fat * factor),
-    portion: factor < 0.85 ? `${meal.portion} (küçük)` : factor > 1.15 ? `${meal.portion} (büyük)` : meal.portion,
+    name: food.displayName,
+    calories: cal,
+    protein: macros.protein,
+    carbs: macros.carbs,
+    fat: macros.fat,
+    portion,
+    emoji: food.emoji,
+    foodKey: food.key,
   };
 }
 
 function pickRandom<T>(arr: T[], count: number): T[] {
   const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+  return shuffled.slice(0, Math.min(count, arr.length));
 }
 
+function adjustRecommendationCalories(rec: MealRecommendation, factor: number): MealRecommendation {
+  return {
+    ...rec,
+    calories: Math.round(rec.calories * factor),
+    protein: Math.round(rec.protein * factor),
+    carbs: Math.round(rec.carbs * factor),
+    fat: Math.round(rec.fat * factor),
+    portion: factor < 0.85 ? `${rec.portion} (küçük)` : factor > 1.15 ? `${rec.portion} (büyük)` : rec.portion,
+  };
+}
+
+// ─── Recommendation Engine ──────────────────────────────────────────────────
+
 /**
- * Generate a daily meal plan based on user profile
+ * Generate a daily meal plan based on user profile using FOOD_DATABASE
  */
 export function generateDailyPlan(params: {
   dailyCalorieTarget: number;
@@ -142,25 +228,33 @@ export function generateDailyPlan(params: {
   const dinnerTarget = dailyCalorieTarget * 0.30;
   const snackTarget = dailyCalorieTarget * 0.10;
 
-  // Filter by diet preference
-  const breakfastPool = filterByDiet(BREAKFAST_OPTIONS, diet);
-  const lunchPool = filterByDiet(LUNCH_OPTIONS, diet);
-  const dinnerPool = filterByDiet(DINNER_OPTIONS, diet);
-  const snackPool = filterByDiet(SNACK_OPTIONS, diet);
+  // Build pools filtered by diet
+  const breakfastPool = filterByDiet(getBreakfastPool(), diet);
+  const lunchPool = filterByDiet(getLunchPool(), diet);
+  const dinnerPool = filterByDiet(getDinnerPool(), diet);
+  const snackPool = filterByDiet(getSnackPool(), diet);
 
-  // Pick and adjust calories
-  const pickAndAdjust = (pool: MealRecommendation[], target: number, count: number): MealRecommendation[] => {
-    const picks = pickRandom(pool, Math.min(count, pool.length));
+  // Pick items and scale to target calories
+  const pickAndScale = (pool: FoodInfo[], target: number, count: number): MealRecommendation[] => {
+    const picks = pickRandom(pool, count);
     if (picks.length === 0) return [];
-    const avgCal = picks.reduce((sum, p) => sum + p.calories, 0) / picks.length;
-    const factor = target / (avgCal * count);
-    return picks.map(p => adjustCalories(p, factor));
+
+    const recs = picks.map(f => foodToRecommendation(f));
+    const totalCal = recs.reduce((s, r) => s + r.calories, 0);
+    if (totalCal === 0) return recs;
+
+    const factor = target / totalCal;
+    return recs.map(r => adjustRecommendationCalories(r, factor));
   };
 
-  const breakfast = pickAndAdjust(breakfastPool, breakfastTarget, 1);
-  const lunch = pickAndAdjust(lunchPool, lunchTarget, 1);
-  const dinner = pickAndAdjust(dinnerPool, dinnerTarget, 1);
-  const snack = pickAndAdjust(snackPool, snackTarget, 1);
+  // Breakfast: 2 items (e.g. a food + a drink)
+  const breakfast = pickAndScale(breakfastPool, breakfastTarget, 2);
+  // Lunch: 2 items (main + side/soup)
+  const lunch = pickAndScale(lunchPool, lunchTarget, 2);
+  // Dinner: 2 items
+  const dinner = pickAndScale(dinnerPool, dinnerTarget, 2);
+  // Snack: 1 item
+  const snack = pickAndScale(snackPool, snackTarget, 1);
 
   const all = [...breakfast, ...lunch, ...dinner, ...snack];
 

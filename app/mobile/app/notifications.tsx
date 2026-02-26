@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,21 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import {
+  requestNotificationPermission,
+  scheduleMealReminders,
+  cancelMealReminders,
+  scheduleWeeklyReport,
+  cancelWeeklyReport,
+  cancelAllNotifications,
+  getScheduledCount,
+} from '@/services/notificationService';
 
 export default function NotificationsScreen() {
   const { profile, updateProfile } = useUser();
@@ -18,20 +28,57 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState(profile.notificationsEnabled ?? true);
   const [mealReminders, setMealReminders] = useState(profile.mealReminders ?? false);
   const [weeklyReport, setWeeklyReport] = useState(profile.weeklyReport ?? false);
+  const [scheduledCount, setScheduledCount] = useState(0);
 
-  const toggleNotifications = (value: boolean) => {
+  useEffect(() => {
+    getScheduledCount().then(setScheduledCount).catch(() => {});
+  }, [notifications, mealReminders, weeklyReport]);
+
+  const toggleNotifications = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        Alert.alert(
+          'İzin Gerekli',
+          'Bildirimleri açmak için lütfen uygulama ayarlarından bildirim iznini verin.',
+        );
+        return;
+      }
+    } else {
+      // Turning off all notifications
+      await cancelAllNotifications();
+      setMealReminders(false);
+      setWeeklyReport(false);
+      updateProfile({ mealReminders: false, weeklyReport: false });
+    }
     setNotifications(value);
     updateProfile({ notificationsEnabled: value });
+    const count = await getScheduledCount();
+    setScheduledCount(count);
   };
 
-  const toggleMealReminders = (value: boolean) => {
+  const toggleMealReminders = async (value: boolean) => {
+    if (value) {
+      await scheduleMealReminders();
+    } else {
+      await cancelMealReminders();
+    }
     setMealReminders(value);
     updateProfile({ mealReminders: value });
+    const count = await getScheduledCount();
+    setScheduledCount(count);
   };
 
-  const toggleWeeklyReport = (value: boolean) => {
+  const toggleWeeklyReport = async (value: boolean) => {
+    if (value) {
+      await scheduleWeeklyReport();
+    } else {
+      await cancelWeeklyReport();
+    }
     setWeeklyReport(value);
     updateProfile({ weeklyReport: value });
+    const count = await getScheduledCount();
+    setScheduledCount(count);
   };
 
   return (
@@ -125,6 +172,10 @@ export default function NotificationsScreen() {
           <Text style={styles.infoText}>
             Bildirim ayarları cihazınızda yerel olarak kaydedilir.
             Sistem ayarlarından da bildirimleri yönetebilirsiniz.
+            {scheduledCount > 0
+              ? `\n\n📋 ${scheduledCount} aktif bildirim planlanmış.`
+              : '\n\nHenüz planlanmış bildirim yok.'
+            }
           </Text>
         </View>
       </ScrollView>

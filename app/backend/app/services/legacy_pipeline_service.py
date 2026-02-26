@@ -135,13 +135,15 @@ class LegacyPipelineService:
         return None
     
     def _init_segmentor(self):
-        """Initialize segmentation with FoodSeg103 priority"""
+        """Initialize segmentation with FoodSeg103 priority, using local models only"""
         try:
+            backend_models = Path(__file__).resolve().parent.parent.parent / "models"
+            
             # Find FoodSeg103 model
             foodseg103_paths = [
+                backend_models / "foodseg103_seg.pt",
                 FOOD_CALORIE_PATH / "foodseg103_seg.pt",
                 FOOD_CALORIE_PATH / "seg_dataset" / "foodseg103_best.pt",
-                Path(__file__).parent.parent.parent / "models" / "foodseg103_seg.pt",
             ]
             
             foodseg103_path = None
@@ -150,9 +152,22 @@ class LegacyPipelineService:
                     foodseg103_path = str(path)
                     break
             
+            # Find YOLOv8 segmentation model (use local models, NEVER download)
+            yolov8_seg_paths = [
+                backend_models / "food_seg_best.pt",
+                backend_models / "food201_seg_best.pt",
+            ]
+            
+            yolov8_path = None
+            for path in yolov8_seg_paths:
+                if path.exists():
+                    yolov8_path = str(path)
+                    logger.info(f"Using local YOLOv8 seg model: {path}")
+                    break
+            
             self.segmentor = FoodSegmentor(
                 foodseg103_path=foodseg103_path,
-                yolov8_path=None,  # Auto-download if needed
+                yolov8_path=yolov8_path,  # Use local model, no download
                 device=None,
                 enabled=True,
                 use_fallback=True,

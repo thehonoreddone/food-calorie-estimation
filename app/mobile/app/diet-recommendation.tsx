@@ -36,6 +36,7 @@ export default function DietRecommendationScreen() {
   const [activeTab, setActiveTab] = useState<'plan' | 'weekly'>('plan');
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(false);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
+  const [chartData, setChartData] = useState<{ label: string; calories: number; burned: number; protein: number; carbs: number; fat: number }[]>([]);
 
   const dailyTarget = calculateDailyCalories();
 
@@ -66,11 +67,14 @@ export default function DietRecommendationScreen() {
     try {
       const today = new Date();
       const dailyData: { calories: number; burned: number; protein: number; carbs: number; fat: number }[] = [];
+      const dayLabels = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+      const newChartData: typeof chartData = [];
 
       for (let i = 6; i >= 0; i--) {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
         const dateKey = formatDateKey(d);
+        const label = dayLabels[d.getDay()];
 
         try {
           const [meals, exercises] = await Promise.all([
@@ -84,14 +88,16 @@ export default function DietRecommendationScreen() {
           const dayCarbs = meals.reduce((s, m) => s + (m.carbs ?? 0), 0);
           const dayFat = meals.reduce((s, m) => s + (m.fat ?? 0), 0);
 
+          newChartData.push({ label, calories: dayCalories, burned: dayBurned, protein: dayProtein, carbs: dayCarbs, fat: dayFat });
           if (dayCalories > 0) {
             dailyData.push({ calories: dayCalories, burned: dayBurned, protein: dayProtein, carbs: dayCarbs, fat: dayFat });
           }
         } catch {
-          // Skip days with errors
+          newChartData.push({ label, calories: 0, burned: 0, protein: 0, carbs: 0, fat: 0 });
         }
       }
 
+      setChartData(newChartData);
       const summary = generateWeeklySummary({
         dailyData,
         calorieGoal: dailyTarget,
@@ -259,6 +265,92 @@ export default function DietRecommendationScreen() {
                   </View>
                 </View>
 
+                {/* Calorie Bar Chart */}
+                {chartData.length > 0 && (
+                  <View style={[styles.chartCard, Shadows.sm]}>
+                    <Text style={styles.chartTitle}>📊 Günlük Kalori Grafiği</Text>
+                    <View style={styles.chartContainer}>
+                      {/* Goal line label */}
+                      <View style={styles.goalLineRow}>
+                        <View style={styles.goalLine} />
+                        <Text style={styles.goalLineLabel}>Hedef: {dailyTarget} kcal</Text>
+                      </View>
+                      <View style={styles.barsRow}>
+                        {chartData.map((d, idx) => {
+                          const maxVal = Math.max(dailyTarget * 1.3, ...chartData.map(c => c.calories));
+                          const barHeight = maxVal > 0 ? (d.calories / maxVal) * 140 : 0;
+                          const goalHeight = maxVal > 0 ? (dailyTarget / maxVal) * 140 : 0;
+                          const isOverGoal = d.calories > dailyTarget;
+                          const isToday = idx === chartData.length - 1;
+                          return (
+                            <View key={idx} style={styles.barColumn}>
+                              <Text style={styles.barValue}>
+                                {d.calories > 0 ? d.calories : ''}
+                              </Text>
+                              <View style={styles.barTrack}>
+                                {/* Goal indicator */}
+                                <View style={[styles.goalIndicator, { bottom: goalHeight }]} />
+                                {/* Bar */}
+                                <View
+                                  style={[
+                                    styles.bar,
+                                    {
+                                      height: Math.max(barHeight, d.calories > 0 ? 4 : 0),
+                                      backgroundColor: d.calories === 0
+                                        ? Colors.neutral[200]
+                                        : isOverGoal
+                                          ? '#ef4444'
+                                          : isToday
+                                            ? Colors.primary[500]
+                                            : Colors.primary[400],
+                                    },
+                                  ]}
+                                />
+                              </View>
+                              <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
+                                {d.label}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Macro Distribution Chart */}
+                <View style={[styles.chartCard, Shadows.sm]}>
+                  <Text style={styles.chartTitle}>🥗 Makro Besin Dağılımı</Text>
+                  <View style={styles.macroBarContainer}>
+                    {[
+                      { label: 'Protein', value: weeklySummary.avgProtein, color: '#ef4444', icon: '🥩' },
+                      { label: 'Karbonhidrat', value: weeklySummary.avgCarbs, color: '#f59e0b', icon: '🍞' },
+                      { label: 'Yağ', value: weeklySummary.avgFat, color: '#3b82f6', icon: '🧈' },
+                    ].map((macro, idx) => {
+                      const total = weeklySummary.avgProtein + weeklySummary.avgCarbs + weeklySummary.avgFat;
+                      const pct = total > 0 ? Math.round((macro.value / total) * 100) : 0;
+                      return (
+                        <View key={idx} style={styles.macroBarRow}>
+                          <View style={styles.macroBarInfo}>
+                            <Text style={styles.macroBarEmoji}>{macro.icon}</Text>
+                            <Text style={styles.macroBarLabel}>{macro.label}</Text>
+                            <Text style={[styles.macroBarPct, { color: macro.color }]}>{pct}%</Text>
+                          </View>
+                          <View style={styles.macroBarTrack}>
+                            <View
+                              style={[
+                                styles.macroBarFill,
+                                { width: `${pct}%`, backgroundColor: macro.color },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.macroBarGrams}>{macro.value}g</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+
                 {/* Trend */}
                 <View style={[styles.trendCard, Shadows.sm, {
                   borderColor: weeklySummary.trend === 'on_track' ? '#10b981' :
@@ -275,24 +367,40 @@ export default function DietRecommendationScreen() {
                   </Text>
                 </View>
 
-                {/* Macros */}
-                <View style={[styles.macrosCard, Shadows.sm]}>
-                  <Text style={styles.macrosTitle}>Ortalama Makro Besinler</Text>
-                  <View style={styles.macrosRow}>
-                    <View style={[styles.macroItem, { borderColor: '#ef4444' }]}>
-                      <Text style={[styles.macroValue, { color: '#ef4444' }]}>{weeklySummary.avgProtein}g</Text>
-                      <Text style={styles.macroLabel}>Protein</Text>
+                {/* Burned vs Consumed Chart */}
+                {chartData.some(d => d.burned > 0) && (
+                  <View style={[styles.chartCard, Shadows.sm]}>
+                    <Text style={styles.chartTitle}>🏃 Yakılan vs Alınan</Text>
+                    <View style={styles.barsRow}>
+                      {chartData.map((d, idx) => {
+                        const maxVal = Math.max(...chartData.map(c => Math.max(c.calories, c.burned)), 1);
+                        const calH = (d.calories / maxVal) * 100;
+                        const burnH = (d.burned / maxVal) * 100;
+                        return (
+                          <View key={idx} style={styles.barColumn}>
+                            <View style={[styles.barTrack, { height: 110 }]}>
+                              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: '100%' }}>
+                                <View style={[styles.miniBar, { height: calH, backgroundColor: Colors.primary[400] }]} />
+                                <View style={[styles.miniBar, { height: burnH, backgroundColor: '#f59e0b' }]} />
+                              </View>
+                            </View>
+                            <Text style={styles.barLabel}>{d.label}</Text>
+                          </View>
+                        );
+                      })}
                     </View>
-                    <View style={[styles.macroItem, { borderColor: '#f59e0b' }]}>
-                      <Text style={[styles.macroValue, { color: '#f59e0b' }]}>{weeklySummary.avgCarbs}g</Text>
-                      <Text style={styles.macroLabel}>Karbonhidrat</Text>
-                    </View>
-                    <View style={[styles.macroItem, { borderColor: '#3b82f6' }]}>
-                      <Text style={[styles.macroValue, { color: '#3b82f6' }]}>{weeklySummary.avgFat}g</Text>
-                      <Text style={styles.macroLabel}>Yağ</Text>
+                    <View style={styles.legendRow}>
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: Colors.primary[400] }]} />
+                        <Text style={styles.legendText}>Alınan</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+                        <Text style={styles.legendText}>Yakılan</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
+                )}
 
                 {/* Tips */}
                 <View style={[styles.tipsCard, Shadows.sm]}>
@@ -484,4 +592,154 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 64 },
   emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text.primary, marginTop: Spacing.lg },
   emptyDesc: { fontSize: FontSize.sm, color: Colors.text.secondary, textAlign: 'center', marginTop: Spacing.sm, paddingHorizontal: Spacing.xl },
+  // Chart styles
+  chartCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  chartTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  chartContainer: {
+    paddingTop: Spacing.sm,
+  },
+  goalLineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  goalLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ef4444',
+    opacity: 0.4,
+  },
+  goalLineLabel: {
+    fontSize: FontSize.xs,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  barsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+  },
+  barColumn: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  barValue: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.text.secondary,
+    marginBottom: 4,
+    height: 14,
+  },
+  barTrack: {
+    height: 140,
+    width: 28,
+    backgroundColor: Colors.neutral[100],
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  goalIndicator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#ef4444',
+    opacity: 0.5,
+    borderRadius: 1,
+  },
+  bar: {
+    width: '100%',
+    borderRadius: 8,
+    minWidth: 28,
+  },
+  barLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  barLabelToday: {
+    color: Colors.primary[700],
+    fontWeight: '700',
+  },
+  miniBar: {
+    width: 10,
+    borderRadius: 4,
+    minHeight: 2,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xl,
+    marginTop: Spacing.md,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+  },
+  // Macro bar chart
+  macroBarContainer: {
+    gap: Spacing.md,
+  },
+  macroBarRow: {
+    gap: Spacing.xs,
+  },
+  macroBarInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: 4,
+  },
+  macroBarEmoji: {
+    fontSize: 16,
+  },
+  macroBarLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    flex: 1,
+  },
+  macroBarPct: {
+    fontSize: FontSize.sm,
+    fontWeight: '800',
+  },
+  macroBarTrack: {
+    height: 12,
+    backgroundColor: Colors.neutral[100],
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  macroBarFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  macroBarGrams: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
 });

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # ML Models
     YOLO_MODEL_PATH: str = "models/food_seg_best.pt"
-    YOLO_FALLBACK_MODEL: str = "yolov8n-seg.pt"
+    YOLO_FALLBACK_MODEL: str = "models/food201_seg_best.pt"
     CONFIDENCE_THRESHOLD: float = 0.25
     IOU_THRESHOLD: float = 0.45
     

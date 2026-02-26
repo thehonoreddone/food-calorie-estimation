@@ -120,10 +120,12 @@ class ModelService:
                     break
             
             if loaded_path is None:
-                # Download default YOLOv8 segmentation model
-                logger.warning("No custom model found, using default yolov8n-seg")
-                self.segmentation_model = YOLO("yolov8n-seg.pt")
-                self.using_foodseg103 = False
+                # Do NOT download models - require local models
+                logger.error("No segmentation model found in models/ directory!")
+                logger.error("Expected one of: food_seg_best.pt, food201_seg_best.pt, foodseg103_seg.pt")
+                raise FileNotFoundError(
+                    "No segmentation model found. Place your trained model in the models/ directory."
+                )
             else:
                 logger.info(f"Loading model from: {loaded_path}")
                 self.segmentation_model = YOLO(str(loaded_path))

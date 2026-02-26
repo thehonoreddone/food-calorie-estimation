@@ -1,0 +1,11 @@
+adb reverse --remove-all; adb reverse tcp:8081 tcp:8081; adb reverse tcp:8000 tcp:8000; adb reverse --list
+
+
+ Set-Location "C:\Users\User\Desktop\thend_food101_and_others\app\mobile"; $env:REACT_NATIVE_PACKAGER_HOSTNAME = "127.0.0.1"; npx expo start --localhost --clear
+
+
+
+ labelstudio
+ set LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
+set LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=C:/
+label-studio start --data-dir "C:/labelstudio/data"

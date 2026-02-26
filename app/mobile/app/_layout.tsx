@@ -1,12 +1,19 @@
 import '../global.css';
 import React, { useRef } from 'react';
-import { Platform, StatusBar as RNStatusBar } from 'react-native';
+import { Platform, StatusBar as RNStatusBar, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { initSentry } from '@/config/sentry';
+
+// Expo Go'da push notifications desteklenmez (SDK 53+). Local notifications çalışır.
+// Bu uyarıyı bastır — development build'de bu mesaj gelmez.
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'expo-notifications: Push notifications',
+]);
 
 // Sentry'yi uygulama başlatılırken ilklendir
 initSentry();

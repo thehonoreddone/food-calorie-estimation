@@ -13,6 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { PrimaryButton } from '@/components/ui';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { useUser } from '@/contexts/UserContext';
 
 const FAQ_ITEMS = [
   {
@@ -38,10 +41,12 @@ const FAQ_ITEMS = [
 ];
 
 export default function HelpScreen() {
+  const { profile } = useUser();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackCategory, setFeedbackCategory] = useState<string>('general');
   const [submitted, setSubmitted] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const categories = [
     { value: 'general', label: '💬 Genel' },
@@ -50,19 +55,69 @@ export default function HelpScreen() {
     { value: 'other', label: '📝 Diğer' },
   ];
 
-  const handleSubmitFeedback = () => {
+  const handleSubmitFeedback = async () => {
     if (!feedbackText.trim()) {
       Alert.alert('Hata', 'Lütfen geri bildiriminizi yazın.');
       return;
     }
 
-    // In production: send to backend API
-    setSubmitted(true);
-    setFeedbackText('');
-    Alert.alert(
-      'Teşekkürler! 🎉',
-      'Geri bildiriminiz alındı. En kısa sürede değerlendireceğiz.',
-    );
+    setIsSending(true);
+    try {
+      // 1. Save to Firestore feedback collection
+      await addDoc(collection(db, 'feedback'), {
+        category: feedbackCategory,
+        message: feedbackText.trim(),
+        userEmail: profile.email || 'anonymous',
+        userName: profile.name || 'Anonim',
+        createdAt: serverTimestamp(),
+        status: 'new',
+      });
+
+      // 2. Also open mailto as fallback / direct email
+      const subject = encodeURIComponent(`[Nutrino ${feedbackCategory}] Kullanıcı Geri Bildirimi`);
+      const body = encodeURIComponent(
+        `Kategori: ${feedbackCategory}\n` +
+        `Kullanıcı: ${profile.name || 'Anonim'}\n` +
+        `E-posta: ${profile.email || '-'}\n\n` +
+        `Mesaj:\n${feedbackText.trim()}`
+      );
+      const mailUrl = `mailto:nutrinooapp@gmail.com?subject=${subject}&body=${body}`;
+
+      setSubmitted(true);
+      setFeedbackText('');
+
+      Alert.alert(
+        'Teşekkürler! 🎉',
+        'Geri bildiriminiz kaydedildi. E-posta ile de göndermek ister misiniz?',
+        [
+          { text: 'Hayır', style: 'cancel' },
+          {
+            text: 'E-posta Gönder',
+            onPress: () => Linking.openURL(mailUrl).catch(() => {}),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Feedback save error:', error);
+      // Fallback: just open mailto
+      const subject = encodeURIComponent(`[Nutrino ${feedbackCategory}] Kullanıcı Geri Bildirimi`);
+      const body = encodeURIComponent(`Mesaj:\n${feedbackText.trim()}`);
+      const mailUrl = `mailto:nutrinooapp@gmail.com?subject=${subject}&body=${body}`;
+
+      Alert.alert(
+        'Geri Bildirim',
+        'Kayıt sırasında hata oluştu. E-posta ile göndermek ister misiniz?',
+        [
+          { text: 'İptal', style: 'cancel' },
+          {
+            text: 'E-posta Gönder',
+            onPress: () => Linking.openURL(mailUrl).catch(() => {}),
+          },
+        ],
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleContact = () => {
@@ -145,9 +200,9 @@ export default function HelpScreen() {
           />
 
           <PrimaryButton
-            title={submitted ? 'Gönderildi ✓' : 'Gönder'}
+            title={isSending ? 'Gönderiliyor...' : submitted ? 'Gönderildi ✓' : 'Gönder'}
             onPress={handleSubmitFeedback}
-            disabled={submitted}
+            disabled={submitted || isSending}
           />
         </View>
 
