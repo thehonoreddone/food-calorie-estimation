@@ -221,6 +221,49 @@ export async function cancelAllNotifications(): Promise<void> {
   }
 }
 
+// ─── Streak Reminder ────────────────────────────────────────────────────────
+
+const STREAK_REMINDER_ID = 'streak-reminder';
+
+/**
+ * Her gün 21:00'de kullanıcıya serisi hatırlatılır.
+ * Bu bildirim öğün hatırlatıcılarıyla birlikte aktif edilir.
+ */
+export async function scheduleStreakReminder(): Promise<void> {
+  try {
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) return;
+
+    await cancelStreakReminder();
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: STREAK_REMINDER_ID,
+      content: {
+        title: '🔥 Serini Korumaya Devam Et!',
+        body: 'Bugün yemek kaydı yapmayı unutma! Serinizi kaybetmek istemezsiniz.',
+        sound: 'default',
+        ...(Platform.OS === 'android' ? { channelId: 'meal-reminders' } : {}),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: 21,
+        minute: 0,
+      },
+    });
+    console.log('[Notifications] Streak reminder scheduled');
+  } catch (e) {
+    console.warn('[Notifications] Schedule streak reminder failed:', e);
+  }
+}
+
+export async function cancelStreakReminder(): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(STREAK_REMINDER_ID);
+  } catch (e) {
+    console.warn('[Notifications] Cancel streak reminder failed:', e);
+  }
+}
+
 /**
  * Get count of currently scheduled notifications (for debugging)
  */

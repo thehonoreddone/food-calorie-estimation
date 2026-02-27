@@ -20,13 +20,18 @@ import { PrimaryButton } from '@/components/ui';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
 export default function EditProfileScreen() {
-  const { profile, updateProfile } = useUser();
+  const { profile, updateProfile, calculateDailyCalories } = useUser();
 
   const [name, setName] = useState(profile.name ?? '');
   const [avatarUri, setAvatarUri] = useState(profile.avatarUri ?? '');
   const [weight, setWeight] = useState(profile.weight ?? 70);
   const [goal, setGoal] = useState<Goal>(profile.goal ?? 'maintain');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel ?? 'moderate');
+  const [dailyCalorieTarget, setDailyCalorieTarget] = useState<string>(
+    profile.dailyCalorieTarget ? String(profile.dailyCalorieTarget) : ''
+  );
+  const [useCustomCalorie, setUseCustomCalorie] = useState(!!profile.dailyCalorieTarget);
+  const autoCalories = calculateDailyCalories();
 
   // Derive display info from profile
   const displayHeight = profile.height ?? 170;
@@ -70,12 +75,14 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = () => {
+    const calTarget = useCustomCalorie ? parseInt(dailyCalorieTarget) || undefined : undefined;
     updateProfile({
       name,
       avatarUri,
       weight,
       goal,
       activityLevel,
+      dailyCalorieTarget: calTarget,
     });
     Alert.alert('Başarılı', 'Profiliniz güncellendi.', [
       { text: 'Tamam', onPress: () => router.back() },
@@ -161,7 +168,6 @@ export default function EditProfileScreen() {
               <Text style={styles.readOnlyLabel}>Kilo</Text>
             </View>
           </View>
-          <Text style={styles.readOnlyHint}>Boy ve yaş ilk kayıtta belirlenir</Text>
         </View>
 
         {/* Weight Slider */}
@@ -225,6 +231,52 @@ export default function EditProfileScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        {/* Daily Calorie Target */}
+        <View style={[styles.section, { marginBottom: Spacing.lg }]}>
+          <Text style={styles.label}>🍎 Günlük Kalori Hedefi</Text>
+          <View style={[styles.readOnlyCard, Shadows.sm, { marginBottom: 0 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+              <Text style={{ fontSize: FontSize.sm, color: Colors.text.secondary }}>Otomatik Hesaplama</Text>
+              <Text style={{ fontSize: FontSize.lg, fontWeight: '800', color: Colors.primary[600] }}>{autoCalories} kcal</Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.chip,
+                useCustomCalorie && styles.chipActive,
+                { alignSelf: 'flex-start', marginBottom: useCustomCalorie ? Spacing.md : 0 },
+              ]}
+              onPress={() => {
+                setUseCustomCalorie(!useCustomCalorie);
+                if (!useCustomCalorie && !dailyCalorieTarget) {
+                  setDailyCalorieTarget(String(autoCalories));
+                }
+              }}
+            >
+              <Text style={[styles.chipLabel, useCustomCalorie && styles.chipLabelActive]}>
+                {useCustomCalorie ? '✅ Özel Hedef Aktif' : 'Manuel Hedef Belirle'}
+              </Text>
+            </TouchableOpacity>
+            {useCustomCalorie && (
+              <View>
+                <View style={[styles.inputContainer, Shadows.sm, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={dailyCalorieTarget}
+                    onChangeText={setDailyCalorieTarget}
+                    keyboardType="numeric"
+                    placeholder="Ör: 2000"
+                    placeholderTextColor={Colors.text.light}
+                  />
+                  <Text style={{ fontSize: FontSize.sm, color: Colors.text.secondary, marginLeft: Spacing.sm }}>kcal</Text>
+                </View>
+                <Text style={{ fontSize: FontSize.xs, color: Colors.text.light, marginTop: 6, fontStyle: 'italic' }}>
+                  Bu değeri girerseniz otomatik hesaplama yerine sizin belirledik hedef kullanılır.
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -330,16 +382,16 @@ const styles = StyleSheet.create({
   readOnlyCard: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    marginBottom: Spacing.xl,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.primary[100],
   },
   readOnlyTitle: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontWeight: '700',
     color: Colors.text.primary,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   readOnlyRow: {
     flexDirection: 'row',

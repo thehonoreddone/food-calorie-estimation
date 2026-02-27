@@ -12,18 +12,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
-import {
-  requestNotificationPermission,
-  scheduleMealReminders,
-  cancelMealReminders,
-  scheduleWeeklyReport,
-  cancelWeeklyReport,
-  cancelAllNotifications,
-  getScheduledCount,
-} from '@/services/notificationService';
+
+// Lazy import to avoid expo-notifications push token auto-registration error in Expo Go
+const getNotificationService = () => require('@/services/notificationService') as {
+  requestNotificationPermission: () => Promise<boolean>;
+  scheduleMealReminders: () => Promise<void>;
+  cancelMealReminders: () => Promise<void>;
+  scheduleWeeklyReport: () => Promise<void>;
+  cancelWeeklyReport: () => Promise<void>;
+  cancelAllNotifications: () => Promise<void>;
+  getScheduledCount: () => Promise<number>;
+};
 
 export default function NotificationsScreen() {
   const { profile, updateProfile } = useUser();
+  const ns = getNotificationService();
 
   const [notifications, setNotifications] = useState(profile.notificationsEnabled ?? true);
   const [mealReminders, setMealReminders] = useState(profile.mealReminders ?? false);
@@ -31,12 +34,12 @@ export default function NotificationsScreen() {
   const [scheduledCount, setScheduledCount] = useState(0);
 
   useEffect(() => {
-    getScheduledCount().then(setScheduledCount).catch(() => {});
+    ns.getScheduledCount().then(setScheduledCount).catch(() => {});
   }, [notifications, mealReminders, weeklyReport]);
 
   const toggleNotifications = async (value: boolean) => {
     if (value) {
-      const granted = await requestNotificationPermission();
+      const granted = await ns.requestNotificationPermission();
       if (!granted) {
         Alert.alert(
           'İzin Gerekli',
@@ -46,38 +49,38 @@ export default function NotificationsScreen() {
       }
     } else {
       // Turning off all notifications
-      await cancelAllNotifications();
+      await ns.cancelAllNotifications();
       setMealReminders(false);
       setWeeklyReport(false);
       updateProfile({ mealReminders: false, weeklyReport: false });
     }
     setNotifications(value);
     updateProfile({ notificationsEnabled: value });
-    const count = await getScheduledCount();
+    const count = await ns.getScheduledCount();
     setScheduledCount(count);
   };
 
   const toggleMealReminders = async (value: boolean) => {
     if (value) {
-      await scheduleMealReminders();
+      await ns.scheduleMealReminders();
     } else {
-      await cancelMealReminders();
+      await ns.cancelMealReminders();
     }
     setMealReminders(value);
     updateProfile({ mealReminders: value });
-    const count = await getScheduledCount();
+    const count = await ns.getScheduledCount();
     setScheduledCount(count);
   };
 
   const toggleWeeklyReport = async (value: boolean) => {
     if (value) {
-      await scheduleWeeklyReport();
+      await ns.scheduleWeeklyReport();
     } else {
-      await cancelWeeklyReport();
+      await ns.cancelWeeklyReport();
     }
     setWeeklyReport(value);
     updateProfile({ weeklyReport: value });
-    const count = await getScheduledCount();
+    const count = await ns.getScheduledCount();
     setScheduledCount(count);
   };
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,25 +7,30 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { useTranslation } from '@/i18n';
 
 export default function ProfileTab() {
-  const { profile, logout, calculateDailyCalories } = useUser();
+  const { profile, logout, calculateDailyCalories, updateProfile } = useUser();
+  const { t } = useTranslation();
   const dailyCalories = calculateDailyCalories();
-  const userName = profile.name || 'İsim ekle';
+  const userName = profile.name || t('profile.addName');
   const userEmail = profile.email ?? '';
 
   const displayWeight = profile.weight ?? '-';
 
+  const [showActivityModal, setShowActivityModal] = useState(false);
+
   const handleLogout = () => {
-    Alert.alert('Çıkış', 'Hesabınızdan çıkmak istiyor musunuz?', [
-      { text: 'İptal', style: 'cancel' },
+    Alert.alert(t('profile.signOut'), t('profile.signOutConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Çıkış Yap',
+        text: t('profile.signOut'),
         style: 'destructive',
         onPress: async () => {
           await logout();
@@ -53,8 +58,8 @@ export default function ProfileTab() {
             </TouchableOpacity>
           </View>
           <View style={styles.topBarRight}>
-            <Text style={styles.topBarTitle}>Ayarlar</Text>
-            <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.settingsGearBtn}>
+            <Text style={styles.topBarTitle}>{t('profile.settings')}</Text>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsGearBtn}>
               <Text style={{ fontSize: 20 }}>⚙️</Text>
             </TouchableOpacity>
           </View>
@@ -70,7 +75,7 @@ export default function ProfileTab() {
                 <Text style={{ fontSize: 30 }}>👤</Text>
               )}
             </View>
-            <Text style={styles.editBtnText}>Düzenle</Text>
+            <Text style={styles.editBtnText}>{t('common.edit')}</Text>
           </TouchableOpacity>
           <View style={styles.identityInfo}>
             <View style={styles.nameRow}>
@@ -78,14 +83,14 @@ export default function ProfileTab() {
               <Text style={styles.nameText}>{userName}</Text>
             </View>
             {userEmail ? <Text style={styles.emailText}>{userEmail}</Text> : null}
-            <Text style={styles.accountType}>Hesap Türü: Ücretsiz</Text>
+            <Text style={styles.accountType}>{t('profile.accountTypeFree')}</Text>
           </View>
         </View>
 
         {/* Quick Action Buttons */}
         <View style={styles.quickActions}>
           <View style={styles.quickRow}>
-            <TouchableOpacity style={styles.quickBtn}>
+            <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/edit-profile')}>
               <Text style={styles.quickIcon}>🍴</Text>
               <Text style={styles.quickValue}>{dailyCalories} kal</Text>
             </TouchableOpacity>
@@ -95,7 +100,7 @@ export default function ProfileTab() {
             </TouchableOpacity>
           </View>
           <View style={styles.quickRow}>
-            <TouchableOpacity style={styles.quickBtn}>
+            <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/weight-tracking')}>
               <Text style={styles.quickIcon}>⚖️</Text>
               <Text style={styles.quickValue}>{displayWeight} kg</Text>
             </TouchableOpacity>
@@ -110,58 +115,91 @@ export default function ProfileTab() {
 
         {/* Menu Section 1 */}
         <View style={styles.menuGroup}>
-          <MenuItem icon="📊" label="Benim Kilom" onPress={() => {}} />
+          <MenuItem icon="📊" label={t('profile.myGoals')} subtitle={`${profile.weight ?? '-'} kg → ${profile.targetWeight ?? '-'} kg`} onPress={() => router.push('/weight-tracking')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="⭐" label="Başarılarım" onPress={() => {}} />
+          <MenuItem icon="⭐" label={t('profile.achievements')} onPress={() => router.push('/achievements')} />
         </View>
 
-        {/* Menu Section 2: Goal & Activity */}
+        {/* Menu Section 2: Activity & Diet */}
         <View style={styles.menuGroup}>
           <MenuItem
-            icon="🎯"
-            label="Hedefim"
-            subtitle={profile.goal === 'lose' ? 'Kilo Ver' : profile.goal === 'gain' ? 'Kilo Al' : 'Koru'}
-            onPress={() => router.push('/edit-profile')}
-          />
-          <View style={styles.menuDivider} />
-          <MenuItem
             icon="🏋️"
-            label="Aktivite Seviyesi"
+            label={t('profile.activityLevel')}
             subtitle={
-              profile.activityLevel === 'sedentary' ? 'Hareketsiz'
-              : profile.activityLevel === 'light' ? 'Az Hareketli'
-              : profile.activityLevel === 'active' ? 'Çok Aktif'
-              : 'Orta Düzey'
+              profile.activityLevel === 'sedentary' ? t('profile.sedentary')
+              : profile.activityLevel === 'light' ? t('profile.light')
+              : profile.activityLevel === 'active' ? t('profile.active')
+              : t('profile.moderate')
             }
-            onPress={() => router.push('/edit-profile')}
+            onPress={() => setShowActivityModal(true)}
           />
           <View style={styles.menuDivider} />
           <MenuItem
             icon="🥗"
-            label="Diyet Önerisi & Rapor"
+            label={t('profile.dietSuggestion')}
             onPress={() => router.push('/diet-recommendation')}
           />
         </View>
 
         {/* Menu Section 3 */}
         <View style={styles.menuGroup}>
-          <MenuItem icon="⏰" label="Hatırlatıcılar" onPress={() => router.push('/notifications')} />
+          <MenuItem icon="⏰" label={t('profile.reminders')} onPress={() => router.push('/notifications')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="🖼️" label="Fotoğraf Albümü" onPress={() => router.push('/(tabs)/history')} />
+          <MenuItem icon="🖼️" label={t('profile.photoAlbum')} onPress={() => router.push('/(tabs)/history')} />
         </View>
 
         {/* Menu Section 4 */}
         <View style={styles.menuGroup}>
-          <MenuItem icon="🔒" label="İletişim ve Gizlilik" onPress={() => {}} />
+          <MenuItem icon="🔒" label={t('profile.contactAndPrivacy')} onPress={() => router.push('/contact-privacy')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="💬" label="Bize Ulaşın" onPress={() => router.push('/help')} />
+          <MenuItem icon="💬" label={t('profile.contactUs')} onPress={() => router.push('/help')} />
         </View>
 
         {/* Logout */}
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutIcon}>🚪</Text>
-          <Text style={styles.logoutText}>Çıkış Yap</Text>
+          <Text style={styles.logoutText}>{t('profile.signOut')}</Text>
         </TouchableOpacity>
+
+        {/* Inline Activity Level Modal */}
+        <Modal visible={showActivityModal} transparent animationType="fade">
+          <View style={styles.activityOverlay}>
+            <View style={styles.activitySheet}>
+              <Text style={styles.activityTitle}>{t('profile.activityLevel')}</Text>
+              {([
+                { value: 'sedentary', label: t('profile.sedentary'), desc: t('profile.sedentaryDesc'), icon: '🪑' },
+                { value: 'light', label: t('profile.light'), desc: t('profile.lightDesc'), icon: '🚶' },
+                { value: 'moderate', label: t('profile.moderate'), desc: t('profile.moderateDesc'), icon: '🏃' },
+                { value: 'active', label: t('profile.active'), desc: t('profile.activeDesc'), icon: '🏋️' },
+              ] as const).map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.activityOption,
+                    profile.activityLevel === opt.value && styles.activityOptionActive,
+                  ]}
+                  onPress={() => {
+                    updateProfile({ activityLevel: opt.value });
+                    setShowActivityModal(false);
+                  }}
+                >
+                  <Text style={styles.activityOptionIcon}>{opt.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[
+                      styles.activityOptionLabel,
+                      profile.activityLevel === opt.value && styles.activityOptionLabelActive,
+                    ]}>{opt.label}</Text>
+                    <Text style={styles.activityOptionDesc}>{opt.desc}</Text>
+                  </View>
+                  {profile.activityLevel === opt.value && <Text style={styles.activityCheck}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.activityCloseBtn} onPress={() => setShowActivityModal(false)}>
+                <Text style={styles.activityCloseText}>{t('common.close')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -406,5 +444,79 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: '600',
     color: '#ef4444',
+  },
+
+  // Activity Modal
+  activityOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  activitySheet: {
+    backgroundColor: '#151515',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.xl,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  activityTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    color: '#eee',
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  activityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    marginBottom: 8,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#222',
+    gap: Spacing.md,
+  },
+  activityOptionActive: {
+    backgroundColor: '#0d2818',
+    borderColor: '#22c55e',
+  },
+  activityOptionIcon: {
+    fontSize: 22,
+    width: 34,
+    textAlign: 'center',
+  },
+  activityOptionLabel: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: '#eee',
+  },
+  activityOptionLabelActive: {
+    color: '#22c55e',
+  },
+  activityOptionDesc: {
+    fontSize: FontSize.xs,
+    color: '#777',
+    marginTop: 2,
+  },
+  activityCheck: {
+    fontSize: 18,
+    color: '#22c55e',
+    fontWeight: '700',
+  },
+  activityCloseBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: '#1f1f1f',
+    alignItems: 'center',
+  },
+  activityCloseText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: '#aaa',
   },
 });

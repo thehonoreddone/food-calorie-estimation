@@ -4,12 +4,14 @@ import {
   firebaseLogin,
   firebaseRegister,
   firebaseLogout,
+  firebaseDeleteAccount,
   getCurrentUser,
   getUserProfile,
   updateUserProfile,
   onAuthChanged,
   getFirebaseErrorMessage,
 } from '../services/firebaseAuth';
+import { recordAppOpen } from '../services/firestoreService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -28,10 +30,12 @@ export interface UserProfile {
   birthDate?: string; // ISO date string YYYY-MM-DD
   height?: number; // cm
   weight?: number; // kg
+  startingWeight?: number; // kg - onboarding'de belirlenen başlangıç kilosu
+  targetWeight?: number; // kg - hedef kilo
   goal?: Goal;
   activityLevel?: ActivityLevel;
   dietPreferences?: DietPreference[];
-  dailyCalorieTarget?: number;
+  dailyCalorieTarget?: number; // kullanıcı tarafından ayarlanabilir
   notificationsEnabled?: boolean;
   mealReminders?: boolean;
   weeklyReport?: boolean;
@@ -50,6 +54,7 @@ interface UserContextType extends UserState {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<{ success: boolean; error?: string }>;
   calculateDailyCalories: () => number;
   initializeState: () => Promise<void>;
 }
@@ -112,6 +117,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Cache locally
         await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProfile));
+
+        // Record app open for login streak tracking
+        try {
+          await recordAppOpen(firebaseUser.uid);
+        } catch (e) {
+          console.warn('recordAppOpen failed:', e);
+        }
 
         setState({
           hasCompletedOnboarding: onboardingComplete === 'true',
@@ -272,7 +284,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isAuthenticated: false }));
   }, []);
 
+  const deleteAccount = useCallback(async (password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await firebaseDeleteAccount(password);
+      // Clear local storage
+      await AsyncStorage.multiRemove([STORAGE_KEYS.USER_PROFILE, STORAGE_KEYS.ONBOARDING_COMPLETE]);
+      setState({
+        hasCompletedOnboarding: false,
+        isAuthenticated: false,
+        profile: {},
+        isLoading: false,
+      });
+      return { success: true };
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        return { success: false, error: 'Şifre yanlış. Lütfen tekrar deneyin.' };
+      }
+      return { success: false, error: getFirebaseErrorMessage(error) };
+    }
+  }, []);
+
   const calculateDailyCalories = useCallback((): number => {
+    // Kullanıcı kendi kalori hedefini belirlediyse onu kullan
+    if (state.profile.dailyCalorieTarget && state.profile.dailyCalorieTarget > 0) {
+      return state.profile.dailyCalorieTarget;
+    }
+
     const { gender, age, birthDate, height, weight, goal, activityLevel } = state.profile;
     // Derive age from birthDate if available, fallback to stored age
     let effectiveAge = age;
@@ -319,6 +357,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        deleteAccount,
         calculateDailyCalories,
         initializeState,
       }}

@@ -11,10 +11,13 @@ import {
   onAuthStateChanged,
   sendPasswordResetEmail,
   sendEmailVerification,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   User,
   UserCredential,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export interface FirebaseUserProfile {
@@ -34,6 +37,10 @@ export interface FirebaseUserProfile {
   notificationsEnabled?: boolean;
   mealReminders?: boolean;
   weeklyReport?: boolean;
+  // App settings (synced to Firestore)
+  themeMode?: string;
+  language?: string;
+  region?: string;
   createdAt?: ReturnType<typeof serverTimestamp>;
   updatedAt?: ReturnType<typeof serverTimestamp>;
 }
@@ -207,4 +214,30 @@ export async function updateUserProfile(
     cleanUpdates,
     { merge: true }
   );
+}
+
+/**
+ * Delete the current user's account.
+ * Requires re-authentication with the user's password.
+ * Also deletes Firestore user profile document.
+ */
+export async function firebaseDeleteAccount(password: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('Kullanıcı oturumu bulunamadı.');
+  }
+
+  // Re-authenticate before dangerous operation
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+
+  // Delete Firestore profile document
+  try {
+    await deleteDoc(doc(db, 'users', user.uid));
+  } catch (e) {
+    console.warn('Firestore profile delete failed (continuing):', e);
+  }
+
+  // Delete auth account
+  await deleteUser(user);
 }

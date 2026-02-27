@@ -12,11 +12,14 @@ import {
   Platform,
   FlatList,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useUser } from '@/contexts/UserContext';
+import { useTranslation, TranslationKey } from '@/i18n';
 import {
   getMealsForDate,
   deleteMeal,
@@ -28,6 +31,7 @@ import {
   deleteExercise,
   logExercise,
   ExerciseEntry,
+  recordMealLog,
 } from '../../src/services/firestoreService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import {
@@ -53,14 +57,42 @@ const MEAL_SECTIONS: { key: MealType; label: string; icon: string; color: string
   { key: 'snack', label: 'Aperatifler / Diğer', icon: '🍿', color: '#06b6d4' },
 ];
 
-const COMMON_EXERCISES = [
-  { name: 'Yürüyüş', calPer30: 120 },
-  { name: 'Koşu', calPer30: 300 },
-  { name: 'Bisiklet', calPer30: 250 },
-  { name: 'Yüzme', calPer30: 280 },
-  { name: 'Yoga', calPer30: 90 },
-  { name: 'Ağırlık', calPer30: 180 },
+const EXERCISE_CATEGORIES: { category: string; emoji: string; exercises: { name: string; calPer30: number }[] }[] = [
+  { category: 'Kardiyo', emoji: '🏃', exercises: [
+    { name: 'Yürüyüş', calPer30: 120 },
+    { name: 'Koşu', calPer30: 300 },
+    { name: 'Bisiklet', calPer30: 250 },
+    { name: 'Yüzme', calPer30: 280 },
+    { name: 'İp Atlama', calPer30: 340 },
+    { name: 'Merdiven Çıkma', calPer30: 220 },
+    { name: 'Eliptik', calPer30: 260 },
+    { name: 'Dans', calPer30: 200 },
+  ]},
+  { category: 'Güç / Vücut Geliştirme', emoji: '💪', exercises: [
+    { name: 'Güç / Vücut Geliştirme', calPer30: 180 },
+  ]},
+  { category: 'Spor', emoji: '⚽', exercises: [
+    { name: 'Futbol', calPer30: 260 },
+    { name: 'Basketbol', calPer30: 280 },
+    { name: 'Tenis', calPer30: 240 },
+    { name: 'Voleybol', calPer30: 180 },
+    { name: 'Masa Tenisi', calPer30: 140 },
+    { name: 'Badminton', calPer30: 200 },
+  ]},
+  { category: 'Esneklik & Denge', emoji: '🧘', exercises: [
+    { name: 'Yoga', calPer30: 90 },
+    { name: 'Pilates', calPer30: 130 },
+    { name: 'Esneme', calPer30: 70 },
+  ]},
+  { category: 'Günlük Aktiviteler', emoji: '🏠', exercises: [
+    { name: 'Ev Temizliği', calPer30: 110 },
+    { name: 'Bahçe İşleri', calPer30: 150 },
+    { name: 'Merdiven İnip Çıkma', calPer30: 200 },
+  ]},
 ];
+
+// Flat lookup for calorie calculation
+const ALL_EXERCISES = EXERCISE_CATEGORIES.flatMap(c => c.exercises);
 
 // ─── Date helpers ───────────────────────────────────────────────────────────
 
@@ -72,12 +104,16 @@ function isSameDay(d1: Date, d2: Date): boolean {
   return formatDateKey(d1) === formatDateKey(d2);
 }
 
-function getDayNames(): string[] {
-  return ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+function getDayNames(lang: string): string[] {
+  return lang === 'en'
+    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    : ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 }
 
-function getMonthNames(): string[] {
-  return ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+function getMonthNames(lang: string): string[] {
+  return lang === 'en'
+    ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    : ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 }
 
 function getCalendarDays(centerDate: Date): Date[] {
@@ -94,6 +130,7 @@ function getCalendarDays(centerDate: Date): Date[] {
 
 export default function HomeTab() {
   const { profile, calculateDailyCalories } = useUser();
+  const { t, lang } = useTranslation();
   const today = new Date();
 
   // State
@@ -117,6 +154,7 @@ export default function HomeTab() {
   const [exerciseName, setExerciseName] = useState('');
   const [exerciseDuration, setExerciseDuration] = useState('');
   const [exerciseCalories, setExerciseCalories] = useState('');
+  const [expandedExerciseCategory, setExpandedExerciseCategory] = useState<string | null>(null);
 
   const calendarRef = useRef<FlatList>(null);
 
@@ -173,10 +211,10 @@ export default function HomeTab() {
 
   // ─── Handlers ──────────────────────────────────────────────────────
   const handleDeleteMeal = async (mealId: string) => {
-    Alert.alert('Sil', 'Bu kaydı silmek istediğinize emin misiniz?', [
-      { text: 'İptal', style: 'cancel' },
+    Alert.alert(t('common.delete'), t('home.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -190,6 +228,16 @@ export default function HomeTab() {
     ]);
   };
 
+  // ─── Swipe-to-delete (instant, no confirm) ──────────────────────
+  const handleSwipeDelete = async (mealId: string) => {
+    try {
+      await deleteMeal(mealId);
+      setMeals(prev => prev.filter(m => m.id !== mealId));
+    } catch (err) {
+      console.error('Swipe delete error:', err);
+    }
+  };
+
   // ─── Quantity +/- adjustment ──────────────────────────────────────
   const handleAdjustQuantity = async (meal: MealEntry, delta: number) => {
     if (!meal.id) return;
@@ -197,6 +245,28 @@ export default function HomeTab() {
     const foodInfo = meal.foodKey ? getFoodByKey(meal.foodKey) : null;
     const currentQty = meal.quantity ?? 1;
     const unit = (meal.unit as FoodUnit) ?? 'gram';
+    
+    // If decreasing at minimum → delete the item entirely
+    if (delta < 0) {
+      const atMinimum =
+        (unit === 'gram' && currentQty <= 50) ||
+        (unit === 'ml' && currentQty <= 50) ||
+        (unit === 'kase' && currentQty <= 0.5) ||
+        (unit === 'adet' && currentQty <= 1) ||
+        (unit === 'porsiyon' && currentQty <= 1) ||
+        (unit === 'kucuk' && currentQty <= 1) ||
+        (unit === 'buyuk' && currentQty <= 1);
+      
+      if (atMinimum) {
+        try {
+          await deleteMeal(meal.id);
+          setMeals(prev => prev.filter(m => m.id !== meal.id));
+        } catch (err) {
+          console.error('Delete at minimum error:', err);
+        }
+        return;
+      }
+    }
     
     let newQty: number;
     if (unit === 'gram') {
@@ -240,10 +310,10 @@ export default function HomeTab() {
   };
 
   const handleDeleteExercise = async (exerciseId: string) => {
-    Alert.alert('Sil', 'Bu egzersizi silmek istediğinize emin misiniz?', [
-      { text: 'İptal', style: 'cancel' },
+    Alert.alert(t('common.delete'), t('home.deleteExerciseConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -301,6 +371,14 @@ export default function HomeTab() {
         carbs: Math.round(cal * 0.45 / 4), fat: Math.round(cal * 0.30 / 9),
         weight, quantity: amount, unit: manualUnit, foodKey: selectedFood?.key,
       }, ...prev]);
+
+      // Record meal for streak tracking
+      try {
+        await recordMealLog(profile.uid);
+      } catch (e) {
+        console.warn('recordMealLog failed:', e);
+      }
+
       setShowManualModal(false);
       setManualFoodName('');
       setManualAmount('');
@@ -348,8 +426,8 @@ export default function HomeTab() {
 
   // ─── Calendar strip ───────────────────────────────────────────────
   const calendarDays = getCalendarDays(today);
-  const dayNames = getDayNames();
-  const monthNames = getMonthNames();
+  const dayNames = getDayNames(lang);
+  const monthNames = getMonthNames(lang);
 
   // ─── Render ────────────────────────────────────────────────────────
   return (
@@ -363,7 +441,7 @@ export default function HomeTab() {
       >
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.greeting}>Merhaba, {profile.name ?? 'Kullanıcı'}! 👋</Text>
+            <Text style={styles.greeting}>{t('home.greeting', { name: profile.name ?? (lang === 'en' ? 'User' : 'Kullanıcı') })}</Text>
             <Text style={styles.headerSubtitle}>
               {monthNames[selectedDate.getMonth()]} {selectedDate.getDate()}, {selectedDate.getFullYear()}
             </Text>
@@ -419,24 +497,24 @@ export default function HomeTab() {
           <View style={styles.caloryRow}>
             <View style={styles.caloryItem}>
               <Text style={styles.caloryItemValue}>{consumedCalories}</Text>
-              <Text style={styles.caloryItemLabel}>Alınan</Text>
+              <Text style={styles.caloryItemLabel}>{t('home.consumed')}</Text>
             </View>
             <View style={styles.caloryDivider} />
             <View style={styles.caloryItem}>
               <Text style={[styles.caloryItemValue, { color: Colors.primary[500] }]}>{dailyTarget}</Text>
-              <Text style={styles.caloryItemLabel}>Hedef</Text>
+              <Text style={styles.caloryItemLabel}>{t('home.target')}</Text>
             </View>
             <View style={styles.caloryDivider} />
             <View style={styles.caloryItem}>
               <Text style={[styles.caloryItemValue, { color: Colors.accent.orange }]}>{burnedCalories}</Text>
-              <Text style={styles.caloryItemLabel}>Yakılan</Text>
+              <Text style={styles.caloryItemLabel}>{t('home.burned')}</Text>
             </View>
             <View style={styles.caloryDivider} />
             <View style={styles.caloryItem}>
               <Text style={[styles.caloryItemValue, { color: remainingCalories > 0 ? Colors.primary[600] : Colors.error }]}>
                 {remainingCalories}
               </Text>
-              <Text style={styles.caloryItemLabel}>Kalan</Text>
+              <Text style={styles.caloryItemLabel}>{t('home.remaining')}</Text>
             </View>
           </View>
 
@@ -466,8 +544,8 @@ export default function HomeTab() {
         >
           <Text style={styles.dietPlanBtnIcon}>🥗</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.dietPlanBtnText}>Diyet Önerisi & Haftalık Rapor</Text>
-            <Text style={styles.dietPlanBtnSub}>Kişisel yemek planı ve analiz</Text>
+            <Text style={styles.dietPlanBtnText}>{t('home.dietSuggestion')}</Text>
+            <Text style={styles.dietPlanBtnSub}>{t('home.personalPlan')}</Text>
           </View>
           <Text style={{ fontSize: 16, color: Colors.text.light }}>›</Text>
         </TouchableOpacity>
@@ -475,7 +553,7 @@ export default function HomeTab() {
         {isLoading && !dataLoaded ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary[500]} />
-            <Text style={styles.loadingText}>Veriler yükleniyor...</Text>
+            <Text style={styles.loadingText}>{t('home.dataLoading')}</Text>
           </View>
         ) : (
           <>
@@ -490,7 +568,7 @@ export default function HomeTab() {
                     <View style={styles.mealSectionLeft}>
                       <Text style={styles.mealSectionIcon}>{section.icon}</Text>
                       <View>
-                        <Text style={styles.mealSectionTitle}>{section.label}</Text>
+                        <Text style={styles.mealSectionTitle}>{t(`home.${section.key}` as TranslationKey)}</Text>
                         {sectionCalories > 0 && (
                           <Text style={styles.mealSectionCal}>{sectionCalories} kcal</Text>
                         )}
@@ -513,12 +591,47 @@ export default function HomeTab() {
                   </View>
 
                   {sectionMeals.length === 0 ? (
-                    <Text style={styles.emptyMealText}>Henüz eklenmedi</Text>
+                    <Text style={styles.emptyMealText}>{t('home.notAdded')}</Text>
                   ) : (
                     sectionMeals.map((meal) => (
-                      <View key={meal.id} style={styles.mealItem}>
+                      <Swipeable
+                        key={meal.id}
+                        renderRightActions={() => (
+                          <View style={styles.swipeDeleteAction}>
+                            <Text style={styles.swipeDeleteEmoji}>🗑️</Text>
+                            <Text style={styles.swipeDeleteText}>{t('common.delete')}</Text>
+                          </View>
+                        )}
+                        renderLeftActions={() => (
+                          <View style={styles.swipeDeleteAction}>
+                            <Text style={styles.swipeDeleteEmoji}>🗑️</Text>
+                            <Text style={styles.swipeDeleteText}>{t('common.delete')}</Text>
+                          </View>
+                        )}
+                        onSwipeableOpen={() => meal.id && handleSwipeDelete(meal.id)}
+                        friction={2}
+                        rightThreshold={60}
+                        leftThreshold={60}
+                        overshootLeft={false}
+                        overshootRight={false}
+                      >
+                      <View style={[styles.mealItem, { backgroundColor: Colors.surface }]}>
                         <TouchableOpacity
                           style={styles.mealItemLeft}
+                          onPress={() => router.push({
+                            pathname: '/food-detail',
+                            params: {
+                              foodName: meal.foodName,
+                              foodKey: meal.foodKey ?? '',
+                              calories: String(meal.calories),
+                              weight: String(meal.weight),
+                              quantity: String(meal.quantity ?? ''),
+                              unit: meal.unit ?? '',
+                              protein: String(meal.protein ?? 0),
+                              carbs: String(meal.carbs ?? 0),
+                              fat: String(meal.fat ?? 0),
+                            },
+                          })}
                           onLongPress={() => meal.id && handleDeleteMeal(meal.id)}
                         >
                           <Text style={styles.mealItemName}>{meal.foodName}</Text>
@@ -546,6 +659,7 @@ export default function HomeTab() {
                           </TouchableOpacity>
                         </View>
                       </View>
+                      </Swipeable>
                     ))
                   )}
                 </View>
@@ -558,7 +672,7 @@ export default function HomeTab() {
                 <View style={styles.mealSectionLeft}>
                   <Text style={styles.mealSectionIcon}>🏃</Text>
                   <View>
-                    <Text style={styles.mealSectionTitle}>Egzersiz</Text>
+                    <Text style={styles.mealSectionTitle}>{t('home.exercise')}</Text>
                     {burnedCalories > 0 && (
                       <Text style={[styles.mealSectionCal, { color: Colors.accent.orange }]}>
                         -{burnedCalories} kcal
@@ -570,12 +684,12 @@ export default function HomeTab() {
                   style={[styles.addBtn, { backgroundColor: '#8b5cf6' }]}
                   onPress={() => setShowExerciseModal(true)}
                 >
-                  <Text style={styles.addBtnText}>+ Ekle</Text>
+                  <Text style={styles.addBtnText}>+ {t('common.add')}</Text>
                 </TouchableOpacity>
               </View>
 
               {exercises.length === 0 ? (
-                <Text style={styles.emptyMealText}>Henüz egzersiz eklenmedi</Text>
+                <Text style={styles.emptyMealText}>{t('home.exerciseNotAdded')}</Text>
               ) : (
                 exercises.map((ex) => (
                   <TouchableOpacity
@@ -596,7 +710,7 @@ export default function HomeTab() {
             </View>
 
             {/* Bottom info */}
-            <Text style={styles.footer}>Silmek için bir kayda uzun basın</Text>
+            <Text style={styles.footer}>{t('home.swipeHint')}</Text>
           </>
         )}
       </ScrollView>
@@ -624,7 +738,7 @@ export default function HomeTab() {
       <Modal visible={showManualModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Manuel Yemek Ekle</Text>
+            <Text style={styles.modalTitle}>{t('home.addFood')}</Text>
             <Text style={styles.modalSubtitle}>
               {MEAL_SECTIONS.find(s => s.key === manualMealType)?.icon}{' '}
               {MEAL_SECTIONS.find(s => s.key === manualMealType)?.label}
@@ -687,6 +801,8 @@ export default function HomeTab() {
                       // Reset amount to default for unit
                       if (u === 'kase') setManualAmount(String(selectedFood.defaultPortion));
                       else if (u === 'ml') setManualAmount(String(selectedFood.portionGrams));
+                      else if (u === 'kucuk' || u === 'buyuk') setManualAmount(String(selectedFood.defaultPortion));
+                      else if (u === 'porsiyon') setManualAmount('1');
                     }}
                   >
                     <Text style={[
@@ -716,6 +832,9 @@ export default function HomeTab() {
                 <Text style={styles.unitInfoEmoji}>{selectedFood.emoji}</Text>
                 <Text style={styles.unitInfoText}>
                   {manualUnit === 'adet' ? `1 adet = ~${selectedFood.portionGrams}g` :
+                   manualUnit === 'kucuk' ? `1 küçük = ~${selectedFood.sizes?.kucuk ?? Math.round(selectedFood.portionGrams * 0.75)}g` :
+                   manualUnit === 'buyuk' ? `1 büyük = ~${selectedFood.sizes?.buyuk ?? Math.round(selectedFood.portionGrams * 1.3)}g` :
+                   manualUnit === 'porsiyon' ? `1 porsiyon = ~${selectedFood.unit === 'gram' || selectedFood.unit === 'ml' ? selectedFood.defaultPortion : selectedFood.defaultPortion * selectedFood.portionGrams}g` :
                    manualUnit === 'kase' ? `1 kase = ~${selectedFood.portionGrams}ml` :
                    manualUnit === 'ml' ? '1 ml ≈ 1g' :
                    `${selectedFood.kcalPer100g} kcal/100g`}
@@ -759,32 +878,39 @@ export default function HomeTab() {
       <Modal visible={showExerciseModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Egzersiz Ekle</Text>
+            <Text style={styles.modalTitle}>{t('home.addExercise')}</Text>
 
-            {/* Quick exercise picks */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.exerciseChips}>
-              {COMMON_EXERCISES.map((ex) => (
-                <TouchableOpacity
-                  key={ex.name}
-                  style={[
-                    styles.exerciseChip,
-                    exerciseName === ex.name && styles.exerciseChipActive,
-                  ]}
-                  onPress={() => {
-                    setExerciseName(ex.name);
-                    const dur = parseInt(exerciseDuration) || 30;
-                    setExerciseCalories(String(Math.round(ex.calPer30 * dur / 30)));
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.exerciseChipText,
-                      exerciseName === ex.name && styles.exerciseChipTextActive,
-                    ]}
+            {/* Categorized exercise picker */}
+            <ScrollView style={{ maxHeight: 220, marginBottom: 8 }} nestedScrollEnabled>
+              {EXERCISE_CATEGORIES.map((cat) => (
+                <View key={cat.category}>
+                  <TouchableOpacity
+                    style={[styles.exerciseCategoryHeader, expandedExerciseCategory === cat.category && styles.exerciseCategoryHeaderActive]}
+                    onPress={() => setExpandedExerciseCategory(expandedExerciseCategory === cat.category ? null : cat.category)}
                   >
-                    {ex.name}
-                  </Text>
-                </TouchableOpacity>
+                    <Text style={styles.exerciseCategoryTitle}>{cat.emoji} {cat.category}</Text>
+                    <Text style={styles.exerciseCategoryArrow}>{expandedExerciseCategory === cat.category ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  {expandedExerciseCategory === cat.category && (
+                    <View style={styles.exerciseCategoryBody}>
+                      {cat.exercises.map((ex) => (
+                        <TouchableOpacity
+                          key={ex.name}
+                          style={[styles.exerciseChip, exerciseName === ex.name && styles.exerciseChipActive]}
+                          onPress={() => {
+                            setExerciseName(ex.name);
+                            const dur = parseInt(exerciseDuration) || 30;
+                            setExerciseCalories(String(Math.round(ex.calPer30 * dur / 30)));
+                          }}
+                        >
+                          <Text style={[styles.exerciseChipText, exerciseName === ex.name && styles.exerciseChipTextActive]}>
+                            {ex.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
               ))}
             </ScrollView>
 
@@ -804,7 +930,7 @@ export default function HomeTab() {
               onChangeText={(val) => {
                 setExerciseDuration(val);
                 // Auto-calc calories if common exercise selected
-                const found = COMMON_EXERCISES.find(e => e.name === exerciseName);
+                const found = ALL_EXERCISES.find(e => e.name === exerciseName);
                 if (found) {
                   const dur = parseInt(val) || 30;
                   setExerciseCalories(String(Math.round(found.calPer30 * dur / 30)));
@@ -1192,12 +1318,47 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     maxHeight: 44,
   },
+  exerciseCategoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.neutral[50],
+    borderRadius: BorderRadius.lg,
+    marginBottom: 4,
+  },
+  exerciseCategoryHeaderActive: {
+    backgroundColor: Colors.primary[50],
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  exerciseCategoryTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  exerciseCategoryArrow: {
+    fontSize: 10,
+    color: Colors.text.light,
+  },
+  exerciseCategoryBody: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 6,
+    backgroundColor: Colors.neutral[50],
+    borderBottomLeftRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.lg,
+    marginBottom: 6,
+  },
   exerciseChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.neutral[100],
-    marginRight: 8,
+    marginRight: 0,
   },
   exerciseChipActive: {
     backgroundColor: Colors.primary[500],
@@ -1362,5 +1523,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.primary[700],
+  },
+
+  // Swipe delete action
+  swipeDeleteAction: {
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 0,
+    paddingHorizontal: 8,
+  },
+  swipeDeleteEmoji: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  swipeDeleteText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

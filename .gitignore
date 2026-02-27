@@ -64,6 +64,7 @@ yarn-error.log*
 # =============== Dataset & Models (Large Files) ===============
 # Datasets
 datasets/
+dataset_200/
 merged_datasetf/
 manual_annotations_dataset_v3/
 food_calorie_estimation/seg_dataset/dataset/

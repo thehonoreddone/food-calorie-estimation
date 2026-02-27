@@ -9,3 +9,8 @@ adb reverse --remove-all; adb reverse tcp:8081 tcp:8081; adb reverse tcp:8000 tc
  set LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
 set LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=C:/
 label-studio start --data-dir "C:/labelstudio/data"
+
+
+
+
+adb kill-server; Start-Sleep -Seconds 2; adb start-server; Start-Sleep -Seconds 3; adb devices -l

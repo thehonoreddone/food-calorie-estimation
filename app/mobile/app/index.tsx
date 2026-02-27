@@ -14,16 +14,18 @@ export default function Index() {
     );
   }
 
-  // Route based on user state
+  // If user is already authenticated, skip onboarding entirely
+  if (isAuthenticated) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  // Not authenticated: if onboarding not done, show onboarding first
   if (!hasCompletedOnboarding) {
     return <Redirect href="/onboarding/welcome" />;
   }
 
-  if (!isAuthenticated) {
-    return <Redirect href="/auth/login" />;
-  }
-
-  return <Redirect href="/(tabs)" />;
+  // Onboarding done but not authenticated → login
+  return <Redirect href="/auth/login" />;
 }
 
 const styles = StyleSheet.create({
