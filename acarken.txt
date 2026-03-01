@@ -14,3 +14,10 @@ label-studio start --data-dir "C:/labelstudio/data"
 
 
 adb kill-server; Start-Sleep -Seconds 2; adb start-server; Start-Sleep -Seconds 3; adb devices -l
+
+GEMINI API KEY EKLE 
+
+.env dosyasına GEMINI_API_KEY=your_key ekle
+
+
+offline istersek ONNX/TFlite ile on device model.

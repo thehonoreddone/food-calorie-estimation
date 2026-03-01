@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     CONFIDENCE_THRESHOLD: float = 0.25
     IOU_THRESHOLD: float = 0.45
     
+    # Gemini Vision API (fallback classifier)
+    GEMINI_API_KEY: str = ""  # Set via env: GEMINI_API_KEY=your_key
+    GEMINI_HIGH_CONFIDENCE_THRESHOLD: float = 0.80  # >80%: trust model directly
+    GEMINI_CONFIDENCE_THRESHOLD: float = 0.50  # 50-80%: return model + background Gemini; <50%: wait for Gemini
+    GEMINI_CACHE_TTL: int = 300  # Gemini result cache TTL in seconds
+    
     # Firebase
     FIREBASE_CREDENTIALS_PATH: str = "firebase-credentials.json"
     FIREBASE_PROJECT_ID: str = "food-calorie-estimation-2e3bd"

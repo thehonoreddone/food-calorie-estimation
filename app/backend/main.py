@@ -50,6 +50,13 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("📦 Using YOLO-only pipeline")
         
+        # Initialize Gemini Vision API fallback
+        gemini_loaded = await prediction_service.initialize_gemini()
+        if gemini_loaded:
+            logger.info("✅ Gemini Vision API fallback enabled")
+        else:
+            logger.info("📦 Gemini fallback disabled (set GEMINI_API_KEY to enable)")
+        
         logger.info("✅ ML models and data loaded successfully")
     except Exception as e:
         logger.error(f"❌ Failed to load ML models or data: {e}")

@@ -17,7 +17,10 @@ class PredictionResponse(BaseModel):
     confidence: float = Field(..., ge=0, le=1, description="Prediction confidence (0-1)")
     estimated_weight_grams: float = Field(..., ge=0, description="Estimated portion weight in grams")
     estimated_calories: float = Field(..., ge=0, description="Estimated calories")
+    calories_min: Optional[float] = Field(None, ge=0, description="Min estimated calories")
+    calories_max: Optional[float] = Field(None, ge=0, description="Max estimated calories")
     mask_base64: Optional[str] = Field(None, description="Base64-encoded segmentation mask")
+    source: Optional[str] = Field(None, description="Prediction source: model, gemini, hybrid")
     
     class Config:
         json_schema_extra = {

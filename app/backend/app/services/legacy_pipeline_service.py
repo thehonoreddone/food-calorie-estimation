@@ -113,22 +113,36 @@ class LegacyPipelineService:
             return False
     
     def _find_classifier_checkpoint(self) -> Optional[Path]:
-        """Find the best classifier checkpoint"""
-        # Look for checkpoint in expected locations
-        # Prioritize the correctly trained checkpoint_best.pth
+        """Find the best classifier checkpoint, including latest training runs"""
         backend_models = Path(__file__).resolve().parent.parent.parent / "models"
+        ml_runs = Path(__file__).resolve().parent.parent.parent / "ml" / "runs" / "classifier"
         
         possible_paths = [
-            # Priority 1: The correctly trained checkpoint with embedded class names
+            # Priority 1: The deployed best checkpoint
             backend_models / "checkpoint_best.pth",
-            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "checkpoint_best.pth",
-            # Fallback to other checkpoints
-            backend_models / "efficientnet_b2_best.pt",
-            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "efficientnet_b2_best.pt",
         ]
         
+        # Priority 2: Latest training run (auto-discover newest run folder)
+        if ml_runs.exists():
+            run_dirs = sorted(
+                [d for d in ml_runs.iterdir() if d.is_dir()],
+                key=lambda d: d.stat().st_mtime,
+                reverse=True,
+            )
+            for run_dir in run_dirs:
+                best = run_dir / "checkpoints" / "checkpoint_best.pth"
+                if best.exists():
+                    possible_paths.append(best)
+                    break  # Only add newest
+        
+        # Priority 3: Legacy fallback paths
+        possible_paths.extend([
+            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "checkpoint_best.pth",
+            backend_models / "efficientnet_b2_best.pt",
+        ])
+        
         for path in possible_paths:
-             if path.exists():
+            if path.exists():
                 logger.info(f"Found classifier checkpoint: {path}")
                 return path
         
