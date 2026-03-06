@@ -36,6 +36,10 @@ export interface UserProfile {
   activityLevel?: ActivityLevel;
   dietPreferences?: DietPreference[];
   dailyCalorieTarget?: number; // kullanıcı tarafından ayarlanabilir
+  dailyProtein?: number; // gram
+  dailyCarbs?: number; // gram
+  dailyFat?: number; // gram
+  healthScore?: number; // 1-10
   notificationsEnabled?: boolean;
   mealReminders?: boolean;
   weeklyReport?: boolean;
@@ -56,6 +60,7 @@ interface UserContextType extends UserState {
   logout: () => Promise<void>;
   deleteAccount: (password: string) => Promise<{ success: boolean; error?: string }>;
   calculateDailyCalories: () => number;
+  calculateMacros: () => { calories: number; protein: number; carbs: number; fat: number; healthScore: number };
   initializeState: () => Promise<void>;
 }
 
@@ -348,6 +353,60 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [state.profile]);
 
+  const calculateMacros = useCallback(() => {
+    const calories = calculateDailyCalories();
+    const { gender, weight, goal } = state.profile;
+
+    // If user has saved custom macros, use them
+    if (state.profile.dailyProtein && state.profile.dailyCarbs && state.profile.dailyFat) {
+      return {
+        calories,
+        protein: state.profile.dailyProtein,
+        carbs: state.profile.dailyCarbs,
+        fat: state.profile.dailyFat,
+        healthScore: state.profile.healthScore ?? 7,
+      };
+    }
+
+    // Calculate macros based on goal
+    let proteinRatio: number;
+    let fatRatio: number;
+    let carbRatio: number;
+
+    switch (goal) {
+      case 'lose':
+        proteinRatio = 0.35;
+        fatRatio = 0.25;
+        carbRatio = 0.40;
+        break;
+      case 'gain':
+        proteinRatio = 0.30;
+        fatRatio = 0.25;
+        carbRatio = 0.45;
+        break;
+      default: // maintain
+        proteinRatio = 0.25;
+        fatRatio = 0.30;
+        carbRatio = 0.45;
+        break;
+    }
+
+    const protein = Math.round((calories * proteinRatio) / 4);
+    const carbs = Math.round((calories * carbRatio) / 4);
+    const fat = Math.round((calories * fatRatio) / 9);
+
+    // Health score based on completeness of profile data
+    let healthScore = 5;
+    if (weight) healthScore += 1;
+    if (state.profile.activityLevel && state.profile.activityLevel !== 'sedentary') healthScore += 1;
+    if (state.profile.height) healthScore += 1;
+    if (state.profile.birthDate) healthScore += 1;
+    if (state.profile.dietPreferences?.length) healthScore += 1;
+    healthScore = Math.min(healthScore, 10);
+
+    return { calories, protein, carbs, fat, healthScore };
+  }, [state.profile, calculateDailyCalories]);
+
   return (
     <UserContext.Provider
       value={{
@@ -359,6 +418,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         logout,
         deleteAccount,
         calculateDailyCalories,
+        calculateMacros,
         initializeState,
       }}
     >

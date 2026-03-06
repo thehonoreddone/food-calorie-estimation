@@ -36,7 +36,7 @@ export default function TargetWeightScreen() {
     if (isValid) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       updateProfile({ dailyCalorieTarget: undefined }); // will be calculated
-      router.push('/onboarding/activity');
+      router.push('/onboarding/motivation');
     }
   };
 

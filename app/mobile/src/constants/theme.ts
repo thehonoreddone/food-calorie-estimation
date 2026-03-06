@@ -125,13 +125,17 @@ export const ONBOARDING_STEPS = [
   'goal',
   'discovery',
   'gender-age',
+  'birth-date',
   'body-info',
   'target-weight',
+  'motivation',
   'activity',
   'diet-check',
   'health',
   'daily-time',
   'privacy',
+  'preparing',
+  'plan-ready',
   'signup',
 ] as const;
 
@@ -142,8 +146,8 @@ export type OnboardingStep = typeof ONBOARDING_STEPS[number];
  * Each category groups multiple steps together.
  */
 export const ONBOARDING_CATEGORIES = [
-  { key: 'goals', label: 'Hedef & Profil', steps: ['goal', 'discovery', 'gender-age'] },
-  { key: 'body', label: 'Vücut Bilgileri', steps: ['body-info', 'target-weight', 'activity'] },
+  { key: 'goals', label: 'Hedef & Profil', steps: ['goal', 'discovery', 'gender-age', 'birth-date'] },
+  { key: 'body', label: 'Vücut Bilgileri', steps: ['body-info', 'target-weight', 'motivation', 'activity'] },
   { key: 'nutrition', label: 'Beslenme', steps: ['diet-check', 'health'] },
-  { key: 'account', label: 'Hesap', steps: ['daily-time', 'privacy', 'signup'] },
+  { key: 'account', label: 'Hesap', steps: ['daily-time', 'privacy', 'preparing', 'plan-ready', 'signup'] },
 ] as const;

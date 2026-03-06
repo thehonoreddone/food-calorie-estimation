@@ -441,11 +441,13 @@ def main():
 
     # Resume if requested
     start_epoch = 0
+    resumed_checkpoint = None
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             model.load_state_dict(checkpoint["model_state_dict"])
             start_epoch = checkpoint.get("epoch", 0)
+            resumed_checkpoint = checkpoint
             logger.info(f"Resumed from epoch {start_epoch}")
         else:
             model.load_state_dict(checkpoint)
@@ -483,6 +485,19 @@ def main():
     best_val_acc = 0.0
     best_val_loss = float("inf")
     patience_counter = 0
+
+    # Restore training state from resumed checkpoint
+    if resumed_checkpoint is not None:
+        if "optimizer_state_dict" in resumed_checkpoint:
+            optimizer.load_state_dict(resumed_checkpoint["optimizer_state_dict"])
+            logger.info("  Restored optimizer state")
+        if "scheduler_state_dict" in resumed_checkpoint:
+            scheduler.load_state_dict(resumed_checkpoint["scheduler_state_dict"])
+            logger.info("  Restored scheduler state")
+        best_val_acc = resumed_checkpoint.get("best_val_acc", resumed_checkpoint.get("val_acc", 0.0))
+        best_val_loss = resumed_checkpoint.get("best_val_loss", resumed_checkpoint.get("val_loss", float("inf")))
+        patience_counter = resumed_checkpoint.get("patience_counter", 0)
+        logger.info(f"  Restored best_val_acc={best_val_acc:.2f}%, best_val_loss={best_val_loss:.4f}, patience={patience_counter}")
 
     # Save training config
     config = {
@@ -575,8 +590,11 @@ def main():
                 "arch": args.arch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
                 "val_acc": val_acc,
                 "val_loss": val_loss,
+                "best_val_acc": best_val_acc,
+                "best_val_loss": best_val_loss,
                 "num_classes": num_classes,
                 "class_names": class_names,  # Embed class names in checkpoint!
             }
@@ -587,6 +605,26 @@ def main():
             if patience_counter >= args.patience:
                 logger.info(f"Early stopping at epoch {epoch+1} (patience={args.patience})")
                 break
+
+        # Always save resumable checkpoint (overwrite each epoch for crash recovery)
+        torch.save({
+            "epoch": epoch + 1,
+            "arch": args.arch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "val_acc": val_acc,
+            "val_loss": val_loss,
+            "best_val_acc": best_val_acc,
+            "best_val_loss": best_val_loss,
+            "patience_counter": patience_counter,
+            "num_classes": num_classes,
+            "class_names": class_names,
+        }, checkpoints_dir / "checkpoint_last.pth")
+
+        # Save history incrementally (crash-safe)
+        with open(output_dir / "training_history.json", "w") as f:
+            json.dump(history, f, indent=2)
 
         # Save periodic checkpoint
         if (epoch + 1) % 10 == 0:

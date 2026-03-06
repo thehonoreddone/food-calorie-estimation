@@ -34,6 +34,10 @@ export interface FirebaseUserProfile {
   activityLevel?: string;
   dietPreferences?: string[];
   dailyCalorieTarget?: number;
+  dailyProtein?: number;
+  dailyCarbs?: number;
+  dailyFat?: number;
+  healthScore?: number;
   notificationsEnabled?: boolean;
   mealReminders?: boolean;
   weeklyReport?: boolean;
