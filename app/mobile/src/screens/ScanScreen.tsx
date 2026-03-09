@@ -52,6 +52,7 @@ export const ScanScreen: React.FC = () => {
   // Full result state (after manual capture)
   const [fullResult, setFullResult] = useState<PredictionResponse | null>(null);
   const [fullImageUri, setFullImageUri] = useState<string | null>(null);
+  const [segmentedImageUri, setSegmentedImageUri] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,9 +145,22 @@ export const ScanScreen: React.FC = () => {
         type: "image/jpeg",
         name: `capture_${Date.now()}.jpg`,
       };
-      const result = await predictionService.predict(image);
+      // First, try segmentation (background removal)
+      let displayUri = photo.uri;
+      try {
+        const seg = await predictionService.segment(image);
+        if (seg.segmented_image_url) {
+          displayUri = seg.segmented_image_url;
+          setSegmentedImageUri(seg.segmented_image_url);
+        }
+      } catch (segErr) {
+        console.log("Segmentation failed, falling back to original image:", segErr);
+        setSegmentedImageUri(null);
+      }
+
+      const result = await predictionService.predictFromUrl(displayUri);
       setFullResult(result);
-      setFullImageUri(photo.uri);
+      setFullImageUri(displayUri);
       setMode("result");
     } catch (err: unknown) {
       console.error("Capture error:", err);
@@ -183,9 +197,21 @@ export const ScanScreen: React.FC = () => {
           type: asset.mimeType || "image/jpeg",
           name: asset.fileName || `gallery_${Date.now()}.jpg`,
         };
-        const prediction = await predictionService.predict(image);
+        let displayUri = asset.uri;
+        try {
+          const seg = await predictionService.segment(image);
+          if (seg.segmented_image_url) {
+            displayUri = seg.segmented_image_url;
+            setSegmentedImageUri(seg.segmented_image_url);
+          }
+        } catch (segErr) {
+          console.log("Segmentation failed, falling back to original image:", segErr);
+          setSegmentedImageUri(null);
+        }
+
+        const prediction = await predictionService.predictFromUrl(displayUri);
         setFullResult(prediction);
-        setFullImageUri(asset.uri);
+        setFullImageUri(displayUri);
         setMode("result");
         setIsAnalyzing(false);
       }
@@ -229,6 +255,18 @@ export const ScanScreen: React.FC = () => {
 
       setShowMealModal(false);
       Alert.alert("Eklendi! ✅", `${predToUse.class_name.replace(/_/g, " ")} ${getMealLabel(selectedMealType)} öğününe eklendi.`);
+      // Simple smart notification: if dinner is high-calorie, schedule advice for tomorrow morning
+      if (selectedMealType === "dinner" && predToUse.estimated_calories > 800) {
+        try {
+          const ns = require("../services/notificationService") as typeof import("../services/notificationService");
+          await ns.scheduleSmartAdvice({
+            type: "heavy_dinner",
+            calories: Math.round(predToUse.estimated_calories),
+          });
+        } catch (notifyErr) {
+          console.log("Smart advice notification failed:", notifyErr);
+        }
+      }
       handleReset();
     } catch (err) {
       console.error("Meal log error:", err);

@@ -88,7 +88,7 @@ interface MealSchedule {
   channelId: string;
 }
 
-const MEAL_SCHEDULES: MealSchedule[] = [
+const DEFAULT_MEAL_SCHEDULES: MealSchedule[] = [
   {
     id: MEAL_REMINDER_IDS.breakfast,
     title: '🌅 Kahvaltı Zamanı!',
@@ -115,10 +115,29 @@ const MEAL_SCHEDULES: MealSchedule[] = [
   },
 ];
 
+export interface MealReminderTimes {
+  breakfast?: string; // "08:00"
+  lunch?: string;     // "12:30"
+  dinner?: string;    // "19:00"
+}
+
+function parseTimeString(value: string | undefined, fallbackHour: number, fallbackMinute: number) {
+  if (!value) {
+    return { hour: fallbackHour, minute: fallbackMinute };
+  }
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return { hour: fallbackHour, minute: fallbackMinute };
+  }
+  const hour = Math.min(23, Math.max(0, Number(match[1])));
+  const minute = Math.min(59, Math.max(0, Number(match[2])));
+  return { hour, minute };
+}
+
 /**
  * Schedule daily meal reminder notifications
  */
-export async function scheduleMealReminders(): Promise<void> {
+export async function scheduleMealReminders(times?: MealReminderTimes): Promise<void> {
   try {
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) return;
@@ -126,7 +145,23 @@ export async function scheduleMealReminders(): Promise<void> {
     // Cancel existing meal reminders first
     await cancelMealReminders();
 
-    for (const schedule of MEAL_SCHEDULES) {
+    const schedules: MealSchedule[] = DEFAULT_MEAL_SCHEDULES.map((s) => {
+      if (s.id === MEAL_REMINDER_IDS.breakfast) {
+        const t = parseTimeString(times?.breakfast, s.hour, s.minute);
+        return { ...s, hour: t.hour, minute: t.minute };
+      }
+      if (s.id === MEAL_REMINDER_IDS.lunch) {
+        const t = parseTimeString(times?.lunch, s.hour, s.minute);
+        return { ...s, hour: t.hour, minute: t.minute };
+      }
+      if (s.id === MEAL_REMINDER_IDS.dinner) {
+        const t = parseTimeString(times?.dinner, s.hour, s.minute);
+        return { ...s, hour: t.hour, minute: t.minute };
+      }
+      return s;
+    });
+
+    for (const schedule of schedules) {
       await Notifications.scheduleNotificationAsync({
         identifier: schedule.id,
         content: {
@@ -224,6 +259,7 @@ export async function cancelAllNotifications(): Promise<void> {
 // ─── Streak Reminder ────────────────────────────────────────────────────────
 
 const STREAK_REMINDER_ID = 'streak-reminder';
+const SMART_ADVICE_ID_PREFIX = 'smart-advice-';
 
 /**
  * Her gün 21:00'de kullanıcıya serisi hatırlatılır.
@@ -261,6 +297,56 @@ export async function cancelStreakReminder(): Promise<void> {
     await Notifications.cancelScheduledNotificationAsync(STREAK_REMINDER_ID);
   } catch (e) {
     console.warn('[Notifications] Cancel streak reminder failed:', e);
+  }
+}
+
+// ─── Smart Advice Notifications ───────────────────────────────────────────────
+/**
+ * Simple smart advice type for now.
+ * Can be extended with more cases (e.g. low_protein_day, no_breakfast, etc.)
+ */
+export type SmartAdviceType = 'heavy_dinner';
+
+export interface SmartAdvicePayload {
+  type: SmartAdviceType;
+  calories: number;
+}
+
+export async function scheduleSmartAdvice(payload: SmartAdvicePayload): Promise<void> {
+  try {
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) return;
+
+    const id = `${SMART_ADVICE_ID_PREFIX}${payload.type}`;
+    // Cancel previous same-type advice if any
+    await Notifications.cancelScheduledNotificationAsync(id);
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0); // 09:00 next day
+
+    let title = 'Beslenme Koçun Konuşuyor';
+    let body = 'Bugün için küçük bir beslenme önerin var.';
+
+    if (payload.type === 'heavy_dinner') {
+      title = '🌙 Akşam Biraz Ağır Kaçtı';
+      body = `Akşam yemeğin yaklaşık ${payload.calories} kcal idi. Yarın için daha hafif bir kahvaltı planlamaya ne dersin?`;
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: id,
+      content: {
+        title,
+        body,
+        sound: 'default',
+        ...(Platform.OS === 'android' ? { channelId: 'meal-reminders' } : {}),
+      },
+      trigger: tomorrow,
+    });
+    console.log('[Notifications] Smart advice scheduled:', payload.type);
+  } catch (e) {
+    console.warn('[Notifications] Schedule smart advice failed:', e);
   }
 }
 

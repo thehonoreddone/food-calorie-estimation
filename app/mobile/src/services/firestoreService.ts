@@ -463,3 +463,58 @@ export async function recordMealLog(uid: string): Promise<UserAchievements> {
   await setDoc(doc(db, ACHIEVEMENTS_COLLECTION, uid), { ...updated, updatedAt: serverTimestamp() }, { merge: true });
   return { ...achievements, ...updated };
 }
+
+// ─── Daily Health Data (Steps & Sleep & Water) ──────────────────────────────
+
+const HEALTH_DATA_COLLECTION = 'daily_health';
+
+export interface DailyHealthData {
+  id?: string;
+  uid: string;
+  date: string; // YYYY-MM-DD
+  steps: number;
+  stepsGoal: number;
+  sleepMinutes: number;
+  sleepHours: number;
+  sleepMins: number;
+  waterMl: number;
+  waterGoal: number;
+  updatedAt?: Timestamp;
+}
+
+export async function saveDailyHealth(
+  uid: string,
+  date: string,
+  data: Partial<Omit<DailyHealthData, 'id' | 'uid' | 'date' | 'updatedAt'>>
+): Promise<string> {
+  const docId = `${uid}_${date}`;
+  const docRef = doc(db, HEALTH_DATA_COLLECTION, docId);
+  await setDoc(docRef, {
+    uid,
+    date,
+    ...data,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  return docId;
+}
+
+export async function getDailyHealth(
+  uid: string,
+  date: string
+): Promise<DailyHealthData | null> {
+  const docId = `${uid}_${date}`;
+  const docRef = doc(db, HEALTH_DATA_COLLECTION, docId);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    return { id: docSnap.id, ...docSnap.data() } as DailyHealthData;
+  }
+  return null;
+}
+
+export async function updateWaterIntake(
+  uid: string,
+  date: string,
+  waterMl: number
+): Promise<void> {
+  await saveDailyHealth(uid, date, { waterMl });
+}

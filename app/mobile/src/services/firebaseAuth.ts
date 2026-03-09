@@ -41,6 +41,10 @@ export interface FirebaseUserProfile {
   notificationsEnabled?: boolean;
   mealReminders?: boolean;
   weeklyReport?: boolean;
+  // Reminder times (HH:MM, 24-hour)
+  breakfastReminderTime?: string;
+  lunchReminderTime?: string;
+  dinnerReminderTime?: string;
   // App settings (synced to Firestore)
   themeMode?: string;
   language?: string;

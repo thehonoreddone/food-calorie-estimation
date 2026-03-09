@@ -22,9 +22,7 @@ export function initSentry(): void {
     return;
   }
   if (!SENTRY_DSN) {
-    if (__DEV__) {
-      console.log('[Sentry] DSN tanımlı değil, crash reporting devre dışı.');
-    }
+    // DSN tanımlı değilse Sentry'yi sessizce devre dışı bırak
     return;
   }
 

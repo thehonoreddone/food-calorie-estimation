@@ -61,6 +61,7 @@ export default function RootLayout() {
             <Stack.Screen name="notifications" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="help" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="food-detail" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+            <Stack.Screen name="day-detail" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="weight-tracking" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="achievements" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="contact-privacy" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />

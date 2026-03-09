@@ -16,7 +16,11 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/th
 // Lazy import to avoid expo-notifications push token auto-registration error in Expo Go
 const getNotificationService = () => require('@/services/notificationService') as {
   requestNotificationPermission: () => Promise<boolean>;
-  scheduleMealReminders: () => Promise<void>;
+  scheduleMealReminders: (times?: {
+    breakfast?: string;
+    lunch?: string;
+    dinner?: string;
+  }) => Promise<void>;
   cancelMealReminders: () => Promise<void>;
   scheduleWeeklyReport: () => Promise<void>;
   cancelWeeklyReport: () => Promise<void>;
@@ -32,6 +36,9 @@ export default function NotificationsScreen() {
   const [mealReminders, setMealReminders] = useState(profile.mealReminders ?? false);
   const [weeklyReport, setWeeklyReport] = useState(profile.weeklyReport ?? false);
   const [scheduledCount, setScheduledCount] = useState(0);
+  const [breakfastTime, setBreakfastTime] = useState(profile.breakfastReminderTime ?? '08:00');
+  const [lunchTime, setLunchTime] = useState(profile.lunchReminderTime ?? '12:30');
+  const [dinnerTime, setDinnerTime] = useState(profile.dinnerReminderTime ?? '19:00');
 
   useEffect(() => {
     ns.getScheduledCount().then(setScheduledCount).catch(() => {});
@@ -55,19 +62,34 @@ export default function NotificationsScreen() {
       updateProfile({ mealReminders: false, weeklyReport: false });
     }
     setNotifications(value);
-    updateProfile({ notificationsEnabled: value });
+    updateProfile({
+      notificationsEnabled: value,
+      // İlk kez açılıyorsa mevcut saatleri profile yaz
+      breakfastReminderTime: breakfastTime,
+      lunchReminderTime: lunchTime,
+      dinnerReminderTime: dinnerTime,
+    });
     const count = await ns.getScheduledCount();
     setScheduledCount(count);
   };
 
   const toggleMealReminders = async (value: boolean) => {
     if (value) {
-      await ns.scheduleMealReminders();
+      await ns.scheduleMealReminders({
+        breakfast: breakfastTime,
+        lunch: lunchTime,
+        dinner: dinnerTime,
+      });
     } else {
       await ns.cancelMealReminders();
     }
     setMealReminders(value);
-    updateProfile({ mealReminders: value });
+    updateProfile({
+      mealReminders: value,
+      breakfastReminderTime: breakfastTime,
+      lunchReminderTime: lunchTime,
+      dinnerReminderTime: dinnerTime,
+    });
     const count = await ns.getScheduledCount();
     setScheduledCount(count);
   };
@@ -82,6 +104,61 @@ export default function NotificationsScreen() {
     updateProfile({ weeklyReport: value });
     const count = await ns.getScheduledCount();
     setScheduledCount(count);
+  };
+
+  const handleTimeChange = async (meal: 'breakfast' | 'lunch' | 'dinner', time: string) => {
+    if (meal === 'breakfast') {
+      setBreakfastTime(time);
+    } else if (meal === 'lunch') {
+      setLunchTime(time);
+    } else {
+      setDinnerTime(time);
+    }
+
+    updateProfile({
+      breakfastReminderTime: meal === 'breakfast' ? time : breakfastTime,
+      lunchReminderTime: meal === 'lunch' ? time : lunchTime,
+      dinnerReminderTime: meal === 'dinner' ? time : dinnerTime,
+    });
+
+    if (mealReminders) {
+      await ns.scheduleMealReminders({
+        breakfast: meal === 'breakfast' ? time : breakfastTime,
+        lunch: meal === 'lunch' ? time : lunchTime,
+        dinner: meal === 'dinner' ? time : dinnerTime,
+      });
+      const count = await ns.getScheduledCount();
+      setScheduledCount(count);
+    }
+  };
+
+  const openTimePicker = (meal: 'breakfast' | 'lunch' | 'dinner') => {
+    const presets =
+      meal === 'breakfast'
+        ? ['07:30', '08:00', '08:30']
+        : meal === 'lunch'
+        ? ['12:00', '12:30', '13:00']
+        : ['18:30', '19:00', '19:30'];
+
+    const title =
+      meal === 'breakfast'
+        ? 'Kahvaltı Saati'
+        : meal === 'lunch'
+        ? 'Öğle Yemeği Saati'
+        : 'Akşam Yemeği Saati';
+
+    Alert.alert(
+      title,
+      'Bir saat seçin',
+      [
+        ...presets.map((p) => ({
+          text: p,
+          onPress: () => handleTimeChange(meal, p),
+        })),
+        { text: 'İptal', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -151,21 +228,21 @@ export default function NotificationsScreen() {
           <Text style={styles.cardTitle}>⏰ Hatırlatma Saatleri</Text>
 
           <View style={styles.scheduleRow}>
-            <View style={styles.scheduleItem}>
+            <TouchableOpacity style={styles.scheduleItem} onPress={() => openTimePicker('breakfast')}>
               <Text style={styles.scheduleIcon}>🌅</Text>
               <Text style={styles.scheduleLabel}>Kahvaltı</Text>
-              <Text style={styles.scheduleTime}>08:00</Text>
-            </View>
-            <View style={styles.scheduleItem}>
+              <Text style={styles.scheduleTime}>{breakfastTime}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.scheduleItem} onPress={() => openTimePicker('lunch')}>
               <Text style={styles.scheduleIcon}>☀️</Text>
               <Text style={styles.scheduleLabel}>Öğle</Text>
-              <Text style={styles.scheduleTime}>12:30</Text>
-            </View>
-            <View style={styles.scheduleItem}>
+              <Text style={styles.scheduleTime}>{lunchTime}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.scheduleItem} onPress={() => openTimePicker('dinner')}>
               <Text style={styles.scheduleIcon}>🌙</Text>
               <Text style={styles.scheduleLabel}>Akşam</Text>
-              <Text style={styles.scheduleTime}>19:00</Text>
-            </View>
+              <Text style={styles.scheduleTime}>{dinnerTime}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

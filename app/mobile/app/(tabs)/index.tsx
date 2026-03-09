@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,1541 +6,428 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  Alert,
-  Modal,
-  TextInput,
-  Platform,
-  FlatList,
   Dimensions,
-  Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Swipeable } from 'react-native-gesture-handler';
+import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
 import { useUser } from '@/contexts/UserContext';
-import { useTranslation, TranslationKey } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import {
   getMealsForDate,
-  deleteMeal,
-  updateMeal,
-  logMeal,
-  MealEntry,
-  MealType,
   getExercisesForDate,
-  deleteExercise,
-  logExercise,
+  MealEntry,
   ExerciseEntry,
-  recordMealLog,
+  getDailyHealth,
+  saveDailyHealth,
+  DailyHealthData,
 } from '../../src/services/firestoreService';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import {
-  FOOD_DATABASE,
-  FoodInfo,
-  FoodUnit,
-  searchFoods,
-  getFoodByKey,
-  calculateCalories,
-  calculateWeightGrams,
-  getUnitLabel,
-  getUnitPlaceholder,
-} from '../../src/constants/foodDatabase';
+  getTodaySteps,
+  getLastNightSleep,
+  getStepsForDate,
+  getSleepForDate,
+  isHealthConnectAvailable,
+  requestHealthPermissions,
+  initHealthConnect,
+} from '../../src/services/healthService';
+import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const MEAL_SECTIONS: { key: MealType; label: string; icon: string; color: string }[] = [
-  { key: 'breakfast', label: 'Kahvaltı', icon: '🌅', color: '#f59e0b' },
-  { key: 'lunch', label: 'Öğle Yemeği', icon: '☀️', color: '#f97316' },
-  { key: 'dinner', label: 'Akşam Yemeği', icon: '🌆', color: '#8b5cf6' },
-  { key: 'snack', label: 'Aperatifler / Diğer', icon: '🍿', color: '#06b6d4' },
-];
-
-const EXERCISE_CATEGORIES: { category: string; emoji: string; exercises: { name: string; calPer30: number }[] }[] = [
-  { category: 'Kardiyo', emoji: '🏃', exercises: [
-    { name: 'Yürüyüş', calPer30: 120 },
-    { name: 'Koşu', calPer30: 300 },
-    { name: 'Bisiklet', calPer30: 250 },
-    { name: 'Yüzme', calPer30: 280 },
-    { name: 'İp Atlama', calPer30: 340 },
-    { name: 'Merdiven Çıkma', calPer30: 220 },
-    { name: 'Eliptik', calPer30: 260 },
-    { name: 'Dans', calPer30: 200 },
-  ]},
-  { category: 'Güç / Vücut Geliştirme', emoji: '💪', exercises: [
-    { name: 'Güç / Vücut Geliştirme', calPer30: 180 },
-  ]},
-  { category: 'Spor', emoji: '⚽', exercises: [
-    { name: 'Futbol', calPer30: 260 },
-    { name: 'Basketbol', calPer30: 280 },
-    { name: 'Tenis', calPer30: 240 },
-    { name: 'Voleybol', calPer30: 180 },
-    { name: 'Masa Tenisi', calPer30: 140 },
-    { name: 'Badminton', calPer30: 200 },
-  ]},
-  { category: 'Esneklik & Denge', emoji: '🧘', exercises: [
-    { name: 'Yoga', calPer30: 90 },
-    { name: 'Pilates', calPer30: 130 },
-    { name: 'Esneme', calPer30: 70 },
-  ]},
-  { category: 'Günlük Aktiviteler', emoji: '🏠', exercises: [
-    { name: 'Ev Temizliği', calPer30: 110 },
-    { name: 'Bahçe İşleri', calPer30: 150 },
-    { name: 'Merdiven İnip Çıkma', calPer30: 200 },
-  ]},
-];
-
-// Flat lookup for calorie calculation
-const ALL_EXERCISES = EXERCISE_CATEGORIES.flatMap(c => c.exercises);
+const { width: SW } = Dimensions.get('window');
 
 // ─── Date helpers ───────────────────────────────────────────────────────────
 
-function formatDateKey(date: Date): string {
-  return date.toISOString().split('T')[0];
+function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
+function sameDay(a: Date, b: Date) { return fmtDate(a) === fmtDate(b); }
+
+function dayLabels(l: string) {
+  return l === 'en'
+    ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    : ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+}
+function monthLabels(l: string) {
+  return l === 'en'
+    ? ['January','February','March','April','May','June','July','August','September','October','November','December']
+    : ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+}
+function calDays(center: Date) {
+  const d: Date[] = [];
+  for (let i = -7; i <= 7; i++) { const x = new Date(center); x.setDate(x.getDate()+i); d.push(x); }
+  return d;
 }
 
-function isSameDay(d1: Date, d2: Date): boolean {
-  return formatDateKey(d1) === formatDateKey(d2);
+// ─── Calorie Ring (SVG) ────────────────────────────────────────────────────
+
+function CalRing({ eaten, target, sz = 150 }: { eaten: number; target: number; sz?: number }) {
+  const sw = 14, r = (sz - sw) / 2, c = 2 * Math.PI * r;
+  const rem = Math.max(0, target - eaten);
+  const p = target > 0 ? Math.min(eaten / target, 1) : 0;
+  return (
+    <View style={{ width: sz, height: sz, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={sz} height={sz}>
+        <Defs>
+          <SvgGrad id="rg" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0%" stopColor={Colors.primary[400]} />
+            <Stop offset="100%" stopColor={Colors.primary[600]} />
+          </SvgGrad>
+        </Defs>
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke={Colors.neutral[200]} strokeWidth={sw} fill="none" />
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke="url(#rg)" strokeWidth={sw} fill="none"
+          strokeDasharray={`${c}`} strokeDashoffset={c*(1-p)} strokeLinecap="round"
+          transform={`rotate(-90 ${sz/2} ${sz/2})`} />
+      </Svg>
+      <View style={{ position:'absolute', alignItems:'center' }}>
+        <Text style={{ fontSize: 30, fontWeight: '900', color: Colors.text.primary }}>{rem.toLocaleString('tr-TR')}</Text>
+        <Text style={{ fontSize: 12, color: Colors.text.secondary, fontWeight: '500' }}>Kalan</Text>
+      </View>
+    </View>
+  );
 }
 
-function getDayNames(lang: string): string[] {
-  return lang === 'en'
-    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    : ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+// ─── Small ring for macros ──────────────────────────────────────────────────
+
+function MiniRing({ p, sz = 42, clr, children }: { p: number; sz?: number; clr: string; children: React.ReactNode }) {
+  const w = 4, r = (sz-w)/2, c = 2*Math.PI*r;
+  return (
+    <View style={{ width: sz, height: sz, alignItems:'center', justifyContent:'center' }}>
+      <Svg width={sz} height={sz}>
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke={Colors.neutral[100]} strokeWidth={w} fill="none" />
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke={clr} strokeWidth={w} fill="none"
+          strokeDasharray={`${c}`} strokeDashoffset={c*(1-Math.min(p,1))} strokeLinecap="round"
+          transform={`rotate(-90 ${sz/2} ${sz/2})`} />
+      </Svg>
+      <View style={{ position:'absolute' }}>{children}</View>
+    </View>
+  );
 }
 
-function getMonthNames(lang: string): string[] {
-  return lang === 'en'
-    ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-    : ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+// ─── Macro bar item ─────────────────────────────────────────────────────────
+
+function MacroItem({ label, eaten, goal, clr }: { label: string; eaten: number; goal: number; clr: string }) {
+  const p = goal > 0 ? eaten / goal : 0;
+  return (
+    <View style={S.macroItem}>
+      <MiniRing p={p} clr={clr}><Text style={{ fontSize:10, fontWeight:'700', color: clr }}>{Math.round(p*100)}%</Text></MiniRing>
+      <View style={{ marginLeft: 8 }}>
+        <Text style={{ fontSize:11, color: Colors.text.secondary, fontWeight:'500' }}>{label}</Text>
+        <Text style={{ fontSize:13, fontWeight:'800', color: Colors.text.primary }}>{eaten}/{goal}g</Text>
+      </View>
+    </View>
+  );
 }
 
-function getCalendarDays(centerDate: Date): Date[] {
-  const days: Date[] = [];
-  for (let i = -7; i <= 7; i++) {
-    const d = new Date(centerDate);
-    d.setDate(d.getDate() + i);
-    days.push(d);
-  }
-  return days;
+// ─── Dashboard card ─────────────────────────────────────────────────────────
+
+function DCard({ icon, title, val, sub, clr, onPress }: { icon: string; title: string; val: string; sub: string; clr: string; onPress?: () => void }) {
+  return (
+    <TouchableOpacity style={[S.dCard, Shadows.sm]} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
+      <View style={[S.dCardIcon, { backgroundColor: clr + '18' }]}><Text style={{ fontSize:22 }}>{icon}</Text></View>
+      <Text style={S.dCardTitle}>{title}</Text>
+      <Text style={[S.dCardVal, { color: clr }]}>{val}</Text>
+      <Text style={S.dCardSub}>{sub}</Text>
+    </TouchableOpacity>
+  );
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function HomeTab() {
-  const { profile, calculateDailyCalories } = useUser();
+  const { profile, calculateDailyCalories, calculateMacros } = useUser();
   const { t, lang } = useTranslation();
   const today = new Date();
 
-  // State
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [selDate, setSelDate] = useState(today);
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [health, setHealth] = useState<Partial<DailyHealthData>>({});
+  const [steps, setSteps] = useState(0);
+  const [sleepH, setSleepH] = useState(0);
+  const [sleepM, setSleepM] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [hcOn, setHcOn] = useState(false);
+  const [water, setWater] = useState(0);
 
-  // Manual entry modal state
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [manualMealType, setManualMealType] = useState<MealType>('lunch');
-  const [manualFoodName, setManualFoodName] = useState('');
-  const [manualAmount, setManualAmount] = useState('');
-  const [manualUnit, setManualUnit] = useState<FoodUnit>('gram');
-  const [selectedFood, setSelectedFood] = useState<FoodInfo | null>(null);
-  const [showFoodSuggestions, setShowFoodSuggestions] = useState(false);
+  const stGoal = health.stepsGoal ?? 10000;
+  const wGoal = health.waterGoal ?? 2500;
 
-  // Exercise modal state
-  const [showExerciseModal, setShowExerciseModal] = useState(false);
-  const [exerciseName, setExerciseName] = useState('');
-  const [exerciseDuration, setExerciseDuration] = useState('');
-  const [exerciseCalories, setExerciseCalories] = useState('');
-  const [expandedExerciseCategory, setExpandedExerciseCategory] = useState<string | null>(null);
-
-  const calendarRef = useRef<FlatList>(null);
-
-  // ─── Computed meal calorie ────────────────────────────────────────
-  const manualCaloriesComputed = useMemo(() => {
-    const amount = parseFloat(manualAmount) || 0;
-    if (!selectedFood || amount <= 0) return 0;
-    return calculateCalories(selectedFood, amount, manualUnit);
-  }, [selectedFood, manualAmount, manualUnit]);
-
-  const foodSuggestions = useMemo(() => {
-    return searchFoods(manualFoodName, 8);
-  }, [manualFoodName]);
-
-  // ─── Load data ──────────────────────────────────────────────────────
-  const loadData = useCallback(async (date: Date) => {
+  // ─── Load ──────────────────────────────────────────────────────────
+  const load = useCallback(async (d: Date) => {
     if (!profile.uid) return;
-    setIsLoading(true);
+    setLoading(true);
     try {
-      const dateKey = formatDateKey(date);
-      const [mealData, exerciseData] = await Promise.all([
-        getMealsForDate(profile.uid, dateKey),
-        getExercisesForDate(profile.uid, dateKey),
+      const dk = fmtDate(d);
+      const td = sameDay(d, new Date());
+      const [ml, ex, dh] = await Promise.all([
+        getMealsForDate(profile.uid, dk),
+        getExercisesForDate(profile.uid, dk),
+        getDailyHealth(profile.uid, dk),
       ]);
-      setMeals(mealData);
-      setExercises(exerciseData);
-    } catch (err) {
-      console.error('Error loading day data:', err);
-    } finally {
-      setIsLoading(false);
-      setDataLoaded(true);
-    }
+      setMeals(ml); setExercises(ex); setHealth(dh ?? {}); setWater(dh?.waterMl ?? 0);
+
+      // Health Connect
+      try {
+        const [sd, sl] = await Promise.all([
+          td ? getTodaySteps() : getStepsForDate(dk),
+          td ? getLastNightSleep() : getSleepForDate(dk),
+        ]);
+        if (sd.steps > 0) setSteps(sd.steps); else setSteps(dh?.steps ?? 0);
+        if (sl.totalMinutes > 0) { setSleepH(sl.hours); setSleepM(sl.minutes); }
+        else { setSleepH(dh?.sleepHours ?? 0); setSleepM(dh?.sleepMins ?? 0); }
+        if (td && (sd.steps > 0 || sl.totalMinutes > 0)) {
+          saveDailyHealth(profile.uid, dk, {
+            steps: sd.steps, sleepMinutes: sl.totalMinutes, sleepHours: sl.hours, sleepMins: sl.minutes,
+          }).catch(() => {});
+        }
+      } catch {
+        setSteps(dh?.steps ?? 0); setSleepH(dh?.sleepHours ?? 0); setSleepM(dh?.sleepMins ?? 0);
+      }
+    } catch (e) { console.error('Load error:', e); }
+    finally { setLoading(false); setLoaded(true); }
   }, [profile.uid]);
 
-  // Load on first render + date change
-  const lastLoadedDate = useRef<string>('');
-  const dateKey = formatDateKey(selectedDate);
-  if (dateKey !== lastLoadedDate.current && profile.uid) {
-    lastLoadedDate.current = dateKey;
-    loadData(selectedDate);
-  }
+  useEffect(() => {
+    (async () => { const a = await isHealthConnectAvailable(); setHcOn(a); if (a) await initHealthConnect(); })();
+  }, []);
 
-  // ─── Calculations ──────────────────────────────────────────────────
-  const dailyTarget = calculateDailyCalories();
-  const consumedCalories = meals.reduce((sum, m) => sum + m.calories, 0);
-  const burnedCalories = exercises.reduce((sum, e) => sum + e.caloriesBurned, 0);
-  const netCalories = consumedCalories - burnedCalories;
-  const calorieProgress = dailyTarget > 0 ? Math.min(consumedCalories / dailyTarget, 1) : 0;
-  const remainingCalories = Math.max(0, dailyTarget - consumedCalories + burnedCalories);
+  const lastDk = useRef('');
+  const dk = fmtDate(selDate);
+  if (dk !== lastDk.current && profile.uid) { lastDk.current = dk; load(selDate); }
 
-  const getMealsForType = (type: MealType) => meals.filter(m => m.mealType === type);
-  const getMealTypeCalories = (type: MealType) =>
-    getMealsForType(type).reduce((sum, m) => sum + m.calories, 0);
+  // ─── Calc ──────────────────────────────────────────────────────────
+  const tgt = calculateDailyCalories();
+  const eaten = meals.reduce((s, m) => s + m.calories, 0);
+  const burned = exercises.reduce((s, e) => s + e.caloriesBurned, 0);
+  const macros = calculateMacros();
+  const eProt = meals.reduce((s, m) => s + (m.protein ?? 0), 0);
+  const eCarb = meals.reduce((s, m) => s + (m.carbs ?? 0), 0);
+  const eFat = meals.reduce((s, m) => s + (m.fat ?? 0), 0);
 
-  // ─── Handlers ──────────────────────────────────────────────────────
-  const handleDeleteMeal = async (mealId: string) => {
-    Alert.alert(t('common.delete'), t('home.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteMeal(mealId);
-            setMeals(prev => prev.filter(m => m.id !== mealId));
-          } catch (err) {
-            console.error('Delete error:', err);
-          }
-        },
-      },
-    ]);
+  const days = calDays(today);
+  const dN = dayLabels(lang);
+  const mN = monthLabels(lang);
+
+  const addWater = async (ml: number) => {
+    if (!profile.uid) return;
+    const nw = Math.max(0, water + ml);
+    setWater(nw);
+    saveDailyHealth(profile.uid, fmtDate(selDate), { waterMl: nw, waterGoal: wGoal }).catch(() => {});
   };
 
-  // ─── Swipe-to-delete (instant, no confirm) ──────────────────────
-  const handleSwipeDelete = async (mealId: string) => {
-    try {
-      await deleteMeal(mealId);
-      setMeals(prev => prev.filter(m => m.id !== mealId));
-    } catch (err) {
-      console.error('Swipe delete error:', err);
-    }
+  const connectHC = async () => {
+    const a = await isHealthConnectAvailable();
+    if (!a) { Alert.alert('Health Connect', 'Google Health Connect uygulaması yüklü değil. Lütfen Play Store\'dan yükleyin.'); return; }
+    const ok = await requestHealthPermissions();
+    if (ok) { setHcOn(true); load(selDate); }
   };
 
-  // ─── Quantity +/- adjustment ──────────────────────────────────────
-  const handleAdjustQuantity = async (meal: MealEntry, delta: number) => {
-    if (!meal.id) return;
-    
-    const foodInfo = meal.foodKey ? getFoodByKey(meal.foodKey) : null;
-    const currentQty = meal.quantity ?? 1;
-    const unit = (meal.unit as FoodUnit) ?? 'gram';
-    
-    // If decreasing at minimum → delete the item entirely
-    if (delta < 0) {
-      const atMinimum =
-        (unit === 'gram' && currentQty <= 50) ||
-        (unit === 'ml' && currentQty <= 50) ||
-        (unit === 'kase' && currentQty <= 0.5) ||
-        (unit === 'adet' && currentQty <= 1) ||
-        (unit === 'porsiyon' && currentQty <= 1) ||
-        (unit === 'kucuk' && currentQty <= 1) ||
-        (unit === 'buyuk' && currentQty <= 1);
-      
-      if (atMinimum) {
-        try {
-          await deleteMeal(meal.id);
-          setMeals(prev => prev.filter(m => m.id !== meal.id));
-        } catch (err) {
-          console.error('Delete at minimum error:', err);
-        }
-        return;
-      }
-    }
-    
-    let newQty: number;
-    if (unit === 'gram') {
-      newQty = Math.max(50, currentQty + delta * 50); // +/- 50g
-    } else if (unit === 'ml') {
-      newQty = Math.max(50, currentQty + delta * 50); // +/- 50ml
-    } else if (unit === 'kase') {
-      newQty = Math.max(0.5, currentQty + delta * 0.5); // +/- 0.5 kase
-    } else {
-      // adet
-      newQty = Math.max(1, currentQty + delta); // +/- 1 adet
-    }
-    
-    let newCal: number;
-    let newWeight: number;
-    if (foodInfo) {
-      newCal = calculateCalories(foodInfo, newQty, unit);
-      newWeight = calculateWeightGrams(foodInfo, newQty, unit);
-    } else {
-      // Fallback: proportional adjustment
-      const ratio = currentQty > 0 ? newQty / currentQty : 1;
-      newCal = Math.round(meal.calories * ratio);
-      newWeight = Math.round(meal.weight * ratio);
-    }
-    
-    const updates = {
-      quantity: newQty,
-      calories: newCal,
-      weight: newWeight,
-      protein: Math.round(newCal * 0.25 / 4),
-      carbs: Math.round(newCal * 0.45 / 4),
-      fat: Math.round(newCal * 0.30 / 9),
-    };
-    
-    try {
-      await updateMeal(meal.id, updates);
-      setMeals(prev => prev.map(m => m.id === meal.id ? { ...m, ...updates } : m));
-    } catch (err) {
-      console.error('Quantity update error:', err);
-    }
+  const goDayDetail = (d: Date) => {
+    setSelDate(d);
+    router.push({ pathname: '/day-detail', params: { date: fmtDate(d) } });
   };
-
-  const handleDeleteExercise = async (exerciseId: string) => {
-    Alert.alert(t('common.delete'), t('home.deleteExerciseConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteExercise(exerciseId);
-            setExercises(prev => prev.filter(e => e.id !== exerciseId));
-          } catch (err) {
-            console.error('Delete error:', err);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleManualAdd = async () => {
-    if (!profile.uid || !manualFoodName.trim()) {
-      Alert.alert('Hata', 'Yemek adı girmelisiniz.');
-      return;
-    }
-    const amount = parseFloat(manualAmount) || 0;
-    if (amount <= 0) {
-      Alert.alert('Hata', `Lütfen miktar girin (${getUnitLabel(manualUnit)}).`);
-      return;
-    }
-    
-    let cal: number;
-    let weight: number;
-    
-    if (selectedFood) {
-      cal = calculateCalories(selectedFood, amount, manualUnit);
-      weight = calculateWeightGrams(selectedFood, amount, manualUnit);
-    } else {
-      // Fallback for unknown foods: assume 1.5 kcal/g, treat as gram
-      weight = Math.round(amount);
-      cal = Math.round(1.5 * weight);
-    }
-    
-    try {
-      const id = await logMeal(profile.uid, {
-        date: formatDateKey(selectedDate),
-        mealType: manualMealType,
-        foodName: manualFoodName.trim(),
-        calories: cal,
-        protein: Math.round(cal * 0.25 / 4),
-        carbs: Math.round(cal * 0.45 / 4),
-        fat: Math.round(cal * 0.30 / 9),
-        weight,
-        quantity: amount,
-        unit: manualUnit,
-        foodKey: selectedFood?.key,
-      });
-      setMeals(prev => [{
-        id, uid: profile.uid!, date: formatDateKey(selectedDate),
-        mealType: manualMealType, foodName: manualFoodName.trim(),
-        calories: cal, protein: Math.round(cal * 0.25 / 4),
-        carbs: Math.round(cal * 0.45 / 4), fat: Math.round(cal * 0.30 / 9),
-        weight, quantity: amount, unit: manualUnit, foodKey: selectedFood?.key,
-      }, ...prev]);
-
-      // Record meal for streak tracking
-      try {
-        await recordMealLog(profile.uid);
-      } catch (e) {
-        console.warn('recordMealLog failed:', e);
-      }
-
-      setShowManualModal(false);
-      setManualFoodName('');
-      setManualAmount('');
-      setSelectedFood(null);
-    } catch (err) {
-      console.error('Manual add error:', err);
-      Alert.alert('Hata', 'Kayıt eklenemedi.');
-    }
-  };
-
-  const handleAddExercise = async () => {
-    if (!profile.uid || !exerciseName.trim()) {
-      Alert.alert('Hata', 'Egzersiz adı girmelisiniz.');
-      return;
-    }
-    const duration = parseInt(exerciseDuration) || 30;
-    const cal = parseInt(exerciseCalories) || 0;
-    try {
-      const id = await logExercise(profile.uid, {
-        date: formatDateKey(selectedDate),
-        name: exerciseName.trim(),
-        duration,
-        caloriesBurned: cal,
-      });
-      setExercises(prev => [{ id, uid: profile.uid!, date: formatDateKey(selectedDate), name: exerciseName.trim(), duration, caloriesBurned: cal }, ...prev]);
-      setShowExerciseModal(false);
-      setExerciseName('');
-      setExerciseDuration('');
-      setExerciseCalories('');
-    } catch (err) {
-      console.error('Exercise add error:', err);
-      Alert.alert('Hata', 'Egzersiz eklenemedi.');
-    }
-  };
-
-  const openManualModal = (mealType: MealType) => {
-    setManualMealType(mealType);
-    setManualFoodName('');
-    setManualAmount('');
-    setSelectedFood(null);
-    setManualUnit('gram');
-    setShowFoodSuggestions(false);
-    setShowManualModal(true);
-  };
-
-  // ─── Calendar strip ───────────────────────────────────────────────
-  const calendarDays = getCalendarDays(today);
-  const dayNames = getDayNames(lang);
-  const monthNames = getMonthNames(lang);
 
   // ─── Render ────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={[Colors.primary[500], Colors.primary[700]]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <View style={styles.headerTop}>
+    <SafeAreaView style={S.container} edges={['top']}>
+      <LinearGradient colors={[Colors.primary[500], Colors.primary[700]]} start={{x:0,y:0}} end={{x:1,y:1}} style={S.header}>
+        <View style={S.headerTop}>
           <View>
-            <Text style={styles.greeting}>{t('home.greeting', { name: profile.name ?? (lang === 'en' ? 'User' : 'Kullanıcı') })}</Text>
-            <Text style={styles.headerSubtitle}>
-              {monthNames[selectedDate.getMonth()]} {selectedDate.getDate()}, {selectedDate.getFullYear()}
-            </Text>
+            <Text style={S.greeting}>{t('home.greeting', { name: profile.name ?? (lang === 'en' ? 'User' : 'Kullanıcı') })}</Text>
+            <Text style={S.headerSub}>{mN[selDate.getMonth()]} {selDate.getDate()}, {selDate.getFullYear()}</Text>
           </View>
+          <TouchableOpacity style={S.settingsBtn} onPress={() => router.push('/settings')}>
+            <Text style={{ fontSize: 20 }}>⚙️</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Calendar Strip */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.calendarStrip}
-        >
-          {calendarDays.map((day, index) => {
-            const isSelected = isSameDay(day, selectedDate);
-            const isToday = isSameDay(day, today);
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.calStrip}>
+          {days.map((day, i) => {
+            const sel = sameDay(day, selDate), td = sameDay(day, today);
             return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.calendarDay,
-                  isSelected && styles.calendarDaySelected,
-                  isToday && !isSelected && styles.calendarDayToday,
-                ]}
-                onPress={() => setSelectedDate(day)}
-              >
-                <Text
-                  style={[
-                    styles.calendarDayName,
-                    isSelected && styles.calendarDayTextActive,
-                  ]}
-                >
-                  {dayNames[day.getDay()]}
-                </Text>
-                <Text
-                  style={[
-                    styles.calendarDayNumber,
-                    isSelected && styles.calendarDayTextActive,
-                  ]}
-                >
-                  {day.getDate()}
-                </Text>
-                {isToday && <View style={[styles.todayDot, isSelected && styles.todayDotActive]} />}
+              <TouchableOpacity key={i} style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
+                onPress={() => setSelDate(day)} onLongPress={() => goDayDetail(day)}>
+                <Text style={[S.calDayN, sel && S.calDayA]}>{dN[day.getDay()]}</Text>
+                <Text style={[S.calDayNum, sel && S.calDayA]}>{day.getDate()}</Text>
+                {td && <View style={[S.tdDot, sel && S.tdDotA]} />}
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       </LinearGradient>
 
-      {/* Content */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Calorie Summary Card */}
-        <View style={[styles.calorySummaryCard, Shadows.md]}>
-          <View style={styles.caloryRow}>
-            <View style={styles.caloryItem}>
-              <Text style={styles.caloryItemValue}>{consumedCalories}</Text>
-              <Text style={styles.caloryItemLabel}>{t('home.consumed')}</Text>
-            </View>
-            <View style={styles.caloryDivider} />
-            <View style={styles.caloryItem}>
-              <Text style={[styles.caloryItemValue, { color: Colors.primary[500] }]}>{dailyTarget}</Text>
-              <Text style={styles.caloryItemLabel}>{t('home.target')}</Text>
-            </View>
-            <View style={styles.caloryDivider} />
-            <View style={styles.caloryItem}>
-              <Text style={[styles.caloryItemValue, { color: Colors.accent.orange }]}>{burnedCalories}</Text>
-              <Text style={styles.caloryItemLabel}>{t('home.burned')}</Text>
-            </View>
-            <View style={styles.caloryDivider} />
-            <View style={styles.caloryItem}>
-              <Text style={[styles.caloryItemValue, { color: remainingCalories > 0 ? Colors.primary[600] : Colors.error }]}>
-                {remainingCalories}
-              </Text>
-              <Text style={styles.caloryItemLabel}>{t('home.remaining')}</Text>
-            </View>
-          </View>
-
-          {/* Progress bar */}
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                {
-                  width: `${calorieProgress * 100}%`,
-                  backgroundColor:
-                    calorieProgress > 1 ? Colors.error : calorieProgress > 0.8 ? Colors.warning : Colors.primary[500],
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {consumedCalories} / {dailyTarget} kcal ({Math.round(calorieProgress * 100)}%)
-          </Text>
-        </View>
-
-        {/* Diet Plan & Weekly Report shortcut */}
-        <TouchableOpacity
-          style={[styles.dietPlanBtn, Shadows.sm]}
-          onPress={() => router.push('/diet-recommendation')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.dietPlanBtnIcon}>🥗</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dietPlanBtnText}>{t('home.dietSuggestion')}</Text>
-            <Text style={styles.dietPlanBtnSub}>{t('home.personalPlan')}</Text>
-          </View>
-          <Text style={{ fontSize: 16, color: Colors.text.light }}>›</Text>
-        </TouchableOpacity>
-
-        {isLoading && !dataLoaded ? (
-          <View style={styles.loadingContainer}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
+        {loading && !loaded ? (
+          <View style={S.loadWrap}>
             <ActivityIndicator size="large" color={Colors.primary[500]} />
-            <Text style={styles.loadingText}>{t('home.dataLoading')}</Text>
+            <Text style={S.loadTxt}>{t('home.dataLoading')}</Text>
           </View>
         ) : (
           <>
-            {/* Meal Sections */}
-            {MEAL_SECTIONS.map((section) => {
-              const sectionMeals = getMealsForType(section.key);
-              const sectionCalories = getMealTypeCalories(section.key);
-
-              return (
-                <View key={section.key} style={[styles.mealSection, Shadows.sm]}>
-                  <View style={styles.mealSectionHeader}>
-                    <View style={styles.mealSectionLeft}>
-                      <Text style={styles.mealSectionIcon}>{section.icon}</Text>
-                      <View>
-                        <Text style={styles.mealSectionTitle}>{t(`home.${section.key}` as TranslationKey)}</Text>
-                        {sectionCalories > 0 && (
-                          <Text style={styles.mealSectionCal}>{sectionCalories} kcal</Text>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.mealSectionActions}>
-                      <TouchableOpacity
-                        style={styles.addBtnSmall}
-                        onPress={() => openManualModal(section.key)}
-                      >
-                        <Text style={styles.addBtnSmallText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.addBtn, { backgroundColor: section.color }]}
-                        onPress={() => router.push('/(tabs)/scan')}
-                      >
-                        <Text style={styles.addBtnText}>+ 📸</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {sectionMeals.length === 0 ? (
-                    <Text style={styles.emptyMealText}>{t('home.notAdded')}</Text>
-                  ) : (
-                    sectionMeals.map((meal) => (
-                      <Swipeable
-                        key={meal.id}
-                        renderRightActions={() => (
-                          <View style={styles.swipeDeleteAction}>
-                            <Text style={styles.swipeDeleteEmoji}>🗑️</Text>
-                            <Text style={styles.swipeDeleteText}>{t('common.delete')}</Text>
-                          </View>
-                        )}
-                        renderLeftActions={() => (
-                          <View style={styles.swipeDeleteAction}>
-                            <Text style={styles.swipeDeleteEmoji}>🗑️</Text>
-                            <Text style={styles.swipeDeleteText}>{t('common.delete')}</Text>
-                          </View>
-                        )}
-                        onSwipeableOpen={() => meal.id && handleSwipeDelete(meal.id)}
-                        friction={2}
-                        rightThreshold={60}
-                        leftThreshold={60}
-                        overshootLeft={false}
-                        overshootRight={false}
-                      >
-                      <View style={[styles.mealItem, { backgroundColor: Colors.surface }]}>
-                        <TouchableOpacity
-                          style={styles.mealItemLeft}
-                          onPress={() => router.push({
-                            pathname: '/food-detail',
-                            params: {
-                              foodName: meal.foodName,
-                              foodKey: meal.foodKey ?? '',
-                              calories: String(meal.calories),
-                              weight: String(meal.weight),
-                              quantity: String(meal.quantity ?? ''),
-                              unit: meal.unit ?? '',
-                              protein: String(meal.protein ?? 0),
-                              carbs: String(meal.carbs ?? 0),
-                              fat: String(meal.fat ?? 0),
-                            },
-                          })}
-                          onLongPress={() => meal.id && handleDeleteMeal(meal.id)}
-                        >
-                          <Text style={styles.mealItemName}>{meal.foodName}</Text>
-                          <Text style={styles.mealItemDetail}>
-                            {meal.quantity && meal.unit
-                              ? `${meal.quantity} ${getUnitLabel(meal.unit as FoodUnit)} • `
-                              : meal.weight > 0 ? `${meal.weight}g • ` : ''}
-                            {meal.calories} kcal
-                          </Text>
-                        </TouchableOpacity>
-                        {/* +/- buttons */}
-                        <View style={styles.quantityControls}>
-                          <TouchableOpacity
-                            style={styles.quantityBtn}
-                            onPress={() => handleAdjustQuantity(meal, -1)}
-                          >
-                            <Text style={styles.quantityBtnText}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.mealItemCalories}>{meal.calories}</Text>
-                          <TouchableOpacity
-                            style={styles.quantityBtn}
-                            onPress={() => handleAdjustQuantity(meal, 1)}
-                          >
-                            <Text style={styles.quantityBtnText}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                      </Swipeable>
-                    ))
-                  )}
+            {/* ─── Calorie Card ──────────────────────────────────── */}
+            <View style={[S.calCard, Shadows.md]}>
+              <Text style={S.calCardTitle}>Kaloriler</Text>
+              <Text style={S.calFormula}>Kalan = Hedef - Yiyecek + Egzersiz</Text>
+              <View style={S.calBody}>
+                <CalRing eaten={eaten} target={tgt} />
+                <View style={S.calStatsCol}>
+                  <CalStat icon="🏁" label="Temel Hedef" value={tgt} color={Colors.text.primary} />
+                  <CalStat icon="🍴" label="Yiyecek" value={eaten} color={Colors.primary[600]} />
+                  <CalStat icon="🔥" label="Egzersiz" value={burned} color={Colors.accent.orange} />
                 </View>
-              );
-            })}
-
-            {/* Exercise Section */}
-            <View style={[styles.mealSection, Shadows.sm]}>
-              <View style={styles.mealSectionHeader}>
-                <View style={styles.mealSectionLeft}>
-                  <Text style={styles.mealSectionIcon}>🏃</Text>
-                  <View>
-                    <Text style={styles.mealSectionTitle}>{t('home.exercise')}</Text>
-                    {burnedCalories > 0 && (
-                      <Text style={[styles.mealSectionCal, { color: Colors.accent.orange }]}>
-                        -{burnedCalories} kcal
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={[styles.addBtn, { backgroundColor: '#8b5cf6' }]}
-                  onPress={() => setShowExerciseModal(true)}
-                >
-                  <Text style={styles.addBtnText}>+ {t('common.add')}</Text>
-                </TouchableOpacity>
               </View>
-
-              {exercises.length === 0 ? (
-                <Text style={styles.emptyMealText}>{t('home.exerciseNotAdded')}</Text>
-              ) : (
-                exercises.map((ex) => (
-                  <TouchableOpacity
-                    key={ex.id}
-                    style={styles.mealItem}
-                    onLongPress={() => ex.id && handleDeleteExercise(ex.id)}
-                  >
-                    <View style={styles.mealItemLeft}>
-                      <Text style={styles.mealItemName}>{ex.name}</Text>
-                      <Text style={styles.mealItemDetail}>{ex.duration} dk</Text>
-                    </View>
-                    <Text style={[styles.mealItemCalories, { color: Colors.accent.orange }]}>
-                      -{ex.caloriesBurned}
-                    </Text>
-                  </TouchableOpacity>
-                ))
-              )}
             </View>
 
-            {/* Bottom info */}
-            <Text style={styles.footer}>{t('home.swipeHint')}</Text>
+            {/* ─── Macros ────────────────────────────────────────── */}
+            <View style={[S.macroRow, Shadows.sm]}>
+              <MacroItem label="Protein" eaten={eProt} goal={macros.protein} clr="#ef4444" />
+              <View style={S.macroDivider} />
+              <MacroItem label="Karb" eaten={eCarb} goal={macros.carbs} clr={Colors.accent.amber} />
+              <View style={S.macroDivider} />
+              <MacroItem label="Yağ" eaten={eFat} goal={macros.fat} clr="#3b82f6" />
+            </View>
+
+            {/* ─── Stats Grid ────────────────────────────────────── */}
+            <View style={S.grid}>
+              <DCard icon="👟" title="Adım" val={steps.toLocaleString('tr-TR')}
+                sub={`Hedef: ${stGoal.toLocaleString('tr-TR')}`} clr={Colors.primary[500]}
+                onPress={hcOn ? undefined : connectHC} />
+              <DCard icon="🔥" title="Egzersiz" val={`${burned} kal`}
+                sub={exercises.length > 0 ? `${exercises.reduce((s,e) => s + e.duration, 0)} dk` : 'Ekle →'}
+                clr={Colors.accent.orange} onPress={() => goDayDetail(selDate)} />
+              <DCard icon="🌙" title="Uyku"
+                val={sleepH > 0 || sleepM > 0 ? `${sleepH}sa ${sleepM}dk` : '—'}
+                sub={sleepH >= 7 ? 'İyi uyku 👍' : sleepH > 0 ? 'Daha fazla uyu' : 'Bağlan →'}
+                clr="#8b5cf6" onPress={hcOn ? undefined : connectHC} />
+              <DCard icon="💧" title="Su" val={`${water} ml`}
+                sub={`Hedef: ${wGoal} ml`} clr="#06b6d4" onPress={() => addWater(250)} />
+            </View>
+
+            {/* ─── Connect HC ────────────────────────────────────── */}
+            {!hcOn && (
+              <TouchableOpacity style={[S.hcCard, Shadows.sm]} onPress={connectHC}>
+                <Text style={S.hcIcon}>🔗</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={S.hcTitle}>Health Connect Bağla</Text>
+                  <Text style={S.hcSub}>Adım ve uyku verilerini otomatik izleyin</Text>
+                </View>
+                <Text style={{ fontSize: 20, color: Colors.primary[500] }}>›</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* ─── Meals Link ────────────────────────────────────── */}
+            <TouchableOpacity style={[S.linkCard, Shadows.sm]} onPress={() => goDayDetail(selDate)} activeOpacity={0.7}>
+              <Text style={S.linkIcon}>🍽️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={S.linkTitle}>Öğünleri Görüntüle</Text>
+                <Text style={S.linkSub}>
+                  {meals.length > 0 ? `${meals.length} kayıt • ${eaten} kcal` : 'Yemek eklemek için dokunun'}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 20, color: Colors.text.light }}>›</Text>
+            </TouchableOpacity>
+
+            {/* ─── Diet ──────────────────────────────────────────── */}
+            <TouchableOpacity style={[S.dietBtn, Shadows.sm]} onPress={() => router.push('/diet-recommendation')} activeOpacity={0.8}>
+              <Text style={{ fontSize: 28 }}>🥗</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={S.dietTxt}>{t('home.dietSuggestion')}</Text>
+                <Text style={S.dietSub}>{t('home.personalPlan')}</Text>
+              </View>
+              <Text style={{ fontSize: 16, color: Colors.text.light }}>›</Text>
+            </TouchableOpacity>
+
+            {/* ─── Weight ────────────────────────────────────────── */}
+            <TouchableOpacity style={[S.wCard, Shadows.sm]} onPress={() => router.push('/weight-tracking')} activeOpacity={0.7}>
+              <View style={S.wHead}>
+                <Text style={S.wTitle}>⚖️ Ağırlık</Text>
+                <Text style={S.wAction}>+</Text>
+              </View>
+              <Text style={S.wVal}>{profile.weight ? `${profile.weight} kg` : '— kg'}</Text>
+              <Text style={S.wSub}>{profile.targetWeight ? `Hedef: ${profile.targetWeight} kg` : 'Hedef belirle'}</Text>
+            </TouchableOpacity>
+
+            <View style={{ height: 30 }} />
           </>
         )}
       </ScrollView>
-
-      {/* ─── Bottom Calorie Bar ──────────────────────────────────────── */}
-      <View style={[styles.bottomBar, Shadows.lg]}>
-        <View style={styles.bottomBarContent}>
-          <View style={styles.bottomBarItem}>
-            <Text style={styles.bottomBarIcon}>🔥</Text>
-            <Text style={styles.bottomBarValue}>{consumedCalories}</Text>
-            <Text style={styles.bottomBarLabel}>kcal</Text>
-          </View>
-          <View style={styles.bottomBarCenter}>
-            <Text style={styles.bottomBarSlash}>/</Text>
-          </View>
-          <View style={styles.bottomBarItem}>
-            <Text style={styles.bottomBarIcon}>🎯</Text>
-            <Text style={[styles.bottomBarValue, { color: Colors.primary[500] }]}>{dailyTarget}</Text>
-            <Text style={styles.bottomBarLabel}>hedef</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ─── Manual Add Modal ────────────────────────────────────────── */}
-      <Modal visible={showManualModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('home.addFood')}</Text>
-            <Text style={styles.modalSubtitle}>
-              {MEAL_SECTIONS.find(s => s.key === manualMealType)?.icon}{' '}
-              {MEAL_SECTIONS.find(s => s.key === manualMealType)?.label}
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Yemek adı (ör: mercimek çorbası, döner, baklava)"
-              placeholderTextColor={Colors.text.light}
-              value={manualFoodName}
-              onChangeText={(text) => {
-                setManualFoodName(text);
-                setShowFoodSuggestions(true);
-                // Auto-detect food from database
-                const results = searchFoods(text, 1);
-                if (results.length > 0 && results[0].displayName.toLowerCase() === text.toLowerCase()) {
-                  setSelectedFood(results[0]);
-                  setManualUnit(results[0].unit);
-                  setManualAmount(String(results[0].defaultPortion));
-                }
-              }}
-            />
-
-            {/* Food suggestions from 201 classes */}
-            {showFoodSuggestions && foodSuggestions.length > 0 && (
-              <ScrollView style={styles.suggestionsContainer} nestedScrollEnabled>
-                {foodSuggestions.map((food) => (
-                  <TouchableOpacity
-                    key={food.key}
-                    style={styles.suggestionItem}
-                    onPress={() => {
-                      setManualFoodName(food.displayName);
-                      setSelectedFood(food);
-                      setManualUnit(food.unit);
-                      setManualAmount(String(food.defaultPortion));
-                      setShowFoodSuggestions(false);
-                    }}
-                  >
-                    <Text style={styles.suggestionEmoji}>{food.emoji}</Text>
-                    <Text style={styles.suggestionText}>{food.displayName}</Text>
-                    <Text style={styles.suggestionKcal}>{food.kcalPer100g} kcal/100g</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            {/* Unit selector (for foods with altUnits like soups) */}
-            {selectedFood && selectedFood.altUnits && selectedFood.altUnits.length > 0 && (
-              <View style={styles.unitSelector}>
-                <Text style={styles.unitSelectorLabel}>Birim:</Text>
-                {[selectedFood.unit, ...selectedFood.altUnits].map((u) => (
-                  <TouchableOpacity
-                    key={u}
-                    style={[
-                      styles.unitChip,
-                      manualUnit === u && styles.unitChipActive,
-                    ]}
-                    onPress={() => {
-                      setManualUnit(u);
-                      // Reset amount to default for unit
-                      if (u === 'kase') setManualAmount(String(selectedFood.defaultPortion));
-                      else if (u === 'ml') setManualAmount(String(selectedFood.portionGrams));
-                      else if (u === 'kucuk' || u === 'buyuk') setManualAmount(String(selectedFood.defaultPortion));
-                      else if (u === 'porsiyon') setManualAmount('1');
-                    }}
-                  >
-                    <Text style={[
-                      styles.unitChipText,
-                      manualUnit === u && styles.unitChipTextActive,
-                    ]}>
-                      {getUnitLabel(u)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Amount input */}
-            <TextInput
-              style={styles.input}
-              placeholder={selectedFood ? getUnitPlaceholder(manualUnit) : 'Porsiyon (gram)'}
-              placeholderTextColor={Colors.text.light}
-              keyboardType="numeric"
-              value={manualAmount}
-              onChangeText={setManualAmount}
-            />
-
-            {/* Selected food unit info */}
-            {selectedFood && (
-              <View style={styles.unitInfoRow}>
-                <Text style={styles.unitInfoEmoji}>{selectedFood.emoji}</Text>
-                <Text style={styles.unitInfoText}>
-                  {manualUnit === 'adet' ? `1 adet = ~${selectedFood.portionGrams}g` :
-                   manualUnit === 'kucuk' ? `1 küçük = ~${selectedFood.sizes?.kucuk ?? Math.round(selectedFood.portionGrams * 0.75)}g` :
-                   manualUnit === 'buyuk' ? `1 büyük = ~${selectedFood.sizes?.buyuk ?? Math.round(selectedFood.portionGrams * 1.3)}g` :
-                   manualUnit === 'porsiyon' ? `1 porsiyon = ~${selectedFood.unit === 'gram' || selectedFood.unit === 'ml' ? selectedFood.defaultPortion : selectedFood.defaultPortion * selectedFood.portionGrams}g` :
-                   manualUnit === 'kase' ? `1 kase = ~${selectedFood.portionGrams}ml` :
-                   manualUnit === 'ml' ? '1 ml ≈ 1g' :
-                   `${selectedFood.kcalPer100g} kcal/100g`}
-                </Text>
-              </View>
-            )}
-
-            {/* Auto-calculated calorie display */}
-            <View style={styles.calorieDisplay}>
-              <Text style={styles.calorieDisplayLabel}>Tahmini Kalori:</Text>
-              <Text style={styles.calorieDisplayValue}>
-                {manualCaloriesComputed > 0
-                  ? `${manualCaloriesComputed} kcal`
-                  : selectedFood
-                    ? 'Miktar girin'
-                    : 'Yemek seçin'}
-              </Text>
-              {selectedFood && manualCaloriesComputed > 0 && (
-                <Text style={styles.calorieDisplayHint}>
-                  ({parseFloat(manualAmount) || 0} {getUnitLabel(manualUnit)} = ~{selectedFood ? calculateWeightGrams(selectedFood, parseFloat(manualAmount) || 0, manualUnit) : 0}g)
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowManualModal(false)}
-              >
-                <Text style={styles.modalCancelText}>İptal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleManualAdd}>
-                <Text style={styles.modalConfirmText}>Ekle</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── Exercise Modal ──────────────────────────────────────────── */}
-      <Modal visible={showExerciseModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('home.addExercise')}</Text>
-
-            {/* Categorized exercise picker */}
-            <ScrollView style={{ maxHeight: 220, marginBottom: 8 }} nestedScrollEnabled>
-              {EXERCISE_CATEGORIES.map((cat) => (
-                <View key={cat.category}>
-                  <TouchableOpacity
-                    style={[styles.exerciseCategoryHeader, expandedExerciseCategory === cat.category && styles.exerciseCategoryHeaderActive]}
-                    onPress={() => setExpandedExerciseCategory(expandedExerciseCategory === cat.category ? null : cat.category)}
-                  >
-                    <Text style={styles.exerciseCategoryTitle}>{cat.emoji} {cat.category}</Text>
-                    <Text style={styles.exerciseCategoryArrow}>{expandedExerciseCategory === cat.category ? '▲' : '▼'}</Text>
-                  </TouchableOpacity>
-                  {expandedExerciseCategory === cat.category && (
-                    <View style={styles.exerciseCategoryBody}>
-                      {cat.exercises.map((ex) => (
-                        <TouchableOpacity
-                          key={ex.name}
-                          style={[styles.exerciseChip, exerciseName === ex.name && styles.exerciseChipActive]}
-                          onPress={() => {
-                            setExerciseName(ex.name);
-                            const dur = parseInt(exerciseDuration) || 30;
-                            setExerciseCalories(String(Math.round(ex.calPer30 * dur / 30)));
-                          }}
-                        >
-                          <Text style={[styles.exerciseChipText, exerciseName === ex.name && styles.exerciseChipTextActive]}>
-                            {ex.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ))}
-            </ScrollView>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Egzersiz adı"
-              placeholderTextColor={Colors.text.light}
-              value={exerciseName}
-              onChangeText={setExerciseName}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Süre (dakika)"
-              placeholderTextColor={Colors.text.light}
-              keyboardType="numeric"
-              value={exerciseDuration}
-              onChangeText={(val) => {
-                setExerciseDuration(val);
-                // Auto-calc calories if common exercise selected
-                const found = ALL_EXERCISES.find(e => e.name === exerciseName);
-                if (found) {
-                  const dur = parseInt(val) || 30;
-                  setExerciseCalories(String(Math.round(found.calPer30 * dur / 30)));
-                }
-              }}
-            />
-            <TextInput
-              style={[styles.input, { backgroundColor: Colors.neutral[100], color: Colors.text.secondary }]}
-              placeholder="Yakılan kalori (kcal)"
-              placeholderTextColor={Colors.text.light}
-              keyboardType="numeric"
-              value={exerciseCalories}
-              editable={false}
-            />
-            {!exerciseCalories && (
-              <Text style={{ fontSize: 11, color: Colors.text.light, marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
-                Egzersiz türü ve süre seçin, kalori otomatik hesaplanır
-              </Text>
-            )}
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowExerciseModal(false)}
-              >
-                <Text style={styles.modalCancelText}>İptal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleAddExercise}>
-                <Text style={styles.modalConfirmText}>Ekle</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
+  );
+}
+
+// ─── CalStat helper ─────────────────────────────────────────────────────────
+
+function CalStat({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Text style={{ fontSize: 18, marginRight: 8 }}>{icon}</Text>
+      <View>
+        <Text style={{ fontSize: 11, color: Colors.text.secondary, fontWeight: '500' }}>{label}</Text>
+        <Text style={{ fontSize: FontSize.lg, fontWeight: '800', color }}>{value.toLocaleString('tr-TR')}</Text>
+      </View>
+    </View>
   );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  // Header
-  header: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.lg,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  greeting: {
-    fontSize: FontSize['2xl'],
-    fontWeight: '800',
-    color: '#fff',
-  },
-  headerSubtitle: {
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2,
-  },
-  // Calendar strip
-  calendarStrip: {
-    paddingVertical: Spacing.sm,
-    gap: 6,
-  },
-  calendarDay: {
-    width: 48,
-    height: 64,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  calendarDaySelected: {
-    backgroundColor: '#fff',
-  },
-  calendarDayToday: {
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-  },
-  calendarDayName: {
-    fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.7)',
-    fontWeight: '500',
-  },
-  calendarDayNumber: {
-    fontSize: FontSize.lg,
-    color: '#fff',
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  calendarDayTextActive: {
-    color: Colors.primary[700],
-  },
-  todayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#fff',
-    marginTop: 2,
-  },
-  todayDotActive: {
-    backgroundColor: Colors.primary[500],
-  },
-  // Content
-  scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: 100,
-  },
-  // Calorie summary
-  calorySummaryCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  caloryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  caloryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  caloryItemValue: {
-    fontSize: FontSize.xl,
-    fontWeight: '800',
-    color: Colors.text.primary,
-  },
-  caloryItemLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    marginTop: 2,
-  },
-  caloryDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: Colors.border,
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: Colors.neutral[200],
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginTop: Spacing.xs,
-  },
-  // Meal sections
-  mealSection: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-  },
-  mealSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  mealSectionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  mealSectionIcon: {
-    fontSize: 24,
-  },
-  mealSectionTitle: {
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    color: Colors.text.primary,
-  },
-  mealSectionCal: {
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
-  mealSectionActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  addBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: BorderRadius.md,
-  },
-  addBtnText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontWeight: '700',
-  },
-  addBtnSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.neutral[100],
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addBtnSmallText: {
-    fontSize: 18,
-  },
-  emptyMealText: {
-    color: Colors.text.light,
-    fontSize: FontSize.sm,
-    fontStyle: 'italic',
-    paddingVertical: Spacing.sm,
-  },
-  // Meal items
-  mealItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-  },
-  mealItemLeft: {
-    flex: 1,
-  },
-  mealItemName: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    textTransform: 'capitalize',
-  },
-  mealItemDetail: {
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    marginTop: 1,
-  },
-  mealItemCalories: {
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    color: Colors.text.primary,
-  },
-  // Loading
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
-  },
-  loadingText: {
-    color: Colors.text.secondary,
-    marginTop: Spacing.md,
-    fontSize: FontSize.sm,
-  },
-  footer: {
-    textAlign: 'center',
-    fontSize: FontSize.xs,
-    color: Colors.text.light,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.xl,
-  },
-  // Bottom bar
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-  },
-  bottomBarContent: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  bottomBarItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  bottomBarCenter: {
-    paddingHorizontal: 4,
-  },
-  bottomBarSlash: {
-    fontSize: FontSize.xl,
-    color: Colors.text.light,
-    fontWeight: '300',
-  },
-  bottomBarIcon: {
-    fontSize: 16,
-  },
-  bottomBarValue: {
-    fontSize: FontSize.lg,
-    fontWeight: '800',
-    color: Colors.text.primary,
-  },
-  bottomBarLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-  },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
-  },
-  modalTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    fontSize: FontSize.base,
-    color: Colors.text.secondary,
-    marginBottom: Spacing.lg,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: Colors.neutral[50],
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 14,
-    fontSize: FontSize.base,
-    color: Colors.text.primary,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    marginTop: Spacing.md,
-    gap: 12,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    color: Colors.text.secondary,
-    fontWeight: '600',
-    fontSize: FontSize.base,
-  },
-  modalConfirmBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.primary[500],
-    alignItems: 'center',
-  },
-  modalConfirmText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: FontSize.base,
-  },
-  // Exercise chips
-  exerciseChips: {
-    marginBottom: Spacing.md,
-    maxHeight: 44,
-  },
-  exerciseCategoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Colors.neutral[50],
-    borderRadius: BorderRadius.lg,
-    marginBottom: 4,
-  },
-  exerciseCategoryHeaderActive: {
-    backgroundColor: Colors.primary[50],
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  exerciseCategoryTitle: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  exerciseCategoryArrow: {
-    fontSize: 10,
-    color: Colors.text.light,
-  },
-  exerciseCategoryBody: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 6,
-    backgroundColor: Colors.neutral[50],
-    borderBottomLeftRadius: BorderRadius.lg,
-    borderBottomRightRadius: BorderRadius.lg,
-    marginBottom: 6,
-  },
-  exerciseChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
-    marginRight: 0,
-  },
-  exerciseChipActive: {
-    backgroundColor: Colors.primary[500],
-  },
-  exerciseChipText: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
-  exerciseChipTextActive: {
-    color: '#fff',
-  },
-  // Diet plan shortcut
-  dietPlanBtn: {
-    backgroundColor: Colors.primary[50],
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary[200],
-    gap: Spacing.md,
-  },
-  dietPlanBtnIcon: {
-    fontSize: 28,
-  },
-  dietPlanBtnText: {
-    fontSize: FontSize.sm,
-    fontWeight: '700',
-    color: Colors.primary[700],
-  },
-  dietPlanBtnSub: {
-    fontSize: FontSize.xs,
-    color: Colors.primary[500],
-    marginTop: 1,
-  },
-  // Food suggestions
-  suggestionsContainer: {
-    maxHeight: 160,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.primary[200],
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-  },
-  suggestionEmoji: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  suggestionText: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    flex: 1,
-  },
-  suggestionKcal: {
-    fontSize: FontSize.xs,
-    color: Colors.primary[600],
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  // Calorie display
-  calorieDisplay: {
-    backgroundColor: Colors.primary[50],
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.primary[200],
-    alignItems: 'center',
-  },
-  calorieDisplayLabel: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
-  calorieDisplayValue: {
-    fontSize: FontSize.xl,
-    fontWeight: '800',
-    color: Colors.primary[700],
-    marginTop: 4,
-  },
-  calorieDisplayHint: {
-    fontSize: FontSize.xs,
-    color: Colors.text.light,
-    marginTop: 2,
-  },
-  // Unit selector
-  unitSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-    gap: 8,
-  },
-  unitSelectorLabel: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  unitChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[300],
-    backgroundColor: Colors.surface,
-  },
-  unitChipActive: {
-    borderColor: Colors.primary[500],
-    backgroundColor: Colors.primary[50],
-  },
-  unitChipText: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
-  unitChipTextActive: {
-    color: Colors.primary[700],
-    fontWeight: '700',
-  },
-  // Unit info row
-  unitInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-    paddingHorizontal: 4,
-  },
-  unitInfoEmoji: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  unitInfoText: {
-    fontSize: FontSize.xs,
-    color: Colors.text.light,
-    fontStyle: 'italic',
-  },
-  // Quantity controls on meal items
-  quantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  quantityBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primary[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quantityBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary[700],
-  },
+const cardW = (SW - Spacing.lg * 2 - Spacing.md) / 2;
 
-  // Swipe delete action
-  swipeDeleteAction: {
-    backgroundColor: '#ef4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    borderRadius: 0,
-    paddingHorizontal: 8,
-  },
-  swipeDeleteEmoji: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  swipeDeleteText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
+const S = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+  header: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, paddingBottom: Spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  greeting: { fontSize: FontSize['2xl'], fontWeight: '800', color: '#fff' },
+  headerSub: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  settingsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  calStrip: { paddingVertical: Spacing.sm, gap: 6 },
+  calDay: { width: 48, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' },
+  calDaySel: { backgroundColor: '#fff' },
+  calDayTd: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)' },
+  calDayN: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  calDayNum: { fontSize: FontSize.lg, color: '#fff', fontWeight: '700', marginTop: 2 },
+  calDayA: { color: Colors.primary[700] },
+  tdDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff', marginTop: 2 },
+  tdDotA: { backgroundColor: Colors.primary[500] },
+  scroll: { padding: Spacing.lg, paddingBottom: 20 },
+  loadWrap: { alignItems: 'center', paddingVertical: Spacing['3xl'] },
+  loadTxt: { color: Colors.text.secondary, marginTop: Spacing.md, fontSize: FontSize.sm },
+  // Calorie card
+  calCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius['2xl'], padding: Spacing.xl, marginBottom: Spacing.md },
+  calCardTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text.primary },
+  calFormula: { fontSize: FontSize.xs, color: Colors.text.light, marginTop: 2, marginBottom: Spacing.md },
+  calBody: { flexDirection: 'row', alignItems: 'center' },
+  calStatsCol: { flex: 1, marginLeft: Spacing.xl, gap: Spacing.md },
+  // Macros
+  macroRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.md, marginBottom: Spacing.md },
+  macroItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  macroDivider: { width: 1, height: 36, backgroundColor: Colors.border },
+  // Grid
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.md },
+  dCard: { width: cardW, backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg },
+  dCardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.sm },
+  dCardTitle: { fontSize: FontSize.xs, color: Colors.text.secondary, fontWeight: '600', marginBottom: 2 },
+  dCardVal: { fontSize: FontSize.xl, fontWeight: '800' },
+  dCardSub: { fontSize: 11, color: Colors.text.light, marginTop: 2 },
+  // HC card
+  hcCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary[50], borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.primary[200], gap: Spacing.md },
+  hcIcon: { fontSize: 28 },
+  hcTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary[700] },
+  hcSub: { fontSize: FontSize.xs, color: Colors.primary[500], marginTop: 1 },
+  // Link card
+  linkCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, gap: Spacing.md },
+  linkIcon: { fontSize: 28 },
+  linkTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text.primary },
+  linkSub: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 1 },
+  // Diet
+  dietBtn: { backgroundColor: Colors.primary[50], borderRadius: BorderRadius.xl, padding: Spacing.md, marginBottom: Spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.primary[200], gap: Spacing.md },
+  dietTxt: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary[700] },
+  dietSub: { fontSize: FontSize.xs, color: Colors.primary[500], marginTop: 1 },
+  // Weight
+  wCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md },
+  wHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
+  wTitle: { fontSize: FontSize.base, fontWeight: '700', color: Colors.text.primary },
+  wAction: { fontSize: 22, color: Colors.text.light, fontWeight: '600' },
+  wVal: { fontSize: FontSize['2xl'], fontWeight: '900', color: Colors.text.primary },
+  wSub: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 2 },
 });
