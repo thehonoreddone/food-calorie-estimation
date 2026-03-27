@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PredictionResponse } from "../types";
+import { EmptyState } from "../components/ui/EmptyState";
+import { hapticLight, hapticWarning, hapticSelection } from "../utils/haptics";
 
 interface HistoryItem {
   id: string;
@@ -47,6 +49,7 @@ export const HistoryScreen: React.FC = () => {
   };
 
   const clearHistory = async () => {
+    hapticWarning();
     try {
       await AsyncStorage.removeItem("prediction_history");
       setHistory([]);
@@ -102,26 +105,11 @@ export const HistoryScreen: React.FC = () => {
     </View>
   );
 
-  const EmptyState = () => (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 }}>
-      <View style={{
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: "#f3f4f6",
-        justifyContent: "center",
-        alignItems: "center",
-        marginBottom: 20,
-      }}>
-        <Text style={{ fontSize: 40 }}>📋</Text>
-      </View>
-      <Text style={{ fontSize: 18, fontWeight: "600", color: "#374151", textAlign: "center" }}>
-        Henüz Geçmiş Yok
-      </Text>
-      <Text style={{ color: "#9ca3af", textAlign: "center", marginTop: 8 }}>
-        Yemek taradığınızda burada görünecektir
-      </Text>
-    </View>
+  const renderEmptyState = () => (
+    <EmptyState
+      variant="no-history"
+      onAction={() => hapticLight()}
+    />
   );
 
   return (
@@ -148,7 +136,7 @@ export const HistoryScreen: React.FC = () => {
       </View>
 
       {history.length === 0 ? (
-        <EmptyState />
+        renderEmptyState()
       ) : (
         <FlatList
           data={history}

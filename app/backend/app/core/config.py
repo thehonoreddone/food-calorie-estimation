@@ -7,19 +7,27 @@ import os
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
     
+    # Environment
+    APP_ENV: str = "development"  # development | staging | production
+    
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DEBUG: bool = False
     
-    # CORS
+    # CORS — NO wildcard "*" for security
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
-        "http://172.19.112.1:3000",
-        "*",  # Allow all for development
+        "http://localhost:8081",
+        "http://10.0.2.2:8000",
     ]
+    # Add production domains via env: CORS_ORIGINS=["https://nutrino.app"]
+    
+    # Rate limiting
+    RATE_LIMIT_PREDICT: str = "30/minute"  # Prediction endpoint
+    RATE_LIMIT_DEFAULT: str = "120/minute"  # Default endpoints
     
     # API
     API_V1_PREFIX: str = "/api/v1"
@@ -31,7 +39,7 @@ class Settings(BaseSettings):
     IOU_THRESHOLD: float = 0.45
     
     # Gemini Vision API (fallback classifier)
-    GEMINI_API_KEY: str = "AIzaSyBQYzWl9oQXI4Bz5HukFqLKrtSv_GQO77I"  # Set via env: GEMINI_API_KEY=your_key
+    GEMINI_API_KEY: str = ""  # Set via env: GEMINI_API_KEY=your_key
     GEMINI_HIGH_CONFIDENCE_THRESHOLD: float = 0.80  # >80%: trust model directly
     GEMINI_CONFIDENCE_THRESHOLD: float = 0.50  # 50-80%: return model + background Gemini; <50%: wait for Gemini
     GEMINI_CACHE_TTL: int = 300  # Gemini result cache TTL in seconds
@@ -51,6 +59,22 @@ class Settings(BaseSettings):
     # Paths
     UPLOAD_DIR: str = "uploads"
     MODELS_DIR: str = "models"
+    
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV == "production"
+    
+    @property
+    def docs_url(self):
+        return None if self.is_production else "/docs"
+    
+    @property
+    def redoc_url(self):
+        return None if self.is_production else "/redoc"
+    
+    @property
+    def openapi_url(self):
+        return None if self.is_production else "/openapi.json"
     
     class Config:
         env_file = ".env"

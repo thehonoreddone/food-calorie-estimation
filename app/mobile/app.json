@@ -4,9 +4,11 @@
     "slug": "nutrino",
     "scheme": "nutrino",
     "version": "1.0.0",
+    "description": "AI-powered food calorie estimation. Snap a photo, get instant calorie and nutrition analysis.",
+    "primaryColor": "#16a34a",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -17,21 +19,27 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nutrino.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs camera access to take photos of food for calorie analysis.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select food images for calorie analysis."
+        "NSCameraUsageDescription": "Nutrino needs camera access to take photos of food for calorie analysis.",
+        "NSPhotoLibraryUsageDescription": "Nutrino needs photo library access to select food images for calorie analysis.",
+        "NSHealthShareUsageDescription": "Nutrino can read your health data to provide personalized nutrition insights.",
+        "NSHealthUpdateUsageDescription": "Nutrino can save nutrition data to HealthKit for tracking."
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.nutrino.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#22c55e"
       },
-      "edgeToEdgeEnabled": false,
-      "predictiveBackGestureEnabled": false,
+      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -41,14 +49,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "This app needs access to your photos to analyze food images.",
-          "cameraPermission": "This app needs access to your camera to take photos of food."
+          "photosPermission": "Nutrino needs access to your photos to analyze food images.",
+          "cameraPermission": "Nutrino needs access to your camera to take photos of food."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "This app needs access to your camera to take photos of food for analysis."
+          "cameraPermission": "Nutrino needs access to your camera to take photos of food for analysis."
         }
       ],
       "expo-router",
@@ -61,10 +69,8 @@
       }
     },
     "updates": {
-      "enabled": false
-    },
-    "runtimeVersion": {
-      "policy": "sdkVersion"
+      "enabled": true,
+      "fallbackToCacheTimeout": 3000
     }
   }
 }

@@ -15,6 +15,8 @@ import { router } from 'expo-router';
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
 import { useUser } from '@/contexts/UserContext';
 import { useTranslation } from '@/i18n';
+import { hapticSelection, hapticLight, hapticMedium } from '../../src/utils/haptics';
+import { SkeletonCalorieRing, SkeletonCard, Skeleton } from '../../src/components/ui/SkeletonLoader';
 import {
   getMealsForDate,
   getExercisesForDate,
@@ -246,7 +248,7 @@ export default function HomeTab() {
             const sel = sameDay(day, selDate), td = sameDay(day, today);
             return (
               <TouchableOpacity key={i} style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
-                onPress={() => setSelDate(day)} onLongPress={() => goDayDetail(day)}>
+                onPress={() => { hapticSelection(); setSelDate(day); }} onLongPress={() => goDayDetail(day)}>
                 <Text style={[S.calDayN, sel && S.calDayA]}>{dN[day.getDay()]}</Text>
                 <Text style={[S.calDayNum, sel && S.calDayA]}>{day.getDate()}</Text>
                 {td && <View style={[S.tdDot, sel && S.tdDotA]} />}
@@ -259,8 +261,19 @@ export default function HomeTab() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
         {loading && !loaded ? (
           <View style={S.loadWrap}>
-            <ActivityIndicator size="large" color={Colors.primary[500]} />
-            <Text style={S.loadTxt}>{t('home.dataLoading')}</Text>
+            {/* Skeleton calorie ring */}
+            <SkeletonCalorieRing />
+            {/* Skeleton macro row */}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
+              <Skeleton width="30%" height={50} borderRadius={12} />
+              <Skeleton width="30%" height={50} borderRadius={12} />
+              <Skeleton width="30%" height={50} borderRadius={12} />
+            </View>
+            {/* Skeleton stat cards */}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
+              <SkeletonCard style={{ flex: 1 }} />
+              <SkeletonCard style={{ flex: 1 }} />
+            </View>
           </View>
         ) : (
           <>

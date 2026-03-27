@@ -2,13 +2,19 @@
 Food Calorie Estimation Backend
 FastAPI + YOLO Segmentation Pipeline
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from loguru import logger
 import sys
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
+from app.core.exceptions import AppException
 from app.routers import predict, foods, health
 from app.routers.auth import router as auth_router
 from app.routers.history import router as history_router
@@ -32,11 +38,16 @@ logger.add(
 )
 
 
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=[settings.RATE_LIMIT_DEFAULT])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     logger.info("🚀 Starting Food Calorie Estimation API...")
+    logger.info(f"   Environment: {settings.APP_ENV}")
     
     # Preload ML models
     try:
@@ -67,25 +78,63 @@ async def lifespan(app: FastAPI):
     logger.info("👋 Shutting down API...")
 
 
-# Create FastAPI app
+# Create FastAPI app — docs disabled in production
 app = FastAPI(
     title="Food Calorie Estimation API",
     description="AI-powered food recognition, segmentation, and calorie estimation",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=settings.docs_url,
+    redoc_url=settings.redoc_url,
+    openapi_url=settings.openapi_url,
     lifespan=lifespan,
 )
 
-# CORS middleware
+# Rate limiter state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware — no wildcard "*"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+
+# ── Global exception handler (RFC 7807 style) ──────────────
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """Standardized error response for all AppExceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "type": type(exc).__name__,
+            "title": exc.message,
+            "status": exc.status_code,
+            "detail": exc.message,
+            "instance": str(request.url),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Catch-all for unhandled exceptions — never leak stack traces in prod"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    detail = str(exc) if not settings.is_production else "An internal error occurred"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "InternalServerError",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": detail,
+            "instance": str(request.url),
+        },
+    )
+
 
 # Include routers
 app.include_router(health.router, tags=["Health"])
@@ -102,7 +151,7 @@ async def root():
         "name": "Food Calorie Estimation API",
         "version": "1.0.0",
         "status": "running",
-        "docs": "/docs",
+        "docs": settings.docs_url,
     }
 
 

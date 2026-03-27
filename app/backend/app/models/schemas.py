@@ -100,5 +100,10 @@ class HealthResponse(BaseModel):
     """Health check response"""
     status: str = "healthy"
     version: str
+    environment: str = "development"
     models_loaded: bool
+    model_classes: int = 0
+    gpu_available: bool = False
+    memory_usage_mb: Optional[float] = None
+    python_version: Optional[str] = None
     timestamp: datetime
