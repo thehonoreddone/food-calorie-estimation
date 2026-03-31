@@ -184,4 +184,8 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# =============== Custom Ignores ===============
 acarken.txt
+tez_devami.txt
+gorseller_nereye.txt
+food_calorie_estimation/seg_dataset/dataset_labelstudio/

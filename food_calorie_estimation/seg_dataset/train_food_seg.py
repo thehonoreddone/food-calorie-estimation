@@ -171,10 +171,11 @@ def get_gpu_info():
         import torch
         if torch.cuda.is_available():
             name = torch.cuda.get_device_name(0)
-            mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
+            props = torch.cuda.get_device_properties(0)
+            mem = props.total_memory / (1024**3)
             return True, name, mem
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠️  GPU kontrol hatası: {e}")
     return False, "N/A", 0
 
 
@@ -298,10 +299,18 @@ def main():
         print("   pip install ultralytics torch torchvision")
         sys.exit(1)
 
-    # GPU
+    # GPU — kullanıcı --device verdiyse onu kullan, vermediyse otomatik algıla
     has_gpu, gpu_name, gpu_mem = get_gpu_info()
-    if has_gpu:
-        device = args.device or "cuda:0"
+    if args.device:  # Kullanıcı açıkça device belirtti
+        device = args.device
+        print(f"\n🖥️  Device (manuel): {device}")
+        if has_gpu:
+            print(f"   GPU: {gpu_name} ({gpu_mem:.1f} GB)")
+            suggested_batch = auto_batch_size(gpu_mem, args.imgsz, args.model)
+            if args.batch > suggested_batch:
+                print(f"⚠️  Batch {args.batch} bellek için yüksek olabilir, önerilen: {suggested_batch}")
+    elif has_gpu:
+        device = "cuda:0"
         print(f"\n🖥️  GPU: {gpu_name} ({gpu_mem:.1f} GB)")
         suggested_batch = auto_batch_size(gpu_mem, args.imgsz, args.model)
         if args.batch > suggested_batch:
