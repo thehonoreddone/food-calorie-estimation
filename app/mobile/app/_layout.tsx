@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import OfflineBanner from '@/components/OfflineBanner';
 import { initSentry } from '@/config/sentry';
 
 // Expo Go'da push notifications desteklenmez (SDK 53+). Local notifications çalışır.
@@ -94,7 +95,9 @@ export default function RootLayout() {
             <Stack.Screen name="contact-privacy" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
             <Stack.Screen name="terms-of-use" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+            <Stack.Screen name="privacy-policy" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           </Stack>
+          <OfflineBanner />
           </AppInitializer>
         </UserProvider>
         </ThemeProvider>

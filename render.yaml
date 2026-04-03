@@ -1,0 +1,36 @@
+# render.yaml — Render.com Blueprint for one-click deployment
+# Deploy: Connect Git repo → Render auto-detects this file
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: nutrino-backend
+    runtime: docker
+    dockerfilePath: ./app/backend/Dockerfile
+    dockerContext: ./app/backend
+    region: frankfurt  # Closest to Turkey
+    plan: free  # Upgrade to starter ($7/mo) for always-on
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "8000"
+      - key: DEBUG
+        value: "false"
+      - key: APP_ENV
+        value: "production"
+      - key: CORS_ORIGINS
+        value: '["https://nutrino.app"]'
+      - key: CONFIDENCE_THRESHOLD
+        value: "0.25"
+      - key: IOU_THRESHOLD
+        value: "0.45"
+      - key: YOLO_MODEL_PATH
+        value: "models/food201_seg_best.pt"
+      - key: FIREBASE_CREDENTIALS_PATH
+        value: "config/firebase_service_account.json"
+      - key: FIREBASE_PROJECT_ID
+        value: "food-calorie-estimation-2e3bd"
+      - key: GEMINI_API_KEY
+        sync: false  # Set manually in Render dashboard (secret)

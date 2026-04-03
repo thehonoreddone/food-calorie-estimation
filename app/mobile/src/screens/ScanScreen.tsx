@@ -150,13 +150,19 @@ export const ScanScreen: React.FC = () => {
       setFullImageUri(photo.uri);
       setMode("result");
     } catch (err: unknown) {
-      console.error("Capture error:", err);
-      const axiosErr = err as { response?: { data?: { detail?: unknown } }; message?: string };
-      let errorMessage = "Analiz başarısız. Bağlantınızı kontrol edin.";
-      if (axiosErr.response?.data?.detail) {
+      const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
+      let errorMessage: string;
+
+      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error') {
+        errorMessage = "Backend'e bağlanılamıyor. İnternet bağlantınızı ve backend sunucusunun çalıştığını kontrol edin.";
+      } else if (axiosErr.code === 'ECONNABORTED' || axiosErr.message?.includes('timeout')) {
+        errorMessage = "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.";
+      } else if (axiosErr.response?.status === 503) {
+        errorMessage = "ML modeli henüz yüklenmedi. Birkaç saniye bekleyip tekrar deneyin.";
+      } else if (axiosErr.response?.data?.detail) {
         errorMessage = String(axiosErr.response.data.detail);
-      } else if (axiosErr.message) {
-        errorMessage = String(axiosErr.message);
+      } else {
+        errorMessage = "Analiz başarısız. Lütfen tekrar deneyin.";
       }
       setError(errorMessage);
       setMode("camera");
@@ -192,9 +198,21 @@ export const ScanScreen: React.FC = () => {
         setIsAnalyzing(false);
       }
     } catch (err: unknown) {
-      console.error("Gallery error:", err);
-      const axiosErr = err as { message?: string };
-      setError(axiosErr.message || "Analiz başarısız.");
+      const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
+      let errorMessage: string;
+
+      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error') {
+        errorMessage = "Backend'e bağlanılamıyor. İnternet bağlantınızı kontrol edin.";
+      } else if (axiosErr.code === 'ECONNABORTED' || axiosErr.message?.includes('timeout')) {
+        errorMessage = "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.";
+      } else if (axiosErr.response?.status === 503) {
+        errorMessage = "ML modeli henüz yüklenmedi. Birkaç saniye bekleyip tekrar deneyin.";
+      } else if (axiosErr.response?.data?.detail) {
+        errorMessage = String(axiosErr.response.data.detail);
+      } else {
+        errorMessage = "Analiz başarısız. Lütfen tekrar deneyin.";
+      }
+      setError(errorMessage);
       setMode("camera");
       setIsAnalyzing(false);
     }

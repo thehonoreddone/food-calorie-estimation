@@ -20,6 +20,9 @@ from app.core.exceptions import (
     FileTooLargeException,
 )
 
+import re
+from urllib.parse import urlparse
+
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
 
@@ -118,13 +121,13 @@ async def predict_food(
         if user_id:
             try:
                 prediction_data = {
-                    "food_class": result.food_class,
+                    "food_class": result.class_name,
                     "confidence": result.confidence,
-                    "weight_grams": result.weight_grams,
-                    "calories": result.calories,
-                    "calories_min": result.calories_min,
-                    "calories_max": result.calories_max,
-                    "warnings": result.warnings if result.warnings else []
+                    "weight_grams": result.estimated_weight_grams,
+                    "calories": result.estimated_calories,
+                    "calories_min": getattr(result, 'calories_min', None),
+                    "calories_max": getattr(result, 'calories_max', None),
+                    "warnings": []
                 }
                 await prediction_history_service.save_prediction(
                     user_id=user_id,
@@ -150,8 +153,28 @@ async def predict_from_url(request: PredictionRequest):
     Analyze a food image from URL.
     
     Provide an image URL and receive prediction results.
+    Only public HTTP/HTTPS URLs are accepted (no file://, localhost, or private IPs).
     """
     import httpx
+    
+    # ── SSRF Protection ──
+    parsed = urlparse(request.image_url)
+    # Block non-HTTP schemes
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only HTTP/HTTPS URLs are allowed",
+        )
+    # Block private/internal IPs and localhost
+    hostname = parsed.hostname or ''
+    BLOCKED_HOSTS = re.compile(
+        r'^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|0\.0\.0\.0|\[::1\])'
+    )
+    if BLOCKED_HOSTS.match(hostname):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Private/internal URLs are not allowed",
+        )
     
     # Check if model is loaded
     if not model_service.is_loaded():
@@ -163,8 +186,20 @@ async def predict_from_url(request: PredictionRequest):
     try:
         # Download image
         async with httpx.AsyncClient() as client:
-            response = await client.get(request.image_url, timeout=30.0)
+            response = await client.get(request.image_url, timeout=30.0, follow_redirects=True)
             response.raise_for_status()
+        
+        # Validate content type
+        content_type = response.headers.get('content-type', '')
+        if not content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL does not point to a valid image",
+            )
+        
+        # Check size (10MB max)
+        if len(response.content) > settings.MAX_UPLOAD_SIZE:
+            raise FileTooLargeException(settings.MAX_UPLOAD_SIZE // (1024 * 1024))
         
         # Load image
         image = Image.open(BytesIO(response.content))
@@ -182,6 +217,8 @@ async def predict_from_url(request: PredictionRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to download image: {str(e)}",
         )
+    except (HTTPException, FileTooLargeException):
+        raise
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(
