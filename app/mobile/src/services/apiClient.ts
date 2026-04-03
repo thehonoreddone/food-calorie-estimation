@@ -6,9 +6,14 @@ import { getAuthToken, removeAuthToken } from "./secureStorage";
  * API Configuration
  *
  * URL'ler .env dosyasından okunur (EXPO_PUBLIC_API_URL).
- * Dev (USB + ADB reverse): localhost:8000
- * Dev (Emulator): 10.0.2.2:8000
- * Prod: Render/Railway deploy URL'si
+ *
+ * Geliştirme Modları:
+ * ─────────────────
+ * USB + ADB reverse  → http://localhost:8000
+ * Expo Go (aynı ağ)  → http://<PC_IP>:8000  (örn. http://192.168.1.100:8000)
+ * Expo Go (tunnel)   → http://<PC_IP>:8000  (tunnel sadece Expo bağlantısı içindir, API hâlâ LAN'dan gider)
+ * Emülatör            → http://10.0.2.2:8000
+ * Prod                → https://nutrino-backend.onrender.com
  */
 const getBaseUrl = (): string => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
@@ -19,12 +24,11 @@ const getBaseUrl = (): string => {
   }
 
   // Fallback: local development
-  // USB + ADB reverse kullanıldığında localhost çalışır (fiziksel telefon)
-  // Emülatör kullanıyorsan 10.0.2.2 gerekir → .env'de EXPO_PUBLIC_API_URL=http://10.0.2.2:8000 ayarla
   return "http://localhost:8000";
 };
 
 const API_URL = getBaseUrl();
+console.log(`[API] Base URL: ${API_URL}`);
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,

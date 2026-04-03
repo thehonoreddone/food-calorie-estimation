@@ -11,11 +11,38 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { initSentry } from '@/config/sentry';
 
 // Expo Go'da push notifications desteklenmez (SDK 53+). Local notifications çalışır.
-// Bu uyarıyı bastır — development build'de bu mesaj gelmez.
+// Bu uyarıları bastır — development build'de bu mesajlar gelmez.
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
   'expo-notifications: Push notifications',
+  'SafeAreaView has been deprecated',
+  'Missing or insufficient permissions',
 ]);
+
+// Suppress noisy non-critical warnings/errors in dev console
+const _origWarn = console.warn;
+const _origError = console.error;
+const SUPPRESSED = [
+  'SafeAreaView has been deprecated',
+  'Missing or insufficient permissions',
+  'auth/invalid-credential',
+  "doesn't seem to be linked",
+  'Firestore rules not configured',
+  'Firestore permissions not configured',
+  'Failed to read steps',
+  'Failed to read sleep',
+  'Health Connect init failed',
+];
+console.warn = (...args: unknown[]) => {
+  const msg = typeof args[0] === 'string' ? args[0] : '';
+  if (SUPPRESSED.some(s => msg.includes(s))) return;
+  _origWarn(...args);
+};
+console.error = (...args: unknown[]) => {
+  const msg = typeof args[0] === 'string' ? args[0] : '';
+  if (SUPPRESSED.some(s => msg.includes(s))) return;
+  _origError(...args);
+};
 
 // Sentry'yi uygulama başlatılırken ilklendir
 initSentry();

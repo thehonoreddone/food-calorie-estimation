@@ -103,8 +103,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         let firestoreProfile = null;
         try {
           firestoreProfile = await getUserProfile(firebaseUser.uid);
-        } catch (fsErr) {
-          console.warn('Firestore profile load failed (using local only):', fsErr);
+        } catch (fsErr: unknown) {
+          // Firestore permission errors are expected when rules are restrictive
+          // or during initial setup — silently continue with local data only
+          const errMsg = fsErr instanceof Error ? fsErr.message : String(fsErr);
+          if (!errMsg.includes('permission') && !errMsg.includes('Permission')) {
+            console.warn('Firestore profile load failed:', errMsg);
+          }
         }
 
         const localProfileRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
@@ -127,11 +132,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Cache locally
         await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProfile));
 
-        // Record app open for login streak tracking
+        // Record app open for login streak tracking (non-critical)
         try {
           await recordAppOpen(firebaseUser.uid);
-        } catch (e) {
-          console.warn('recordAppOpen failed:', e);
+        } catch {
+          // Silently ignore — Firestore rules may reject or network may be slow
         }
 
         setState({

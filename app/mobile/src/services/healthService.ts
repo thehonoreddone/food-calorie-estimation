@@ -1,15 +1,21 @@
 // ─── Health Connect Service ─────────────────────────────────────────────────
 // Steps & Sleep tracking via Google Health Connect
 // Falls back gracefully when Health Connect is not available
+// NOTE: Health Connect requires a native development build — it does NOT work in Expo Go.
 // ────────────────────────────────────────────────────────────────────────────
 
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 let HealthConnect: typeof import('react-native-health-connect') | null = null;
 
-// Lazy-load Health Connect (only available on Android native builds)
+// Check if running in Expo Go (native modules unavailable)
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+// Lazy-load Health Connect (only available on Android native builds, NOT Expo Go)
 async function getHC() {
   if (Platform.OS !== 'android') return null;
+  if (isExpoGo) return null; // Skip entirely in Expo Go — native modules not linked
   if (HealthConnect) return HealthConnect;
   try {
     HealthConnect = require('react-native-health-connect');

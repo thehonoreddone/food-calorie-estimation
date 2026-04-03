@@ -162,11 +162,25 @@ export default function HomeTab() {
     try {
       const dk = fmtDate(d);
       const td = sameDay(d, new Date());
-      const [ml, ex, dh] = await Promise.all([
-        getMealsForDate(profile.uid, dk),
-        getExercisesForDate(profile.uid, dk),
-        getDailyHealth(profile.uid, dk),
-      ]);
+
+      // Firestore calls — wrapped individually so permission errors don't crash everything
+      let ml: MealEntry[] = [];
+      let ex: ExerciseEntry[] = [];
+      let dh: DailyHealthData | null = null;
+      try {
+        [ml, ex, dh] = await Promise.all([
+          getMealsForDate(profile.uid, dk),
+          getExercisesForDate(profile.uid, dk),
+          getDailyHealth(profile.uid, dk),
+        ]);
+      } catch (fsErr: unknown) {
+        // Firestore permission errors — use empty data silently
+        const msg = fsErr instanceof Error ? fsErr.message : String(fsErr);
+        if (!msg.includes('permission') && !msg.includes('Permission')) {
+          console.warn('Firestore load failed:', msg);
+        }
+        // Don't log permission errors at all — they repeat on every date change
+      }
       setMeals(ml); setExercises(ex); setHealth(dh ?? {}); setWater(dh?.waterMl ?? 0);
 
       // Health Connect
@@ -186,7 +200,10 @@ export default function HomeTab() {
       } catch {
         setSteps(dh?.steps ?? 0); setSleepH(dh?.sleepHours ?? 0); setSleepM(dh?.sleepMins ?? 0);
       }
-    } catch (e) { console.error('Load error:', e); }
+    } catch (e) {
+      // Catch-all for any other unexpected errors
+      console.warn('Dashboard load issue:', e);
+    }
     finally { setLoading(false); setLoaded(true); }
   }, [profile.uid]);
 
