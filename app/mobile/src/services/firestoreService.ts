@@ -518,3 +518,222 @@ export async function updateWaterIntake(
 ): Promise<void> {
   await saveDailyHealth(uid, date, { waterMl });
 }
+
+// ─── Community Posts ────────────────────────────────────────────────────────
+
+const COMMUNITY_POSTS = 'community_posts';
+const COMMUNITY_LIKES = 'community_likes';
+const COMMUNITY_COMMENTS = 'community_comments';
+
+export interface CommunityPost {
+  id?: string;
+  uid: string;
+  username: string;
+  imageUrl?: string;
+  mealName: string;
+  calories?: number;
+  description?: string;
+  likesCount: number;
+  commentsCount: number;
+  createdAt?: string;
+  likedByMe?: boolean;
+}
+
+export interface CommunityComment {
+  id?: string;
+  postId: string;
+  uid: string;
+  username: string;
+  content: string;
+  createdAt?: string;
+}
+
+/**
+ * Create a community post
+ */
+export async function createCommunityPost(
+  uid: string,
+  username: string,
+  data: {
+    mealName: string;
+    calories?: number;
+    description?: string;
+    imageUrl?: string;
+  }
+): Promise<string> {
+  const docRef = await addDoc(collection(db, COMMUNITY_POSTS), {
+    uid,
+    username,
+    mealName: data.mealName,
+    calories: data.calories ?? 0,
+    description: data.description ?? '',
+    imageUrl: data.imageUrl ?? '',
+    likesCount: 0,
+    commentsCount: 0,
+    createdAt: new Date().toISOString(),
+    serverCreatedAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+/**
+ * Get community posts (recent or popular)
+ */
+export async function getCommunityPosts(
+  sortBy: 'recent' | 'popular' = 'recent',
+  maxResults: number = 20,
+  currentUid?: string,
+): Promise<CommunityPost[]> {
+  const q = query(
+    collection(db, COMMUNITY_POSTS),
+    limit(maxResults * 2),
+  );
+
+  const snapshot = await getDocs(q);
+  let posts = snapshot.docs.map(docSnap => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  })) as CommunityPost[];
+
+  // Client-side sort
+  if (sortBy === 'popular') {
+    posts.sort((a, b) => (b.likesCount ?? 0) - (a.likesCount ?? 0));
+  } else {
+    posts.sort((a, b) => {
+      const da = a.createdAt ?? '';
+      const dateB = b.createdAt ?? '';
+      return dateB > da ? 1 : dateB < da ? -1 : 0;
+    });
+  }
+
+  posts = posts.slice(0, maxResults);
+
+  // Check if current user liked each post
+  if (currentUid) {
+    for (const post of posts) {
+      try {
+        const likeDocId = `${post.id}_${currentUid}`;
+        const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
+        const likeSnap = await getDoc(likeRef);
+        post.likedByMe = likeSnap.exists();
+      } catch {
+        post.likedByMe = false;
+      }
+    }
+  }
+
+  return posts;
+}
+
+/**
+ * Toggle like on a post
+ */
+export async function togglePostLike(
+  postId: string,
+  uid: string,
+  isCurrentlyLiked: boolean
+): Promise<void> {
+  const likeDocId = `${postId}_${uid}`;
+  const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
+  const postRef = doc(db, COMMUNITY_POSTS, postId);
+
+  if (isCurrentlyLiked) {
+    await deleteDoc(likeRef);
+    const postSnap = await getDoc(postRef);
+    if (postSnap.exists()) {
+      const currentLikes = (postSnap.data() as CommunityPost).likesCount ?? 0;
+      await updateDoc(postRef, { likesCount: Math.max(0, currentLikes - 1) });
+    }
+  } else {
+    await setDoc(likeRef, { postId, uid, createdAt: new Date().toISOString() });
+    const postSnap = await getDoc(postRef);
+    if (postSnap.exists()) {
+      const currentLikes = (postSnap.data() as CommunityPost).likesCount ?? 0;
+      await updateDoc(postRef, { likesCount: currentLikes + 1 });
+    }
+  }
+}
+
+/**
+ * Add a comment to a post
+ */
+export async function addPostComment(
+  postId: string,
+  uid: string,
+  content: string
+): Promise<string> {
+  let username = 'Kullanıcı';
+  try {
+    const profileRef = doc(db, 'users', uid);
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      const data = profileSnap.data();
+      username = data.name || data.displayName || 'Kullanıcı';
+    }
+  } catch {}
+
+  const docRef = await addDoc(collection(db, COMMUNITY_COMMENTS), {
+    postId,
+    uid,
+    username,
+    content,
+    createdAt: new Date().toISOString(),
+    serverCreatedAt: serverTimestamp(),
+  });
+
+  // Increment comment count
+  try {
+    const postRef = doc(db, COMMUNITY_POSTS, postId);
+    const postSnap = await getDoc(postRef);
+    if (postSnap.exists()) {
+      const current = (postSnap.data() as CommunityPost).commentsCount ?? 0;
+      await updateDoc(postRef, { commentsCount: current + 1 });
+    }
+  } catch {}
+
+  return docRef.id;
+}
+
+/**
+ * Get comments for a post
+ */
+export async function getPostComments(
+  postId: string,
+  maxResults: number = 50
+): Promise<CommunityComment[]> {
+  const q = query(
+    collection(db, COMMUNITY_COMMENTS),
+    where('postId', '==', postId),
+    limit(maxResults),
+  );
+
+  const snapshot = await getDocs(q);
+  const comments = snapshot.docs.map(docSnap => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  })) as CommunityComment[];
+
+  comments.sort((a, b) => {
+    const da = a.createdAt ?? '';
+    const dateB = b.createdAt ?? '';
+    return da > dateB ? 1 : da < dateB ? -1 : 0;
+  });
+
+  return comments;
+}
+
+/**
+ * Delete a community post (only by owner)
+ */
+export async function deleteCommunityPost(postId: string): Promise<void> {
+  const commentsQ = query(
+    collection(db, COMMUNITY_COMMENTS),
+    where('postId', '==', postId),
+  );
+  const commentsSnap = await getDocs(commentsQ);
+  for (const c of commentsSnap.docs) {
+    await deleteDoc(c.ref);
+  }
+  await deleteDoc(doc(db, COMMUNITY_POSTS, postId));
+}
+

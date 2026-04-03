@@ -63,6 +63,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="community"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="👥" label="Topluluk" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => (

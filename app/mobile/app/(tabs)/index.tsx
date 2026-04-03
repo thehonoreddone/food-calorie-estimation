@@ -17,6 +17,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useTranslation } from '@/i18n';
 import { hapticSelection, hapticLight, hapticMedium } from '../../src/utils/haptics';
 import { SkeletonCalorieRing, SkeletonCard, Skeleton } from '../../src/components/ui/SkeletonLoader';
+import { Mascot } from '../../src/components/mascot';
 import {
   getMealsForDate,
   getExercisesForDate,
@@ -25,6 +26,7 @@ import {
   getDailyHealth,
   saveDailyHealth,
   DailyHealthData,
+  getUserAchievements,
 } from '../../src/services/firestoreService';
 import {
   getTodaySteps,
@@ -151,6 +153,7 @@ export default function HomeTab() {
   const [loaded, setLoaded] = useState(false);
   const [hcOn, setHcOn] = useState(false);
   const [water, setWater] = useState(0);
+  const [loginStreak, setLoginStreak] = useState(0);
 
   const stGoal = health.stepsGoal ?? 10000;
   const wGoal = health.waterGoal ?? 2500;
@@ -210,6 +213,13 @@ export default function HomeTab() {
   useEffect(() => {
     (async () => { const a = await isHealthConnectAvailable(); setHcOn(a); if (a) await initHealthConnect(); })();
   }, []);
+
+  // Load login streak for mascot
+  useEffect(() => {
+    if (profile.uid) {
+      getUserAchievements(profile.uid).then(a => setLoginStreak(a.loginStreakCurrent)).catch(() => {});
+    }
+  }, [profile.uid]);
 
   const lastDk = useRef('');
   const dk = fmtDate(selDate);
@@ -274,6 +284,9 @@ export default function HomeTab() {
           })}
         </ScrollView>
       </LinearGradient>
+
+      {/* ─── Mascot ───────────────────────────────────────────── */}
+      <Mascot caloriesEaten={eaten} calorieGoal={tgt} streak={loginStreak} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
         {loading && !loaded ? (

@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { predictionService } from "../services";
-import { logMeal, MealType } from "../services/firestoreService";
+import { logMeal, MealType, createCommunityPost } from "../services/firestoreService";
 import { PredictionResponse, ImagePickerResult } from "../types";
 import { useUser } from "../contexts/UserContext";
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from "../constants/theme";
@@ -58,6 +58,7 @@ export const ScanScreen: React.FC = () => {
   // Meal add modal
   const [showMealModal, setShowMealModal] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>("lunch");
+  const [isSharing, setIsSharing] = useState(false);
 
   const { profile } = useUser();
 
@@ -385,6 +386,39 @@ export const ScanScreen: React.FC = () => {
               activeOpacity={0.8}
             >
               <Text style={styles.addMealBtnText}>➕ Öğüne Ekle</Text>
+            </TouchableOpacity>
+
+            {/* Share to community */}
+            <TouchableOpacity
+              onPress={async () => {
+                if (!profile.uid || !fullResult) return;
+                setIsSharing(true);
+                try {
+                  const foodName = fullResult.class_name.replace(/_/g, ' ').replace(/-/g, ' ');
+                  await createCommunityPost(
+                    profile.uid,
+                    profile.name || 'Kullanıcı',
+                    {
+                      mealName: foodName,
+                      calories: Math.round(fullResult.estimated_calories),
+                      description: `${foodName} • ${fullResult.estimated_weight_grams.toFixed(0)}g`,
+                      imageUrl: fullImageUri || undefined,
+                    }
+                  );
+                  Alert.alert('Paylaşıldı! 🎉', 'Yemeğin toplulukta paylaşıldı.\nTopluluk sekmesinden görebilirsin.');
+                } catch (err) {
+                  Alert.alert('Hata', 'Paylaşım başarısız oldu.');
+                } finally {
+                  setIsSharing(false);
+                }
+              }}
+              style={styles.shareBtn}
+              activeOpacity={0.8}
+              disabled={isSharing}
+            >
+              <Text style={styles.shareBtnText}>
+                {isSharing ? '⏳ Paylaşılıyor...' : '👥 Topluluğa Paylaş'}
+              </Text>
             </TouchableOpacity>
 
             {/* New analysis */}
@@ -986,6 +1020,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: FontSize.base,
+  },
+  shareBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#818cf8',
+  },
+  shareBtnText: {
+    color: '#fff',
+    fontSize: FontSize.base,
+    fontWeight: '700',
   },
 });
 
