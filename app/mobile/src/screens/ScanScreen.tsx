@@ -17,8 +17,10 @@ import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { predictionService } from "../services";
 import { logMeal, MealType, createCommunityPost } from "../services/firestoreService";
+import { uploadCommunityImage } from "../services/storageService";
 import { PredictionResponse, ImagePickerResult } from "../types";
 import { useUser } from "../contexts/UserContext";
+import { LinearGradient } from "expo-linear-gradient";
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from "../constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -327,104 +329,161 @@ export const ScanScreen: React.FC = () => {
   if (mode === "result" && fullResult && fullImageUri) {
     const confidencePercentage = (fullResult.confidence * 100).toFixed(1);
     const isGoodConfidence = fullResult.confidence > 0.5;
+    const displayName = fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ");
+    
+    // Estimated macros (from calories)
+    const estProtein = Math.round(fullResult.estimated_calories * 0.25 / 4);
+    const estCarbs = Math.round(fullResult.estimated_calories * 0.45 / 4);
+    const estFat = Math.round(fullResult.estimated_calories * 0.30 / 9);
+    const maxMacro = Math.max(estProtein, estCarbs, estFat, 1);
 
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#111827" }} edges={["top"]}>
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.resultHeader}>
-            <Text style={styles.resultHeaderText}>✨ Analiz Sonuçları</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#0f172a" }} edges={["top"]}>
+        <ScrollView 
+          style={{ flex: 1 }} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
+          {/* ── Hero image with overlay ── */}
+          <View style={styles.resultHero}>
+            <Image source={{ uri: fullImageUri }} style={styles.resultHeroImage} resizeMode="cover" />
+            <LinearGradient
+              colors={["transparent", "rgba(15,23,42,0.85)", "#0f172a"]}
+              style={styles.resultHeroGradient}
+            />
+            {/* Back button */}
+            <TouchableOpacity onPress={handleReset} style={styles.resultBackBtn} activeOpacity={0.7}>
+              <Text style={{ fontSize: 18, color: "#fff" }}>✕</Text>
+            </TouchableOpacity>
+            {/* Confidence pill on image */}
+            <View style={[
+              styles.resultConfPill,
+              { backgroundColor: isGoodConfidence ? "rgba(16,185,129,0.9)" : "rgba(239,68,68,0.9)" },
+            ]}>
+              <Text style={styles.resultConfPillText}>%{confidencePercentage}</Text>
+            </View>
           </View>
 
-          <View style={{ padding: 16, backgroundColor: "#111827" }}>
-            {/* Image */}
-            <View style={styles.resultImageContainer}>
-              <View style={styles.resultImageFrame}>
-                <Image source={{ uri: fullImageUri }} style={styles.resultImage} resizeMode="cover" />
+          <View style={styles.resultBody}>
+            {/* ── Food name ── */}
+            <Text style={styles.resultFoodName}>{displayName}</Text>
+            <Text style={styles.resultFoodSub}>Tespit Edilen Yemek</Text>
+
+            {/* ── Stats row ── */}
+            <View style={styles.resultStatsRow}>
+              <View style={styles.resultStatItem}>
+                <View style={[styles.resultStatIcon, { backgroundColor: "rgba(59,130,246,0.15)" }]}>
+                  <Text style={{ fontSize: 20 }}>⚖️</Text>
+                </View>
+                <Text style={styles.resultStatValue}>{fullResult.estimated_weight_grams.toFixed(0)}</Text>
+                <Text style={styles.resultStatLabel}>gram</Text>
+              </View>
+
+              <View style={styles.resultStatDivider} />
+
+              <View style={styles.resultStatItem}>
+                <View style={[styles.resultStatIcon, { backgroundColor: "rgba(249,115,22,0.15)" }]}>
+                  <Text style={{ fontSize: 20 }}>🔥</Text>
+                </View>
+                <Text style={[styles.resultStatValue, { color: "#fb923c" }]}>{fullResult.estimated_calories.toFixed(0)}</Text>
+                <Text style={styles.resultStatLabel}>kcal</Text>
               </View>
             </View>
 
-            {/* Food name */}
-            <View
-              style={[
-                styles.resultNameCard,
-                {
-                  backgroundColor: isGoodConfidence ? "#065f46" : "#7f1d1d",
-                  borderColor: isGoodConfidence ? "#10b981" : "#ef4444",
-                },
-              ]}
-            >
-              <Text style={[styles.resultNameLabel, { color: isGoodConfidence ? "#6ee7b7" : "#fca5a5" }]}>
-                🍽️ TESPİT EDİLEN YEMEK
-              </Text>
-              <Text style={styles.resultNameValue}>
-                {fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ")}
-              </Text>
-              <View style={styles.confidenceBadge}>
-                <Text style={styles.confidenceBadgeText}>%{confidencePercentage} Güven</Text>
+            {/* ── Macros ── */}
+            <View style={styles.resultMacroCard}>
+              <Text style={styles.resultMacroTitle}>Tahmini Besin Değerleri</Text>
+              {/* Protein */}
+              <View style={styles.resultMacroRow}>
+                <View style={[styles.resultMacroDot, { backgroundColor: "#3b82f6" }]} />
+                <Text style={styles.resultMacroName}>Protein</Text>
+                <View style={styles.resultMacroBarBg}>
+                  <View style={[styles.resultMacroBarFill, { backgroundColor: "#3b82f6", width: `${(estProtein / maxMacro) * 100}%` }]} />
+                </View>
+                <Text style={styles.resultMacroValue}>{estProtein}g</Text>
+              </View>
+              {/* Carbs */}
+              <View style={styles.resultMacroRow}>
+                <View style={[styles.resultMacroDot, { backgroundColor: "#f59e0b" }]} />
+                <Text style={styles.resultMacroName}>Karbonhidrat</Text>
+                <View style={styles.resultMacroBarBg}>
+                  <View style={[styles.resultMacroBarFill, { backgroundColor: "#f59e0b", width: `${(estCarbs / maxMacro) * 100}%` }]} />
+                </View>
+                <Text style={styles.resultMacroValue}>{estCarbs}g</Text>
+              </View>
+              {/* Fat */}
+              <View style={styles.resultMacroRow}>
+                <View style={[styles.resultMacroDot, { backgroundColor: "#ef4444" }]} />
+                <Text style={styles.resultMacroName}>Yağ</Text>
+                <View style={styles.resultMacroBarBg}>
+                  <View style={[styles.resultMacroBarFill, { backgroundColor: "#ef4444", width: `${(estFat / maxMacro) * 100}%` }]} />
+                </View>
+                <Text style={styles.resultMacroValue}>{estFat}g</Text>
               </View>
             </View>
 
-            {/* Weight & Calories */}
-            <View style={{ flexDirection: "row", marginBottom: 20 }}>
-              <View style={styles.statCardBlue}>
-                <Text style={{ fontSize: 40 }}>⚖️</Text>
-                <Text style={styles.statValueBlue}>{fullResult.estimated_weight_grams.toFixed(0)}</Text>
-                <Text style={styles.statLabelBlue}>gram</Text>
-              </View>
-              <View style={styles.statCardOrange}>
-                <Text style={{ fontSize: 40 }}>🔥</Text>
-                <Text style={styles.statValueOrange}>{fullResult.estimated_calories.toFixed(0)}</Text>
-                <Text style={styles.statLabelOrange}>kcal</Text>
-              </View>
-            </View>
-
-            {/* Add to meal button */}
+            {/* ── Action buttons ── */}
             <TouchableOpacity
               onPress={() => setShowMealModal(true)}
-              style={styles.addMealBtn}
               activeOpacity={0.8}
             >
-              <Text style={styles.addMealBtnText}>➕ Öğüne Ekle</Text>
+              <LinearGradient
+                colors={[Colors.primary[500], Colors.primary[600]] as [string, string]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.resultPrimaryBtn}
+              >
+                <Text style={styles.resultPrimaryBtnText}>➕ Öğüne Ekle</Text>
+              </LinearGradient>
             </TouchableOpacity>
 
-            {/* Share to community */}
-            <TouchableOpacity
-              onPress={async () => {
-                if (!profile.uid || !fullResult) return;
-                setIsSharing(true);
-                try {
-                  const foodName = fullResult.class_name.replace(/_/g, ' ').replace(/-/g, ' ');
-                  await createCommunityPost(
-                    profile.uid,
-                    profile.name || 'Kullanıcı',
-                    {
-                      mealName: foodName,
-                      calories: Math.round(fullResult.estimated_calories),
-                      description: `${foodName} • ${fullResult.estimated_weight_grams.toFixed(0)}g`,
-                      imageUrl: fullImageUri || undefined,
+            <View style={styles.resultSecondaryRow}>
+              {/* Share */}
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!profile.uid || !fullResult) return;
+                  setIsSharing(true);
+                  try {
+                    const foodName = fullResult.class_name.replace(/_/g, ' ').replace(/-/g, ' ');
+                    let publicImageUrl: string | undefined;
+                    if (fullImageUri) {
+                      try {
+                        publicImageUrl = await uploadCommunityImage(profile.uid, fullImageUri);
+                      } catch (uploadErr) {
+                        console.warn('Community image upload failed:', uploadErr);
+                      }
                     }
-                  );
-                  Alert.alert('Paylaşıldı! 🎉', 'Yemeğin toplulukta paylaşıldı.\nTopluluk sekmesinden görebilirsin.');
-                } catch (err) {
-                  Alert.alert('Hata', 'Paylaşım başarısız oldu.');
-                } finally {
-                  setIsSharing(false);
-                }
-              }}
-              style={styles.shareBtn}
-              activeOpacity={0.8}
-              disabled={isSharing}
-            >
-              <Text style={styles.shareBtnText}>
-                {isSharing ? '⏳ Paylaşılıyor...' : '👥 Topluluğa Paylaş'}
-              </Text>
-            </TouchableOpacity>
+                    await createCommunityPost(
+                      profile.uid,
+                      profile.name || 'Kullanıcı',
+                      {
+                        mealName: foodName,
+                        calories: Math.round(fullResult.estimated_calories),
+                        description: `${foodName} • ${fullResult.estimated_weight_grams.toFixed(0)}g`,
+                        imageUrl: publicImageUrl,
+                      }
+                    );
+                    Alert.alert('Paylaşıldı! 🎉', 'Yemeğin toplulukta paylaşıldı.\nTopluluk sekmesinden görebilirsin.');
+                  } catch (err) {
+                    Alert.alert('Hata', 'Paylaşım başarısız oldu.');
+                  } finally {
+                    setIsSharing(false);
+                  }
+                }}
+                style={styles.resultSecondaryBtn}
+                activeOpacity={0.8}
+                disabled={isSharing}
+              >
+                <Text style={styles.resultSecondaryBtnText}>
+                  {isSharing ? '⏳' : '👥'} Paylaş
+                </Text>
+              </TouchableOpacity>
 
-            {/* New analysis */}
-            <TouchableOpacity onPress={handleReset} style={styles.newAnalysisBtn} activeOpacity={0.8}>
-              <Text style={styles.newAnalysisBtnText}>📷 Yeni Analiz Yap</Text>
-            </TouchableOpacity>
+              {/* New analysis */}
+              <TouchableOpacity onPress={handleReset} style={styles.resultSecondaryBtn} activeOpacity={0.8}>
+                <Text style={styles.resultSecondaryBtnText}>📷 Yeni Tara</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
 
@@ -807,144 +866,191 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
-  // Result screen
-  resultHeader: {
-    backgroundColor: Colors.primary[500],
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingTop: 12,
+  // ─── Result screen (redesigned) ─────────────────────────────────────
+  resultHero: {
+    width: "100%" as const,
+    height: 220,
+    position: "relative" as const,
   },
-  resultHeaderText: {
-    color: "#fff",
-    fontSize: FontSize["2xl"],
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  resultImageContainer: {
-    backgroundColor: "#1f2937",
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  resultImageFrame: {
-    width: 280,
-    height: 280,
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "#374151",
-  },
-  resultImage: {
+  resultHeroImage: {
     width: "100%",
     height: "100%",
   },
-  resultNameCard: {
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 16,
-    alignItems: "center",
-    borderWidth: 2,
+  resultHeroGradient: {
+    position: "absolute" as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
   },
-  resultNameLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: "600",
-    marginBottom: 8,
-    letterSpacing: 1,
+  resultBackBtn: {
+    position: "absolute" as const,
+    top: 12,
+    left: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
   },
-  resultNameValue: {
-    fontSize: 28,
-    fontWeight: "bold",
+  resultConfPill: {
+    position: "absolute" as const,
+    top: 12,
+    right: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  resultConfPillText: {
     color: "#fff",
-    textAlign: "center",
-    textTransform: "capitalize",
+    fontSize: FontSize.xs,
+    fontWeight: "700" as const,
   },
-  confidenceBadge: {
-    marginTop: 12,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+  resultBody: {
+    paddingHorizontal: 20,
+    marginTop: -16,
   },
-  confidenceBadgeText: {
+  resultFoodName: {
+    fontSize: FontSize["2xl"],
+    fontWeight: "700" as const,
     color: "#fff",
-    fontWeight: "600",
-    fontSize: FontSize.base,
+    textTransform: "capitalize" as const,
+    marginBottom: 2,
   },
-  // Stat cards
-  statCardBlue: {
-    flex: 1,
-    backgroundColor: "#1e3a5f",
-    borderRadius: 20,
-    padding: 20,
-    marginRight: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#3b82f6",
+  resultFoodSub: {
+    fontSize: FontSize.xs,
+    color: "rgba(148,163,184,0.8)",
+    marginBottom: 20,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
   },
-  statValueBlue: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#60a5fa",
-    marginTop: 8,
-  },
-  statLabelBlue: {
-    color: "#93c5fd",
-    fontSize: FontSize.base,
-    fontWeight: "500",
-  },
-  statCardOrange: {
-    flex: 1,
-    backgroundColor: "#431407",
-    borderRadius: 20,
-    padding: 20,
-    marginLeft: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#f97316",
-  },
-  statValueOrange: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#fb923c",
-    marginTop: 8,
-  },
-  statLabelOrange: {
-    color: "#fdba74",
-    fontSize: FontSize.base,
-    fontWeight: "500",
-  },
-  // Add to meal buttons
-  addMealBtn: {
-    backgroundColor: Colors.primary[500],
-    paddingVertical: 18,
+  // Stats row
+  resultStatsRow: {
+    flexDirection: "row" as const,
+    backgroundColor: "rgba(30,41,59,0.7)",
     borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: "center" as const,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  resultStatItem: {
+    flex: 1,
+    alignItems: "center" as const,
+  },
+  resultStatIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    marginBottom: 6,
+  },
+  resultStatValue: {
+    fontSize: FontSize["2xl"],
+    fontWeight: "700" as const,
+    color: "#60a5fa",
+  },
+  resultStatLabel: {
+    fontSize: FontSize.xs,
+    color: "rgba(148,163,184,0.7)",
+    fontWeight: "500" as const,
+    marginTop: 1,
+  },
+  resultStatDivider: {
+    width: 1,
+    height: 48,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginHorizontal: 8,
+  },
+  // Macros
+  resultMacroCard: {
+    backgroundColor: "rgba(30,41,59,0.7)",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  resultMacroTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: "600" as const,
+    color: "rgba(148,163,184,0.9)",
     marginBottom: 12,
   },
-  addMealBtnText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: FontSize.lg,
+  resultMacroRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    marginBottom: 10,
   },
-  newAnalysisBtn: {
-    backgroundColor: "transparent",
+  resultMacroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  resultMacroName: {
+    width: 85,
+    fontSize: FontSize.sm,
+    color: "rgba(226,232,240,0.85)",
+    fontWeight: "500" as const,
+  },
+  resultMacroBarBg: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginRight: 10,
+    overflow: "hidden" as const,
+  },
+  resultMacroBarFill: {
+    height: "100%" as const,
+    borderRadius: 3,
+  },
+  resultMacroValue: {
+    width: 36,
+    fontSize: FontSize.sm,
+    color: "#e2e8f0",
+    fontWeight: "600" as const,
+    textAlign: "right" as const,
+  },
+  // Action buttons
+  resultPrimaryBtn: {
     paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
-    marginBottom: 24,
+    borderRadius: 14,
+    alignItems: "center" as const,
+    marginBottom: 10,
   },
-  newAnalysisBtnText: {
-    color: "rgba(255,255,255,0.8)",
-    textAlign: "center",
-    fontWeight: "600",
+  resultPrimaryBtnText: {
+    color: "#fff",
     fontSize: FontSize.base,
+    fontWeight: "700" as const,
+  },
+  resultSecondaryRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  resultSecondaryBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(30,41,59,0.5)",
+    alignItems: "center" as const,
+  },
+  resultSecondaryBtnText: {
+    color: "rgba(226,232,240,0.85)",
+    fontSize: FontSize.sm,
+    fontWeight: "600" as const,
   },
   // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
+    justifyContent: "flex-end" as const,
   },
   modalContent: {
     backgroundColor: "#fff",
@@ -955,14 +1061,14 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: FontSize.xl,
-    fontWeight: "700",
+    fontWeight: "700" as const,
     color: Colors.text.primary,
     marginBottom: 16,
-    textAlign: "center",
+    textAlign: "center" as const,
   },
   mealTypeOption: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
@@ -980,7 +1086,7 @@ const styles = StyleSheet.create({
   mealTypeLabel: {
     flex: 1,
     fontSize: FontSize.base,
-    fontWeight: "600",
+    fontWeight: "600" as const,
     color: Colors.text.primary,
   },
   mealTypeLabelActive: {
@@ -989,10 +1095,10 @@ const styles = StyleSheet.create({
   checkMark: {
     fontSize: 20,
     color: Colors.primary[500],
-    fontWeight: "bold",
+    fontWeight: "bold" as const,
   },
   modalActions: {
-    flexDirection: "row",
+    flexDirection: "row" as const,
     marginTop: 16,
     gap: 12,
   },
@@ -1002,11 +1108,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    alignItems: "center",
+    alignItems: "center" as const,
   },
   modalCancelText: {
     color: Colors.text.secondary,
-    fontWeight: "600",
+    fontWeight: "600" as const,
     fontSize: FontSize.base,
   },
   modalConfirmBtn: {
@@ -1014,27 +1120,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.primary[500],
-    alignItems: "center",
+    alignItems: "center" as const,
   },
   modalConfirmText: {
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "700" as const,
     fontSize: FontSize.base,
-  },
-  shareBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#818cf8',
-  },
-  shareBtnText: {
-    color: '#fff',
-    fontSize: FontSize.base,
-    fontWeight: '700',
   },
 });
 
 export default ScanScreen;
+

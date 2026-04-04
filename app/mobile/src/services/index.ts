@@ -3,3 +3,4 @@ export { predictionService } from "./predictionService";
 export * from "./firebaseAuth";
 export * from "./firestoreService";
 export * from "./healthService";
+export * from "./storageService";

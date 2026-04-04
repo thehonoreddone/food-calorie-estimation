@@ -37,5 +37,15 @@ service firebase.storage {
       allow create: if isAuthenticated() && isImage() && isValidSize();
       // Auto-delete after 24 hours via Cloud Functions
     }
+    
+    // Community images - public read, owner write
+    match /community_images/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && 
+                               request.auth.uid == userId &&
+                               isImage() && 
+                               isValidSize();
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
   }
 }

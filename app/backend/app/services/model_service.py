@@ -58,7 +58,7 @@ DEFAULT_CLASS_NAMES = [
     "sulu-patates-yemegi", "sushi", "sutlac", "tacos", "takoyaki", "tantuni",
     "tarhana-corbasi", "tas-kebabi", "tavuk-gogsu", "tavuk-izgara", "tavuk-sote",
     "tavuk_doner", "tereyagi", "tiramisu", "tost", "tulumba-tatlisi", "tuna_tartare",
-    "turk-kahvesi", "tursu", "urfa-kebap", "uzum", "waffles", "wrap", "yaprak-sarma",
+    "turk-kahvesi", "tursu", "adana-kebap", "uzum", "waffles", "wrap", "yaprak-sarma",
     "yayla-corbasi", "yesil-zeytin", "yogurt", "yogurtlu-makarna", "yulaf_ezmesi",
     "zeytinyagli-fasulye"
 ]

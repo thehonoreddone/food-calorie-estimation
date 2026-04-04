@@ -41,6 +41,7 @@ import {
   CommunityPost,
   CommunityComment,
 } from '../services/firestoreService';
+import { uploadCommunityImage } from '../services/storageService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 const { width: SW } = Dimensions.get('window');
@@ -451,6 +452,7 @@ export function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'recent' | 'popular'>('recent');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPosts();
@@ -497,6 +499,22 @@ export function CommunityScreen() {
 
   const handleCreatePost = async (data: { mealName: string; description: string; imageUri?: string; calories?: number }) => {
     if (!profile.uid) return;
+
+    let imageUrl: string | undefined;
+
+    // Upload image to Firebase Storage if provided
+    if (data.imageUri) {
+      try {
+        setUploadProgress('Fotoğraf yükleniyor...');
+        imageUrl = await uploadCommunityImage(profile.uid, data.imageUri);
+        setUploadProgress(null);
+      } catch (uploadErr) {
+        console.warn('Image upload failed, posting without image:', uploadErr);
+        setUploadProgress(null);
+        // Continue without image rather than failing the post
+      }
+    }
+
     await createCommunityPost(
       profile.uid,
       profile.name || 'Kullanıcı',
@@ -504,7 +522,7 @@ export function CommunityScreen() {
         mealName: data.mealName,
         calories: data.calories,
         description: data.description,
-        imageUrl: data.imageUri,
+        imageUrl,
       }
     );
     // Refresh feed
@@ -558,6 +576,14 @@ export function CommunityScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Upload progress */}
+      {uploadProgress && (
+        <Animated.View entering={FadeIn.duration(200)} style={styles.uploadBanner}>
+          <ActivityIndicator size="small" color="#fff" />
+          <Text style={styles.uploadBannerText}>{uploadProgress}</Text>
+        </Animated.View>
+      )}
 
       {/* Post list */}
       {loading ? (
@@ -1058,5 +1084,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: FontSize.base,
+  },
+  // Upload progress banner
+  uploadBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    gap: 8,
+  },
+  uploadBannerText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontWeight: '600',
   },
 });
