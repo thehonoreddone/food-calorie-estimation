@@ -1,12 +1,12 @@
 """
 Configuration loader for food calorie estimation system.
-Loads densities, kcal_per_gram, and food_types from JSON files.
+Loads densities, kcal_per_gram, food_types, and typical_portions from JSON files.
 """
 
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ _UTILS_DIR = Path(__file__).parent
 _DENSITIES_PATH = _UTILS_DIR / "densities.json"
 _KCAL_PER_GRAM_PATH = _UTILS_DIR / "kcal_per_gram.json"
 _FOOD_TYPES_PATH = _UTILS_DIR / "food_types.json"
+_TYPICAL_PORTIONS_PATH = _UTILS_DIR / "typical_portions.json"
 
 
 class ConfigLoader:
@@ -25,6 +26,7 @@ class ConfigLoader:
     _densities: Dict[str, float] = {}
     _kcal_per_gram: Dict[str, float] = {}
     _food_types: Dict[str, str] = {}
+    _typical_portions: Dict[str, Any] = {}
     _loaded: bool = False
     
     def __new__(cls):
@@ -35,11 +37,13 @@ class ConfigLoader:
     def load_all(self, 
                  densities_path: Optional[Path] = None,
                  kcal_path: Optional[Path] = None,
-                 food_types_path: Optional[Path] = None) -> None:
+                 food_types_path: Optional[Path] = None,
+                 typical_portions_path: Optional[Path] = None) -> None:
         """Load all configuration files."""
         self._densities = self._load_json(densities_path or _DENSITIES_PATH, "densities")
         self._kcal_per_gram = self._load_json(kcal_path or _KCAL_PER_GRAM_PATH, "kcal_per_gram")
         self._food_types = self._load_json(food_types_path or _FOOD_TYPES_PATH, "food_types")
+        self._typical_portions = self._load_json(typical_portions_path or _TYPICAL_PORTIONS_PATH, "typical_portions")
         self._loaded = True
         logger.info("All configuration files loaded successfully")
     
@@ -126,6 +130,54 @@ class ConfigLoader:
         logger.debug(f"No food_type found for {food_class}, defaulting to '{default}'")
         return default
     
+    def get_typical_portion(self, food_class: str) -> Optional[Dict[str, Any]]:
+        """Get typical portion info for a food class."""
+        if not self._loaded:
+            self.load_all()
+        
+        food_class = food_class.lower().replace(' ', '_').replace('-', '_')
+        
+        if food_class in self._typical_portions:
+            return self._typical_portions[food_class]
+        
+        # Try partial match
+        for key in self._typical_portions:
+            if key in food_class or food_class in key:
+                return self._typical_portions[key]
+        
+        return None
+    
+    def get_typical_weight(self, food_class: str, num_instances: int = 1) -> Tuple[float, float, float]:
+        """
+        Get typical weight range for a food class.
+        
+        Returns:
+            Tuple of (typical, min, max) weights in grams
+        """
+        portion_info = self.get_typical_portion(food_class)
+        
+        if portion_info is None:
+            # Default portion
+            default_weight = self._typical_portions.get("_default", 150)
+            return (default_weight, default_weight * 0.5, default_weight * 2.0)
+        
+        if isinstance(portion_info, dict):
+            typical = portion_info.get("typical", 150)
+            min_w = portion_info.get("min", typical * 0.5)
+            max_w = portion_info.get("max", typical * 1.5)
+            per_piece = portion_info.get("per_piece", None)
+            
+            # If per_piece is defined and we have multiple instances
+            if per_piece and num_instances > 1:
+                typical = per_piece * num_instances
+                min_w = per_piece * num_instances * 0.8
+                max_w = per_piece * num_instances * 1.2
+            
+            return (typical, min_w, max_w)
+        else:
+            # Simple value
+            return (portion_info, portion_info * 0.5, portion_info * 1.5)
+    
     @property
     def densities(self) -> Dict[str, float]:
         if not self._loaded:
@@ -143,6 +195,12 @@ class ConfigLoader:
         if not self._loaded:
             self.load_all()
         return self._food_types.copy()
+    
+    @property
+    def typical_portions(self) -> Dict[str, Any]:
+        if not self._loaded:
+            self.load_all()
+        return self._typical_portions.copy()
 
 
 # Global instance

@@ -242,6 +242,27 @@ class PortionEstimator:
         if len(warnings) > 2:
             confidence_level *= 0.8
         
+        # If geometric confidence is low, use typical portions as fallback/adjustment
+        if confidence_level < 0.5 or calibration.method == 'default':
+            typical_weight, min_weight, max_weight = self.config.get_typical_weight(
+                food_class, num_instances=len(instances)
+            )
+            
+            # Blend geometric estimate with typical portion based on confidence
+            if total_mass < min_weight or total_mass > max_weight:
+                # Geometric estimate is outside reasonable range, use typical
+                logger.warning(
+                    f"Geometric estimate {total_mass:.1f}g outside typical range "
+                    f"[{min_weight:.1f}, {max_weight:.1f}]g for {food_class}. "
+                    f"Using typical portion: {typical_weight:.1f}g"
+                )
+                total_mass = typical_weight
+                warnings.append(f"Using typical portion weight ({typical_weight:.0f}g) due to low calibration confidence")
+                method_used = "typical_portion_fallback"
+            else:
+                # Geometric estimate is reasonable, keep it but log
+                logger.info(f"Geometric estimate {total_mass:.1f}g is within typical range for {food_class}")
+        
         return PortionEstimationResult(
             per_instance=instances,
             total_mass_g=total_mass,

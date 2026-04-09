@@ -113,35 +113,51 @@ class LegacyPipelineService:
             return False
     
     def _find_classifier_checkpoint(self) -> Optional[Path]:
-        """Find the best classifier checkpoint"""
-        # Look for checkpoint in expected locations
-        # Prioritize the correctly trained checkpoint_best.pth
+        """Find the best classifier checkpoint, including latest training runs"""
         backend_models = Path(__file__).resolve().parent.parent.parent / "models"
+        ml_runs = Path(__file__).resolve().parent.parent.parent / "ml" / "runs" / "classifier"
         
         possible_paths = [
-            # Priority 1: The correctly trained checkpoint with embedded class names
+            # Priority 1: The deployed best checkpoint
             backend_models / "checkpoint_best.pth",
-            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "checkpoint_best.pth",
-            # Fallback to other checkpoints
-            backend_models / "efficientnet_b2_best.pt",
-            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "efficientnet_b2_best.pt",
         ]
         
+        # Priority 2: Latest training run (auto-discover newest run folder)
+        if ml_runs.exists():
+            run_dirs = sorted(
+                [d for d in ml_runs.iterdir() if d.is_dir()],
+                key=lambda d: d.stat().st_mtime,
+                reverse=True,
+            )
+            for run_dir in run_dirs:
+                best = run_dir / "checkpoints" / "checkpoint_best.pth"
+                if best.exists():
+                    possible_paths.append(best)
+                    break  # Only add newest
+        
+        # Priority 3: Legacy fallback paths
+        possible_paths.extend([
+            FOOD_CALORIE_PATH / "outputs" / "run_20251216_140119" / "checkpoints" / "checkpoint_best.pth",
+            backend_models / "efficientnet_b2_best.pt",
+        ])
+        
         for path in possible_paths:
-             if path.exists():
+            if path.exists():
                 logger.info(f"Found classifier checkpoint: {path}")
                 return path
         
         return None
     
     def _init_segmentor(self):
-        """Initialize segmentation with FoodSeg103 priority"""
+        """Initialize segmentation with FoodSeg103 priority, using local models only"""
         try:
+            backend_models = Path(__file__).resolve().parent.parent.parent / "models"
+            
             # Find FoodSeg103 model
             foodseg103_paths = [
+                backend_models / "foodseg103_seg.pt",
                 FOOD_CALORIE_PATH / "foodseg103_seg.pt",
                 FOOD_CALORIE_PATH / "seg_dataset" / "foodseg103_best.pt",
-                Path(__file__).parent.parent.parent / "models" / "foodseg103_seg.pt",
             ]
             
             foodseg103_path = None
@@ -150,9 +166,22 @@ class LegacyPipelineService:
                     foodseg103_path = str(path)
                     break
             
+            # Find YOLOv8 segmentation model (use local models, NEVER download)
+            yolov8_seg_paths = [
+                backend_models / "food_seg_best.pt",
+                backend_models / "food201_seg_best.pt",
+            ]
+            
+            yolov8_path = None
+            for path in yolov8_seg_paths:
+                if path.exists():
+                    yolov8_path = str(path)
+                    logger.info(f"Using local YOLOv8 seg model: {path}")
+                    break
+            
             self.segmentor = FoodSegmentor(
                 foodseg103_path=foodseg103_path,
-                yolov8_path=None,  # Auto-download if needed
+                yolov8_path=yolov8_path,  # Use local model, no download
                 device=None,
                 enabled=True,
                 use_fallback=True,
