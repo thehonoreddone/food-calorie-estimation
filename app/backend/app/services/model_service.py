@@ -16,7 +16,9 @@ from app.domain.entities import SegmentEntity
 from app.services.firebase_config_service import firebase_config_service
 
 
-# Default class names (211 food classes - EfficientNet-B2 model, updated with merged_datasetf)
+# Default class names (251 food classes - EfficientNet-B2 classifier model)
+# NOTE: These are CLASSIFIER class names, not segmentation class names.
+# The YOLO segmentation model has its own internal class names (model.names).
 DEFAULT_CLASS_NAMES = [
     "acai-bowl", "acma", "adana-kebap", "ali-nazik", "anne-koftesi", "apple_pie", "armut",
     "asure", "avocado-toast", "avokado", "ayran",
@@ -58,7 +60,7 @@ DEFAULT_CLASS_NAMES = [
     "sulu-patates-yemegi", "sushi", "sutlac", "tacos", "takoyaki", "tantuni",
     "tarhana-corbasi", "tas-kebabi", "tavuk-gogsu", "tavuk-izgara", "tavuk-sote",
     "tavuk_doner", "tereyagi", "tiramisu", "tost", "tulumba-tatlisi", "tuna_tartare",
-    "turk-kahvesi", "tursu", "adana-kebap", "uzum", "waffles", "wrap", "yaprak-sarma",
+    "turk-kahvesi", "tursu", "uzum", "waffles", "wrap", "yaprak-sarma",
     "yayla-corbasi", "yesil-zeytin", "yogurt", "yogurtlu-makarna", "yulaf_ezmesi",
     "zeytinyagli-fasulye"
 ]
@@ -70,7 +72,8 @@ class ModelService:
     def __init__(self):
         self.segmentation_model = None
         self.model_loaded = False
-        self.class_names: List[str] = []
+        self.class_names: List[str] = []  # Classifier class names (EfficientNet)
+        self.seg_class_names: List[str] = []  # Segmentation class names (YOLO)
         self.using_foodseg103 = False
         
     async def load_models(self) -> None:
@@ -105,7 +108,7 @@ class ModelService:
                     logger.warning(f"Failed to load class names from {path}: {e}")
         
         # Fallback to hardcoded default class names
-        logger.info("Using default class names (202 classes)")
+        logger.info(f"Using default class names ({len(DEFAULT_CLASS_NAMES)} classes)")
         return DEFAULT_CLASS_NAMES
     
     async def _load_segmentation_model(self) -> None:
@@ -145,40 +148,55 @@ class ModelService:
                 # Check if this is the FoodSeg103 model
                 self.using_foodseg103 = "foodseg103" in str(loaded_path).lower()
             
-            # Get class names - prefer our config over model's internal names
+            # Load classifier class names from config/Firebase
             self.class_names = await self._load_class_names()
             
-            # Verify model classes against loaded classes
+            # Determine segmentation class names:
+            # The YOLO model has its own internal class names (model.names)
+            # which MUST be used for segmentation output mapping.
+            # The config class_names are for the EfficientNet classifier.
             if hasattr(self.segmentation_model, "names"):
                 model_classes = self.segmentation_model.names
-                logger.info(f"Model has {len(model_classes)} internal classes")
+                model_class_count = len(model_classes)
+                config_class_count = len(self.class_names)
                 
-                if len(model_classes) != len(self.class_names):
-                    logger.warning(f"⚠️ Class count mismatch! Model: {len(model_classes)}, Config: {len(self.class_names)}")
-                    # If mismatch is huge, maybe we should trust the model's names?
-                    # But for now, let's just warn.
+                logger.info(f"YOLO model has {model_class_count} internal classes")
+                logger.info(f"Config has {config_class_count} classifier classes")
                 
-                # Check for specific mismatches if counts match
-                if len(model_classes) == len(self.class_names):
-                    # Check first and last
-                    first_id = list(model_classes.keys())[0]
-                    if model_classes[first_id] != self.class_names[0]:
-                         logger.warning(f"⚠️ Class name mismatch at index 0! Model: {model_classes[first_id]}, Config: {self.class_names[0]}")
-
-            if self.using_foodseg103:
-                logger.info(f"Using FoodSeg103 class names: {len(self.class_names)} classes")
-            elif hasattr(self.segmentation_model, "names"):
-                model_names = list(self.segmentation_model.names.values())
-                # Check if model names are just "food_X" format
-                if model_names and model_names[0].startswith("food_"):
-                    logger.info(f"Model has generic names, using loaded class names")
+                if model_class_count != config_class_count:
+                    # Class count mismatch: use model's own names for segmentation
+                    # This is the correct behavior - the YOLO model knows its own classes
+                    self.seg_class_names = list(model_classes.values())
+                    logger.info(
+                        f"✅ Using YOLO model's internal class names for segmentation "
+                        f"({model_class_count} classes) — config has different count ({config_class_count})"
+                    )
                 else:
-                    # If we are not using foodseg103 explicitly, and model has names, maybe we should use them?
-                    # But the user wants to use the JSONs from Firebase.
-                    pass
+                    # Counts match - check if model has generic names ("food_X")
+                    model_names = list(model_classes.values())
+                    if model_names and model_names[0].startswith("food_"):
+                        # Model has generic placeholder names, use config names
+                        self.seg_class_names = self.class_names[:]
+                        logger.info(f"Model has generic names, using config class names for segmentation")
+                    else:
+                        # Counts match and model has real names - verify consistency
+                        first_id = list(model_classes.keys())[0]
+                        if model_classes[first_id] != self.class_names[0]:
+                            logger.warning(
+                                f"⚠️ Class name mismatch at index 0! "
+                                f"Model: {model_classes[first_id]}, Config: {self.class_names[0]}. "
+                                f"Using model's own names for segmentation."
+                            )
+                            self.seg_class_names = model_names
+                        else:
+                            self.seg_class_names = self.class_names[:]
+                            logger.info(f"Config and model class names match")
+            else:
+                # No model names available, fallback to config
+                self.seg_class_names = self.class_names[:]
             
             self.model_loaded = True
-            logger.info(f"✅ Segmentation model loaded with {len(self.class_names)} classes")
+            logger.info(f"✅ Segmentation model loaded with {len(self.seg_class_names)} seg classes")
             
         except Exception as e:
             logger.error(f"Failed to load segmentation model: {e}")
@@ -238,8 +256,8 @@ class ModelService:
                 confidence = float(box.conf[0])
                 bbox = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
                 
-                # Get class name
-                class_name = self.class_names[class_id] if class_id < len(self.class_names) else f"class_{class_id}"
+                # Get class name — use segmentation-specific class names
+                class_name = self.seg_class_names[class_id] if class_id < len(self.seg_class_names) else f"class_{class_id}"
                 
                 # Get mask if available
                 mask_bytes = None
@@ -287,7 +305,13 @@ class ModelService:
         return image
     
     def get_class_name(self, class_id: int) -> str:
-        """Get class name from ID"""
+        """Get segmentation class name from ID"""
+        if 0 <= class_id < len(self.seg_class_names):
+            return self.seg_class_names[class_id]
+        return f"class_{class_id}"
+    
+    def get_classifier_class_name(self, class_id: int) -> str:
+        """Get classifier class name from ID"""
         if 0 <= class_id < len(self.class_names):
             return self.class_names[class_id]
         return f"class_{class_id}"

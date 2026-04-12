@@ -31,10 +31,10 @@ export interface FoodInfo {
 export const FOOD_DATABASE: FoodInfo[] = [
   // ═══ KEBAPLAR & ET YEMEKLERİ ═══
   { key: 'adana-kebap', displayName: 'Adana Kebap', unit: 'gram', kcalPer100g: 205, defaultPortion: 200, portionGrams: 1, emoji: '🥩', category: 'meal' },
-  { key: 'anne-koftesi', displayName: 'Anne Köftesi', unit: 'adet', kcalPer100g: 195, defaultPortion: 4, portionGrams: 30, sizes: { kucuk: 20, normal: 30, buyuk: 45 }, emoji: '🧆', category: 'meal' },
+  { key: 'anne-koftesi', displayName: 'Anne Köftesi', unit: 'adet', kcalPer100g: 195, defaultPortion: 4, portionGrams: 30, sizes: { kucuk: 20, normal: 30, buyuk: 40 }, emoji: '🧆', category: 'meal' },
   { key: 'et-sote', displayName: 'Et Sote', unit: 'gram', kcalPer100g: 155, defaultPortion: 250, portionGrams: 1, emoji: '🍖', category: 'meal' },
   { key: 'hunkar-begendi', displayName: 'Hünkar Beğendi', unit: 'gram', kcalPer100g: 160, defaultPortion: 300, portionGrams: 1, emoji: '🍛', category: 'meal' },
-  { key: 'icli-kofte', displayName: 'İçli Köfte', unit: 'adet', kcalPer100g: 245, defaultPortion: 3, portionGrams: 55, sizes: { kucuk: 40, normal: 55, buyuk: 75 }, emoji: '🧆', category: 'meal' },
+  { key: 'icli-kofte', displayName: 'İçli Köfte', unit: 'adet', kcalPer100g: 245, defaultPortion: 3, portionGrams: 50, sizes: { kucuk: 35, normal: 50, buyuk: 70 }, emoji: '🧆', category: 'meal' },
   { key: 'iskender', displayName: 'İskender', unit: 'gram', kcalPer100g: 230, defaultPortion: 300, portionGrams: 1, emoji: '🥩', category: 'meal' },
   { key: 'kokorec', displayName: 'Kokoreç', unit: 'gram', kcalPer100g: 250, defaultPortion: 200, portionGrams: 1, emoji: '🌯', category: 'meal' },
   { key: 'patlican-kebabi', displayName: 'Patlıcan Kebabı', unit: 'gram', kcalPer100g: 160, defaultPortion: 250, portionGrams: 1, emoji: '🍆', category: 'meal' },
@@ -90,9 +90,9 @@ export const FOOD_DATABASE: FoodInfo[] = [
 
   // ═══ KAHVALTILIK ═══
   { key: 'menemen', displayName: 'Menemen', unit: 'gram', kcalPer100g: 115, defaultPortion: 200, portionGrams: 1, emoji: '🍳', category: 'meal' },
-  { key: 'omlet', displayName: 'Omlet', unit: 'adet', kcalPer100g: 155, defaultPortion: 1, portionGrams: 130, sizes: { kucuk: 90, normal: 130, buyuk: 180 }, emoji: '🍳', category: 'meal' },
+  { key: 'omlet', displayName: 'Omlet', unit: 'adet', kcalPer100g: 155, defaultPortion: 1, portionGrams: 120, sizes: { kucuk: 80, normal: 120, buyuk: 160 }, emoji: '🍳', category: 'meal' },
   { key: 'sucuklu-yumurta', displayName: 'Sucuklu Yumurta', unit: 'gram', kcalPer100g: 265, defaultPortion: 180, portionGrams: 1, emoji: '🍳', category: 'meal' },
-  { key: 'haslanmis-yumurta', displayName: 'Haşlanmış Yumurta', unit: 'adet', kcalPer100g: 155, defaultPortion: 2, portionGrams: 50, sizes: { kucuk: 40, normal: 50, buyuk: 65 }, emoji: '🥚', category: 'meal' },
+  { key: 'haslanmis-yumurta', displayName: 'Haşlanmış Yumurta', unit: 'adet', kcalPer100g: 155, defaultPortion: 2, portionGrams: 45, sizes: { kucuk: 38, normal: 45, buyuk: 50 }, emoji: '🥚', category: 'meal' },
   { key: 'ekmek', displayName: 'Ekmek', unit: 'adet', kcalPer100g: 265, defaultPortion: 2, portionGrams: 30, sizes: { kucuk: 20, normal: 30, buyuk: 40 }, emoji: '🍞', category: 'bread' },
   { key: 'sandvic', displayName: 'Sandviç', unit: 'adet', kcalPer100g: 230, defaultPortion: 1, portionGrams: 180, sizes: { kucuk: 130, normal: 180, buyuk: 240 }, emoji: '🥪', category: 'meal' },
 
@@ -288,6 +288,92 @@ export const FOOD_DATABASE: FoodInfo[] = [
   { key: 'tost', displayName: 'Tost', unit: 'adet', kcalPer100g: 280, defaultPortion: 1, portionGrams: 130, sizes: { kucuk: 90, normal: 130, buyuk: 180 }, emoji: '🧀', category: 'meal' },
   { key: 'turk_kahvesi', displayName: 'Türk Kahvesi', unit: 'ml', kcalPer100g: 2, defaultPortion: 80, portionGrams: 1, emoji: '☕', category: 'drink' },
   { key: 'yulaf_ezmesi', displayName: 'Yulaf Ezmesi', unit: 'gram', kcalPer100g: 370, defaultPortion: 40, portionGrams: 1, emoji: '🥣', category: 'meal' },
+
+  // ═══ SÜT ÜRÜNLERİ & İÇECEKLER (YENİ) ═══
+  { key: 'sut', displayName: 'Süt', unit: 'ml', kcalPer100g: 60, defaultPortion: 200, portionGrams: 1, emoji: '🥛', category: 'drink' },
+  { key: 'yarim_yagli_sut', displayName: 'Yarım Yağlı Süt', unit: 'ml', kcalPer100g: 46, defaultPortion: 200, portionGrams: 1, emoji: '🥛', category: 'drink' },
+  { key: 'yagsiz_sut', displayName: 'Yağsız Süt', unit: 'ml', kcalPer100g: 34, defaultPortion: 200, portionGrams: 1, emoji: '🥛', category: 'drink' },
+  { key: 'kakao_sut', displayName: 'Kakaolu Süt', unit: 'ml', kcalPer100g: 75, defaultPortion: 200, portionGrams: 1, emoji: '🍫', category: 'drink' },
+  { key: 'su', displayName: 'Su', unit: 'ml', kcalPer100g: 0, defaultPortion: 200, portionGrams: 1, emoji: '💧', category: 'drink' },
+  { key: 'limonata', displayName: 'Limonata', unit: 'ml', kcalPer100g: 35, defaultPortion: 250, portionGrams: 1, emoji: '🍋', category: 'drink' },
+  { key: 'portakal_suyu', displayName: 'Portakal Suyu', unit: 'ml', kcalPer100g: 45, defaultPortion: 200, portionGrams: 1, emoji: '🍊', category: 'drink' },
+  { key: 'elma_suyu', displayName: 'Elma Suyu', unit: 'ml', kcalPer100g: 46, defaultPortion: 200, portionGrams: 1, emoji: '🍎', category: 'drink' },
+  { key: 'meyve_suyu', displayName: 'Meyve Suyu', unit: 'ml', kcalPer100g: 50, defaultPortion: 200, portionGrams: 1, emoji: '🧃', category: 'drink' },
+  { key: 'gazli_icecek', displayName: 'Gazlı İçecek', unit: 'ml', kcalPer100g: 42, defaultPortion: 330, portionGrams: 1, emoji: '🥤', category: 'drink' },
+  { key: 'soda', displayName: 'Soda', unit: 'ml', kcalPer100g: 0, defaultPortion: 200, portionGrams: 1, emoji: '🫧', category: 'drink' },
+  { key: 'iced_tea', displayName: 'Ice Tea', unit: 'ml', kcalPer100g: 30, defaultPortion: 330, portionGrams: 1, emoji: '🧊', category: 'drink' },
+  { key: 'latte', displayName: 'Latte', unit: 'ml', kcalPer100g: 42, defaultPortion: 300, portionGrams: 1, emoji: '☕', category: 'drink' },
+  { key: 'cappuccino', displayName: 'Cappuccino', unit: 'ml', kcalPer100g: 38, defaultPortion: 250, portionGrams: 1, emoji: '☕', category: 'drink' },
+  { key: 'americano', displayName: 'Americano', unit: 'ml', kcalPer100g: 2, defaultPortion: 300, portionGrams: 1, emoji: '☕', category: 'drink' },
+  { key: 'filtre_kahve', displayName: 'Filtre Kahve', unit: 'ml', kcalPer100g: 1, defaultPortion: 250, portionGrams: 1, emoji: '☕', category: 'drink' },
+  { key: 'smoothie', displayName: 'Smoothie', unit: 'ml', kcalPer100g: 55, defaultPortion: 300, portionGrams: 1, emoji: '🥤', category: 'drink' },
+  { key: 'kefir', displayName: 'Kefir', unit: 'ml', kcalPer100g: 55, defaultPortion: 200, portionGrams: 1, emoji: '🥛', category: 'drink' },
+
+  // ═══ PEYNİR ÇEŞİTLERİ (YENİ) ═══
+  { key: 'beyaz_peynir', displayName: 'Beyaz Peynir', unit: 'gram', kcalPer100g: 250, defaultPortion: 30, portionGrams: 1, emoji: '🧀', category: 'snack' },
+  { key: 'kasar_peyniri', displayName: 'Kaşar Peyniri', unit: 'gram', kcalPer100g: 320, defaultPortion: 30, portionGrams: 1, emoji: '🧀', category: 'snack' },
+  { key: 'tulum_peyniri', displayName: 'Tulum Peyniri', unit: 'gram', kcalPer100g: 295, defaultPortion: 30, portionGrams: 1, emoji: '🧀', category: 'snack' },
+  { key: 'labne', displayName: 'Labne', unit: 'gram', kcalPer100g: 165, defaultPortion: 30, portionGrams: 1, emoji: '🧀', category: 'snack' },
+  { key: 'surek_peynir', displayName: 'Sürek Peynir', unit: 'gram', kcalPer100g: 330, defaultPortion: 20, portionGrams: 1, emoji: '🧀', category: 'snack' },
+
+  // ═══ ÇİKOLATA & TATLI & ATISTIRMALIK (YENİ) ═══
+  { key: 'cikolata', displayName: 'Çikolata', unit: 'gram', kcalPer100g: 535, defaultPortion: 25, portionGrams: 1, emoji: '🍫', category: 'dessert' },
+  { key: 'bitter_cikolata', displayName: 'Bitter Çikolata', unit: 'gram', kcalPer100g: 510, defaultPortion: 25, portionGrams: 1, emoji: '🍫', category: 'dessert' },
+  { key: 'sutlu_cikolata', displayName: 'Sütlü Çikolata', unit: 'gram', kcalPer100g: 545, defaultPortion: 25, portionGrams: 1, emoji: '🍫', category: 'dessert' },
+  { key: 'damla_cikolata', displayName: 'Damla Çikolata', unit: 'gram', kcalPer100g: 480, defaultPortion: 20, portionGrams: 1, emoji: '🍫', category: 'dessert' },
+  { key: 'nutella', displayName: 'Nutella', unit: 'gram', kcalPer100g: 539, defaultPortion: 15, portionGrams: 1, emoji: '🍫', category: 'dessert' },
+  { key: 'biskuvi', displayName: 'Bisküvi', unit: 'adet', kcalPer100g: 450, defaultPortion: 3, portionGrams: 10, sizes: { kucuk: 7, normal: 10, buyuk: 15 }, emoji: '🍪', category: 'snack' },
+  { key: 'kurabiye', displayName: 'Kurabiye', unit: 'adet', kcalPer100g: 430, defaultPortion: 2, portionGrams: 20, sizes: { kucuk: 12, normal: 20, buyuk: 30 }, emoji: '🍪', category: 'dessert' },
+  { key: 'kraker', displayName: 'Kraker', unit: 'gram', kcalPer100g: 440, defaultPortion: 30, portionGrams: 1, emoji: '🍘', category: 'snack' },
+  { key: 'gofret', displayName: 'Gofret', unit: 'adet', kcalPer100g: 510, defaultPortion: 1, portionGrams: 35, sizes: { kucuk: 20, normal: 35, buyuk: 50 }, emoji: '🍫', category: 'snack' },
+  { key: 'kek', displayName: 'Kek', unit: 'adet', kcalPer100g: 350, defaultPortion: 1, portionGrams: 70, sizes: { kucuk: 40, normal: 70, buyuk: 100 }, emoji: '🍰', category: 'dessert' },
+
+  // ═══ YAĞLAR & SOSLAR & KAHVALTILIKLAR (YENİ) ═══
+  { key: 'bal', displayName: 'Bal', unit: 'gram', kcalPer100g: 304, defaultPortion: 20, portionGrams: 1, emoji: '🍯', category: 'snack' },
+  { key: 'recel', displayName: 'Reçel', unit: 'gram', kcalPer100g: 250, defaultPortion: 20, portionGrams: 1, emoji: '🍓', category: 'snack' },
+  { key: 'tereyagi', displayName: 'Tereyağı', unit: 'gram', kcalPer100g: 717, defaultPortion: 10, portionGrams: 1, emoji: '🧈', category: 'snack' },
+  { key: 'zeytinyagi', displayName: 'Zeytinyağı', unit: 'ml', kcalPer100g: 884, defaultPortion: 10, portionGrams: 1, emoji: '🫒', category: 'snack' },
+  { key: 'tahin', displayName: 'Tahin', unit: 'gram', kcalPer100g: 595, defaultPortion: 15, portionGrams: 1, emoji: '🥜', category: 'snack' },
+  { key: 'tahin_pekmez', displayName: 'Tahin Pekmez', unit: 'gram', kcalPer100g: 430, defaultPortion: 30, portionGrams: 1, emoji: '🍯', category: 'snack' },
+  { key: 'pekmez', displayName: 'Pekmez', unit: 'gram', kcalPer100g: 293, defaultPortion: 20, portionGrams: 1, emoji: '🍇', category: 'snack' },
+  { key: 'ketcap', displayName: 'Ketçap', unit: 'gram', kcalPer100g: 112, defaultPortion: 15, portionGrams: 1, emoji: '🍅', category: 'snack' },
+  { key: 'mayonez', displayName: 'Mayonez', unit: 'gram', kcalPer100g: 680, defaultPortion: 15, portionGrams: 1, emoji: '🥚', category: 'snack' },
+
+  // ═══ ET & PROTEİN (YENİ) ═══
+  { key: 'tavuk_gogsu', displayName: 'Tavuk Göğsü', unit: 'gram', kcalPer100g: 165, defaultPortion: 150, portionGrams: 1, emoji: '🍗', category: 'meal' },
+  { key: 'ton_baligi', displayName: 'Ton Balığı (Konserve)', unit: 'gram', kcalPer100g: 130, defaultPortion: 80, portionGrams: 1, emoji: '🐟', category: 'meal' },
+  { key: 'sucuk', displayName: 'Sucuk', unit: 'gram', kcalPer100g: 380, defaultPortion: 40, portionGrams: 1, emoji: '🌭', category: 'meal' },
+  { key: 'salam', displayName: 'Salam', unit: 'gram', kcalPer100g: 290, defaultPortion: 30, portionGrams: 1, emoji: '🥓', category: 'meal' },
+  { key: 'sosis', displayName: 'Sosis', unit: 'adet', kcalPer100g: 295, defaultPortion: 2, portionGrams: 40, sizes: { kucuk: 25, normal: 40, buyuk: 60 }, emoji: '🌭', category: 'meal' },
+  { key: 'yumurta_sarisi', displayName: 'Yumurta Sarısı', unit: 'adet', kcalPer100g: 322, defaultPortion: 1, portionGrams: 17, emoji: '🥚', category: 'meal' },
+  { key: 'yumurta_beyazi', displayName: 'Yumurta Beyazı', unit: 'adet', kcalPer100g: 52, defaultPortion: 1, portionGrams: 33, emoji: '🥚', category: 'meal' },
+  { key: 'kiyma', displayName: 'Kıyma', unit: 'gram', kcalPer100g: 250, defaultPortion: 100, portionGrams: 1, emoji: '🥩', category: 'meal' },
+  { key: 'kofte', displayName: 'Köfte', unit: 'adet', kcalPer100g: 220, defaultPortion: 4, portionGrams: 35, sizes: { kucuk: 25, normal: 35, buyuk: 50 }, emoji: '🧆', category: 'meal' },
+
+  // ═══ TAHIL & BAKLAGILLER (YENİ) ═══
+  { key: 'pirinc', displayName: 'Pirinç (Pişmiş)', unit: 'gram', kcalPer100g: 130, defaultPortion: 200, portionGrams: 1, emoji: '🍚', category: 'meal' },
+  { key: 'makarna_pismis', displayName: 'Makarna (Pişmiş)', unit: 'gram', kcalPer100g: 131, defaultPortion: 200, portionGrams: 1, emoji: '🍝', category: 'meal' },
+  { key: 'misir', displayName: 'Mısır', unit: 'gram', kcalPer100g: 86, defaultPortion: 150, portionGrams: 1, emoji: '🌽', category: 'vegetable' },
+  { key: 'nohut', displayName: 'Nohut (Pişmiş)', unit: 'gram', kcalPer100g: 164, defaultPortion: 150, portionGrams: 1, emoji: '🫛', category: 'meal' },
+  { key: 'mercimek', displayName: 'Mercimek (Pişmiş)', unit: 'gram', kcalPer100g: 116, defaultPortion: 150, portionGrams: 1, emoji: '🫘', category: 'meal' },
+
+  // ═══ DİĞER YAYGIN YİYECEKLER (YENİ) ═══
+  { key: 'patates', displayName: 'Patates (Haşlanmış)', unit: 'gram', kcalPer100g: 87, defaultPortion: 200, portionGrams: 1, emoji: '🥔', category: 'meal' },
+  { key: 'taze_fasulye', displayName: 'Taze Fasulye', unit: 'gram', kcalPer100g: 35, defaultPortion: 200, portionGrams: 1, emoji: '🫛', category: 'vegetable' },
+  { key: 'patlican', displayName: 'Patlıcan', unit: 'gram', kcalPer100g: 25, defaultPortion: 200, portionGrams: 1, emoji: '🍆', category: 'vegetable' },
+  { key: 'kabak', displayName: 'Kabak', unit: 'gram', kcalPer100g: 17, defaultPortion: 200, portionGrams: 1, emoji: '🥒', category: 'vegetable' },
+  { key: 'biber', displayName: 'Biber', unit: 'adet', kcalPer100g: 20, defaultPortion: 2, portionGrams: 60, sizes: { kucuk: 40, normal: 60, buyuk: 90 }, emoji: '🌶️', category: 'vegetable' },
+  { key: 'sogan', displayName: 'Soğan', unit: 'adet', kcalPer100g: 40, defaultPortion: 1, portionGrams: 110, sizes: { kucuk: 70, normal: 110, buyuk: 160 }, emoji: '🧅', category: 'vegetable' },
+  { key: 'sarimsak', displayName: 'Sarımsak', unit: 'adet', kcalPer100g: 149, defaultPortion: 2, portionGrams: 3, emoji: '🧄', category: 'vegetable' },
+  { key: 'marul', displayName: 'Marul', unit: 'gram', kcalPer100g: 15, defaultPortion: 80, portionGrams: 1, emoji: '🥬', category: 'vegetable' },
+  { key: 'ispanak', displayName: 'Ispanak', unit: 'gram', kcalPer100g: 23, defaultPortion: 200, portionGrams: 1, emoji: '🥬', category: 'vegetable' },
+  { key: 'mantar', displayName: 'Mantar', unit: 'gram', kcalPer100g: 22, defaultPortion: 100, portionGrams: 1, emoji: '🍄', category: 'vegetable' },
+  { key: 'ceviz', displayName: 'Ceviz', unit: 'gram', kcalPer100g: 654, defaultPortion: 20, portionGrams: 1, emoji: '🥜', category: 'snack' },
+  { key: 'badem', displayName: 'Badem', unit: 'gram', kcalPer100g: 579, defaultPortion: 20, portionGrams: 1, emoji: '🥜', category: 'snack' },
+  { key: 'findik', displayName: 'Fındık', unit: 'gram', kcalPer100g: 628, defaultPortion: 20, portionGrams: 1, emoji: '🌰', category: 'snack' },
+  { key: 'kuru_uzum', displayName: 'Kuru Üzüm', unit: 'gram', kcalPer100g: 299, defaultPortion: 30, portionGrams: 1, emoji: '🍇', category: 'snack' },
+  { key: 'kuru_kayisi', displayName: 'Kuru Kayısı', unit: 'gram', kcalPer100g: 241, defaultPortion: 30, portionGrams: 1, emoji: '🍑', category: 'snack' },
+  { key: 'hurma', displayName: 'Hurma', unit: 'adet', kcalPer100g: 277, defaultPortion: 3, portionGrams: 25, sizes: { kucuk: 18, normal: 25, buyuk: 35 }, emoji: '🌴', category: 'snack' },
 ];
 
 // ─── Auto-generate altUnits for all foods ───────────────────────────────────
@@ -394,17 +480,38 @@ export function calculateWeightGrams(food: FoodInfo, amount: number, unit?: Food
   }
 }
 
-/** Search foods by query (for autocomplete) - matches against displayName and key */
+/** Normalize Turkish characters for fuzzy matching */
+function normalizeTr(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/â/g, 'a')
+    .replace(/î/g, 'i')
+    .replace(/û/g, 'u');
+}
+
+/** Search foods by query (for autocomplete) - matches against displayName and key
+ *  Supports fuzzy Turkish character matching: 'sut' → 'Süt'
+ */
 export function searchFoods(query: string, maxResults = 10): FoodInfo[] {
   const lower = query.toLowerCase().trim();
   if (!lower || lower.length < 1) return [];
+  const normalized = normalizeTr(lower);
 
   const results: FoodInfo[] = [];
 
-  // Exact start match first
+  // Exact start match first (both original and normalized)
   for (const food of FOOD_DATABASE) {
-    if (food.displayName.toLowerCase().startsWith(lower) ||
-        food.key.replace(/-/g, ' ').replace(/_/g, ' ').startsWith(lower)) {
+    const dName = food.displayName.toLowerCase();
+    const dNameNorm = normalizeTr(food.displayName);
+    const keyNorm = normalizeTr(food.key.replace(/-/g, ' ').replace(/_/g, ' '));
+    if (dName.startsWith(lower) || dNameNorm.startsWith(normalized) ||
+        keyNorm.startsWith(normalized)) {
       results.push(food);
       if (results.length >= maxResults) return results;
     }
@@ -413,8 +520,11 @@ export function searchFoods(query: string, maxResults = 10): FoodInfo[] {
   // Then partial match
   for (const food of FOOD_DATABASE) {
     if (results.includes(food)) continue;
-    if (food.displayName.toLowerCase().includes(lower) ||
-        food.key.replace(/-/g, ' ').replace(/_/g, ' ').includes(lower)) {
+    const dName = food.displayName.toLowerCase();
+    const dNameNorm = normalizeTr(food.displayName);
+    const keyNorm = normalizeTr(food.key.replace(/-/g, ' ').replace(/_/g, ' '));
+    if (dName.includes(lower) || dNameNorm.includes(normalized) ||
+        keyNorm.includes(normalized)) {
       results.push(food);
       if (results.length >= maxResults) return results;
     }

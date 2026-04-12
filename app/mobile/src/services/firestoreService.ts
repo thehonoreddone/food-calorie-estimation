@@ -138,6 +138,7 @@ export async function logMeal(
 
 /**
  * Get meals for a specific date
+ * NOTE: Uses client-side sorting to avoid requiring a Firestore composite index.
  */
 export async function getMealsForDate(
   uid: string,
@@ -146,15 +147,21 @@ export async function getMealsForDate(
   const q = query(
     collection(db, MEALS_COLLECTION),
     where('uid', '==', uid),
-    where('date', '==', date),
-    orderBy('createdAt', 'desc')
+    where('date', '==', date)
   );
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(docSnap => ({
+  const meals = snapshot.docs.map(docSnap => ({
     id: docSnap.id,
     ...docSnap.data(),
   })) as MealEntry[];
+  // Sort client-side by createdAt descending
+  meals.sort((a, b) => {
+    const ta = a.createdAt?.toMillis?.() ?? 0;
+    const tb = b.createdAt?.toMillis?.() ?? 0;
+    return tb - ta;
+  });
+  return meals;
 }
 
 /**
@@ -205,6 +212,7 @@ export async function logExercise(
 
 /**
  * Get exercises for a specific date
+ * NOTE: Uses client-side sorting to avoid requiring a Firestore composite index.
  */
 export async function getExercisesForDate(
   uid: string,
@@ -213,15 +221,21 @@ export async function getExercisesForDate(
   const q = query(
     collection(db, EXERCISES_COLLECTION),
     where('uid', '==', uid),
-    where('date', '==', date),
-    orderBy('createdAt', 'desc')
+    where('date', '==', date)
   );
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(docSnap => ({
+  const exercises = snapshot.docs.map(docSnap => ({
     id: docSnap.id,
     ...docSnap.data(),
   })) as ExerciseEntry[];
+  // Sort client-side by createdAt descending
+  exercises.sort((a, b) => {
+    const ta = a.createdAt?.toMillis?.() ?? 0;
+    const tb = b.createdAt?.toMillis?.() ?? 0;
+    return tb - ta;
+  });
+  return exercises;
 }
 
 /**
@@ -524,19 +538,24 @@ export async function updateWaterIntake(
 const COMMUNITY_POSTS = 'community_posts';
 const COMMUNITY_LIKES = 'community_likes';
 const COMMUNITY_COMMENTS = 'community_comments';
+const USER_FOLLOWS = 'user_follows';
+
+export type PostType = 'meal' | 'text' | 'photo';
 
 export interface CommunityPost {
   id?: string;
   uid: string;
   username: string;
+  postType: PostType;
   imageUrl?: string;
-  mealName: string;
+  mealName?: string;
   calories?: number;
   description?: string;
   likesCount: number;
   commentsCount: number;
   createdAt?: string;
   likedByMe?: boolean;
+  likedByUsers?: string[]; // kullanıcı adları listesi
 }
 
 export interface CommunityComment {
@@ -548,23 +567,72 @@ export interface CommunityComment {
   createdAt?: string;
 }
 
+export interface UserPublicProfile {
+  uid: string;
+  name: string;
+  email?: string;
+  avatarUri?: string;
+  followersCount?: number;
+  followingCount?: number;
+}
+
+export interface FollowRelation {
+  id?: string;
+  followerId: string;
+  followingId: string;
+  followerName: string;
+  followingName: string;
+  createdAt: string;
+}
+
 /**
- * Create a community post
+ * Get a user's public profile
+ */
+export async function getUserPublicProfile(uid: string): Promise<UserPublicProfile | null> {
+  try {
+    const docRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Get follow counts
+      const counts = await getFollowCounts(uid);
+      return {
+        uid,
+        name: data.name || data.displayName || 'Kullanıcı',
+        email: data.email,
+        avatarUri: data.avatarUri,
+        followersCount: counts.followers,
+        followingCount: counts.following,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn('getUserPublicProfile error:', err);
+    return null;
+  }
+}
+
+/**
+ * Create a community post (supports text, photo, and meal posts)
  */
 export async function createCommunityPost(
   uid: string,
   username: string,
   data: {
-    mealName: string;
+    postType?: PostType;
+    mealName?: string;
     calories?: number;
     description?: string;
     imageUrl?: string;
   }
 ): Promise<string> {
+  const postType: PostType = data.postType || (data.mealName ? 'meal' : (data.imageUrl ? 'photo' : 'text'));
+  
   const docRef = await addDoc(collection(db, COMMUNITY_POSTS), {
     uid,
     username,
-    mealName: data.mealName,
+    postType,
+    mealName: data.mealName ?? '',
     calories: data.calories ?? 0,
     description: data.description ?? '',
     imageUrl: data.imageUrl ?? '',
@@ -608,7 +676,66 @@ export async function getCommunityPosts(
 
   posts = posts.slice(0, maxResults);
 
-  // Check if current user liked each post
+  // Check if current user liked each post + get liked-by usernames
+  if (currentUid) {
+    for (const post of posts) {
+      try {
+        const likeDocId = `${post.id}_${currentUid}`;
+        const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
+        const likeSnap = await getDoc(likeRef);
+        post.likedByMe = likeSnap.exists();
+      } catch {
+        post.likedByMe = false;
+      }
+      
+      // Get liked-by user names (limit to 5)
+      try {
+        const likesQ = query(
+          collection(db, COMMUNITY_LIKES),
+          where('postId', '==', post.id),
+          limit(5),
+        );
+        const likesSnap = await getDocs(likesQ);
+        post.likedByUsers = likesSnap.docs
+          .map(d => d.data().username || 'Kullanıcı')
+          .filter(Boolean);
+      } catch {
+        post.likedByUsers = [];
+      }
+    }
+  }
+
+  return posts;
+}
+
+/**
+ * Get posts by a specific user
+ */
+export async function getUserPosts(
+  uid: string,
+  maxResults: number = 20,
+  currentUid?: string,
+): Promise<CommunityPost[]> {
+  const q = query(
+    collection(db, COMMUNITY_POSTS),
+    where('uid', '==', uid),
+    limit(maxResults),
+  );
+
+  const snapshot = await getDocs(q);
+  let posts = snapshot.docs.map(docSnap => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  })) as CommunityPost[];
+
+  // Sort by date desc
+  posts.sort((a, b) => {
+    const da = a.createdAt ?? '';
+    const dateB = b.createdAt ?? '';
+    return dateB > da ? 1 : dateB < da ? -1 : 0;
+  });
+
+  // Check likes for current user
   if (currentUid) {
     for (const post of posts) {
       try {
@@ -631,7 +758,8 @@ export async function getCommunityPosts(
 export async function togglePostLike(
   postId: string,
   uid: string,
-  isCurrentlyLiked: boolean
+  isCurrentlyLiked: boolean,
+  username?: string,
 ): Promise<void> {
   const likeDocId = `${postId}_${uid}`;
   const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
@@ -645,7 +773,12 @@ export async function togglePostLike(
       await updateDoc(postRef, { likesCount: Math.max(0, currentLikes - 1) });
     }
   } else {
-    await setDoc(likeRef, { postId, uid, createdAt: new Date().toISOString() });
+    await setDoc(likeRef, { 
+      postId, 
+      uid, 
+      username: username || 'Kullanıcı',
+      createdAt: new Date().toISOString() 
+    });
     const postSnap = await getDoc(postRef);
     if (postSnap.exists()) {
       const currentLikes = (postSnap.data() as CommunityPost).likesCount ?? 0;
@@ -736,4 +869,113 @@ export async function deleteCommunityPost(postId: string): Promise<void> {
   }
   await deleteDoc(doc(db, COMMUNITY_POSTS, postId));
 }
+
+// ─── Follow System ──────────────────────────────────────────────────────────
+
+/**
+ * Follow a user
+ */
+export async function followUser(
+  followerId: string,
+  followerName: string,
+  followingId: string,
+  followingName: string,
+): Promise<void> {
+  const followDocId = `${followerId}_${followingId}`;
+  await setDoc(doc(db, USER_FOLLOWS, followDocId), {
+    followerId,
+    followingId,
+    followerName,
+    followingName,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Unfollow a user
+ */
+export async function unfollowUser(
+  followerId: string,
+  followingId: string,
+): Promise<void> {
+  const followDocId = `${followerId}_${followingId}`;
+  await deleteDoc(doc(db, USER_FOLLOWS, followDocId));
+}
+
+/**
+ * Check if user A follows user B
+ */
+export async function isFollowingUser(
+  followerId: string,
+  followingId: string,
+): Promise<boolean> {
+  try {
+    const followDocId = `${followerId}_${followingId}`;
+    const docSnap = await getDoc(doc(db, USER_FOLLOWS, followDocId));
+    return docSnap.exists();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get follow counts for a user
+ */
+export async function getFollowCounts(uid: string): Promise<{ followers: number; following: number }> {
+  try {
+    // Followers: where followingId == uid
+    const followersQ = query(
+      collection(db, USER_FOLLOWS),
+      where('followingId', '==', uid),
+    );
+    const followersSnap = await getDocs(followersQ);
+
+    // Following: where followerId == uid
+    const followingQ = query(
+      collection(db, USER_FOLLOWS),
+      where('followerId', '==', uid),
+    );
+    const followingSnap = await getDocs(followingQ);
+
+    return {
+      followers: followersSnap.size,
+      following: followingSnap.size,
+    };
+  } catch {
+    return { followers: 0, following: 0 };
+  }
+}
+
+/**
+ * Get followers of a user
+ */
+export async function getFollowers(
+  uid: string,
+  maxResults: number = 50,
+): Promise<FollowRelation[]> {
+  const q = query(
+    collection(db, USER_FOLLOWS),
+    where('followingId', '==', uid),
+    limit(maxResults),
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as FollowRelation[];
+}
+
+/**
+ * Get users that a user is following
+ */
+export async function getFollowing(
+  uid: string,
+  maxResults: number = 50,
+): Promise<FollowRelation[]> {
+  const q = query(
+    collection(db, USER_FOLLOWS),
+    where('followerId', '==', uid),
+    limit(maxResults),
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as FollowRelation[];
+}
+
 

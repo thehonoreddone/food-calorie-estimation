@@ -11,12 +11,21 @@ import {
   Modal,
   Dimensions,
   Platform,
+  KeyboardAvoidingView,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  ZoomIn,
+} from "react-native-reanimated";
 import { predictionService } from "../services";
-import { logMeal, MealType, createCommunityPost } from "../services/firestoreService";
+import { logMeal, MealType, createCommunityPost, recordMealLog } from "../services/firestoreService";
 import { uploadCommunityImage } from "../services/storageService";
 import { PredictionResponse, ImagePickerResult } from "../types";
 import { useUser } from "../contexts/UserContext";
@@ -25,7 +34,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from "../constants/t
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-type ScanMode = "camera" | "result" | "loading";
+type ScanMode = "camera" | "result" | "loading" | "saved";
 
 // ─── Meal type selector data ────────────────────────────────────────────────
 const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
@@ -34,6 +43,21 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
   { key: "dinner", label: "Akşam Yemeği", icon: "🌆" },
   { key: "snack", label: "Aperatif", icon: "🍿" },
 ];
+
+// ─── Date helpers ───────────────────────────────────────────────────────────
+function fmtDate(d: Date) { return d.toISOString().split("T")[0]; }
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const months = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const dateNum = `${d.getDate()} ${months[d.getMonth()]}`;
+  if (fmtDate(d) === fmtDate(today)) return `${dateNum} • Bugün`;
+  if (fmtDate(d) === fmtDate(yesterday)) return `${dateNum} • Dün`;
+  if (fmtDate(d) === fmtDate(tomorrow)) return `${dateNum} • Yarın`;
+  return dateNum;
+}
 
 export const ScanScreen: React.FC = () => {
   // Camera state
@@ -60,9 +84,25 @@ export const ScanScreen: React.FC = () => {
   // Meal add modal
   const [showMealModal, setShowMealModal] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>("lunch");
+  const [selectedDate, setSelectedDate] = useState(fmtDate(new Date()));
   const [isSharing, setIsSharing] = useState(false);
+  const [savedFoodName, setSavedFoodName] = useState("");
+
+  // Share modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareDescription, setShareDescription] = useState('');
+  const [shareFoodName, setShareFoodName] = useState('');
 
   const { profile } = useUser();
+
+  // Auto-select meal type based on time of day
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) setSelectedMealType("breakfast");
+    else if (hour >= 11 && hour < 15) setSelectedMealType("lunch");
+    else if (hour >= 15 && hour < 21) setSelectedMealType("dinner");
+    else setSelectedMealType("snack");
+  }, []);
 
   // ─── Auto-detect loop ──────────────────────────────────────────────────
   useEffect(() => {
@@ -134,14 +174,24 @@ export const ScanScreen: React.FC = () => {
     setIsAnalyzing(true);
     setError(null);
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-      });
+      let photo;
+      try {
+        photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+        });
+      } catch (camErr) {
+        console.error('[SCAN] Camera takePicture failed:', camErr);
+        setError("Kamera fotoğraf çekemedi. Kamera izinlerini kontrol edin.");
+        setMode("camera");
+        setIsAnalyzing(false);
+        return;
+      }
       if (!photo) {
         setMode("camera");
         setIsAnalyzing(false);
         return;
       }
+      console.log('[SCAN] Photo captured:', photo.uri, 'width:', photo.width, 'height:', photo.height);
       const image: ImagePickerResult = {
         uri: photo.uri,
         type: "image/jpeg",
@@ -153,19 +203,22 @@ export const ScanScreen: React.FC = () => {
       setFullImageUri(photo.uri);
       setMode("result");
     } catch (err: unknown) {
+      console.error('[SCAN] Camera capture error:', JSON.stringify(err, Object.getOwnPropertyNames(err as any), 2));
       const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
       let errorMessage: string;
 
-      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error') {
-        errorMessage = "Backend'e bağlanılamıyor. İnternet bağlantınızı ve backend sunucusunun çalıştığını kontrol edin.";
+      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error' || axiosErr.message?.includes('Network')) {
+        errorMessage = "Backend'e bağlanılamıyor. Backend sunucusunun çalıştığını ve aynı ağda olduğunuzu kontrol edin.\n\nAPI: " + process.env.EXPO_PUBLIC_API_URL;
       } else if (axiosErr.code === 'ECONNABORTED' || axiosErr.message?.includes('timeout')) {
         errorMessage = "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.";
       } else if (axiosErr.response?.status === 503) {
         errorMessage = "ML modeli henüz yüklenmedi. Birkaç saniye bekleyip tekrar deneyin.";
+      } else if (axiosErr.response?.status === 500) {
+        errorMessage = "Sunucu hatası. Backend loglarını kontrol edin.";
       } else if (axiosErr.response?.data?.detail) {
         errorMessage = String(axiosErr.response.data.detail);
       } else {
-        errorMessage = "Analiz başarısız. Lütfen tekrar deneyin.";
+        errorMessage = `Analiz başarısız: ${axiosErr.message || 'Bilinmeyen hata'}.\n\nBackend URL: ${process.env.EXPO_PUBLIC_API_URL}`;
       }
       setError(errorMessage);
       setMode("camera");
@@ -201,19 +254,22 @@ export const ScanScreen: React.FC = () => {
         setIsAnalyzing(false);
       }
     } catch (err: unknown) {
+      console.error('[SCAN] Gallery upload error:', JSON.stringify(err, Object.getOwnPropertyNames(err as any), 2));
       const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
       let errorMessage: string;
 
-      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error') {
-        errorMessage = "Backend'e bağlanılamıyor. İnternet bağlantınızı kontrol edin.";
+      if (axiosErr.code === 'ERR_NETWORK' || axiosErr.message === 'Network Error' || axiosErr.message?.includes('Network')) {
+        errorMessage = "Backend'e bağlanılamıyor. Backend sunucusunun çalıştığını kontrol edin.\n\nAPI: " + process.env.EXPO_PUBLIC_API_URL;
       } else if (axiosErr.code === 'ECONNABORTED' || axiosErr.message?.includes('timeout')) {
         errorMessage = "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.";
       } else if (axiosErr.response?.status === 503) {
         errorMessage = "ML modeli henüz yüklenmedi. Birkaç saniye bekleyip tekrar deneyin.";
+      } else if (axiosErr.response?.status === 500) {
+        errorMessage = "Sunucu hatası. Backend loglarını kontrol edin.";
       } else if (axiosErr.response?.data?.detail) {
         errorMessage = String(axiosErr.response.data.detail);
       } else {
-        errorMessage = "Analiz başarısız. Lütfen tekrar deneyin.";
+        errorMessage = `Analiz başarısız: ${axiosErr.message || 'Bilinmeyen hata'}.\n\nBackend URL: ${process.env.EXPO_PUBLIC_API_URL}`;
       }
       setError(errorMessage);
       setMode("camera");
@@ -231,16 +287,16 @@ export const ScanScreen: React.FC = () => {
     }
 
     try {
-      const today = new Date().toISOString().split("T")[0];
       // Estimate macros from calories
       const protein = Math.round(predToUse.estimated_calories * 0.25 / 4);
       const carbs = Math.round(predToUse.estimated_calories * 0.45 / 4);
       const fat = Math.round(predToUse.estimated_calories * 0.30 / 9);
+      const foodName = predToUse.class_name.replace(/_/g, " ").replace(/-/g, " ");
 
       await logMeal(profile.uid, {
-        date: today,
+        date: selectedDate,
         mealType: selectedMealType,
-        foodName: predToUse.class_name.replace(/_/g, " ").replace(/-/g, " "),
+        foodName,
         calories: Math.round(predToUse.estimated_calories),
         protein,
         carbs,
@@ -250,8 +306,14 @@ export const ScanScreen: React.FC = () => {
         imageUri: imageToUse || undefined,
       });
 
+      // Record meal log for streak tracking
+      try { await recordMealLog(profile.uid); } catch {}
+
+      // Show success screen instead of alert
+      setSavedFoodName(foodName);
       setShowMealModal(false);
-      Alert.alert("Eklendi! ✅", `${predToUse.class_name.replace(/_/g, " ")} ${getMealLabel(selectedMealType)} öğününe eklendi.`);
+      setMode("saved");
+
       // Simple smart notification: if dinner is high-calorie, schedule advice for tomorrow morning
       if (selectedMealType === "dinner" && predToUse.estimated_calories > 800) {
         try {
@@ -264,7 +326,6 @@ export const ScanScreen: React.FC = () => {
           console.log("Smart advice notification failed:", notifyErr);
         }
       }
-      handleReset();
     } catch (err) {
       console.error("Meal log error:", err);
       Alert.alert("Hata", "Öğün kaydedilemedi. Tekrar deneyin.");
@@ -275,6 +336,13 @@ export const ScanScreen: React.FC = () => {
     return MEAL_TYPES.find((m) => m.key === mt)?.label || mt;
   };
 
+  // ─── Date navigation ─────────────────────────────────────────────────
+  const shiftDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(fmtDate(d));
+  };
+
   // ─── Reset ────────────────────────────────────────────────────────────
   const handleReset = () => {
     setMode("camera");
@@ -283,6 +351,7 @@ export const ScanScreen: React.FC = () => {
     setLiveResult(null);
     setCapturedImageUri(null);
     setError(null);
+    setSelectedDate(fmtDate(new Date()));
   };
 
   // ─── Permission check ─────────────────────────────────────────────────
@@ -325,10 +394,52 @@ export const ScanScreen: React.FC = () => {
     );
   }
 
+  // ─── Saved success screen ─────────────────────────────────────────────
+  if (mode === "saved") {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={["top"]}>
+        <View style={styles.savedContainer}>
+          <Animated.View entering={ZoomIn.duration(400).springify()} style={styles.savedIconWrap}>
+            <Text style={styles.savedIcon}>✅</Text>
+          </Animated.View>
+          <Animated.Text entering={FadeInUp.delay(200).duration(400)} style={styles.savedTitle}>
+            Kaydedildi!
+          </Animated.Text>
+          <Animated.Text entering={FadeInUp.delay(350).duration(400)} style={styles.savedSub}>
+            {savedFoodName} → {getMealLabel(selectedMealType)}{"\n"}
+            📅 {formatDateLabel(selectedDate)}
+          </Animated.Text>
+
+          <Animated.View entering={FadeInUp.delay(500).duration(400)} style={styles.savedActions}>
+            <TouchableOpacity
+              style={styles.savedPrimaryBtn}
+              onPress={() => { router.push('/(tabs)'); handleReset(); }}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[Colors.primary[500], Colors.primary[600]]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.savedPrimaryBtnInner}
+              >
+                <Text style={styles.savedPrimaryBtnText}>✓ Tamam</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.savedSecondaryBtn}
+              onPress={handleReset}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.savedSecondaryBtnText}>📷 Yeni Tara</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ─── Result screen ────────────────────────────────────────────────────
   if (mode === "result" && fullResult && fullImageUri) {
-    const confidencePercentage = (fullResult.confidence * 100).toFixed(1);
-    const isGoodConfidence = fullResult.confidence > 0.5;
     const displayName = fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ");
     
     // Estimated macros (from calories)
@@ -355,13 +466,6 @@ export const ScanScreen: React.FC = () => {
             <TouchableOpacity onPress={handleReset} style={styles.resultBackBtn} activeOpacity={0.7}>
               <Text style={{ fontSize: 18, color: "#fff" }}>✕</Text>
             </TouchableOpacity>
-            {/* Confidence pill on image */}
-            <View style={[
-              styles.resultConfPill,
-              { backgroundColor: isGoodConfidence ? "rgba(16,185,129,0.9)" : "rgba(239,68,68,0.9)" },
-            ]}>
-              <Text style={styles.resultConfPillText}>%{confidencePercentage}</Text>
-            </View>
           </View>
 
           <View style={styles.resultBody}>
@@ -438,45 +542,19 @@ export const ScanScreen: React.FC = () => {
             </TouchableOpacity>
 
             <View style={styles.resultSecondaryRow}>
-              {/* Share */}
+              {/* Share - opens modal */}
               <TouchableOpacity
-                onPress={async () => {
+                onPress={() => {
                   if (!profile.uid || !fullResult) return;
-                  setIsSharing(true);
-                  try {
-                    const foodName = fullResult.class_name.replace(/_/g, ' ').replace(/-/g, ' ');
-                    let publicImageUrl: string | undefined;
-                    if (fullImageUri) {
-                      try {
-                        publicImageUrl = await uploadCommunityImage(profile.uid, fullImageUri);
-                      } catch (uploadErr) {
-                        console.warn('Community image upload failed:', uploadErr);
-                      }
-                    }
-                    await createCommunityPost(
-                      profile.uid,
-                      profile.name || 'Kullanıcı',
-                      {
-                        mealName: foodName,
-                        calories: Math.round(fullResult.estimated_calories),
-                        description: `${foodName} • ${fullResult.estimated_weight_grams.toFixed(0)}g`,
-                        imageUrl: publicImageUrl,
-                      }
-                    );
-                    Alert.alert('Paylaşıldı! 🎉', 'Yemeğin toplulukta paylaşıldı.\nTopluluk sekmesinden görebilirsin.');
-                  } catch (err) {
-                    Alert.alert('Hata', 'Paylaşım başarısız oldu.');
-                  } finally {
-                    setIsSharing(false);
-                  }
+                  const foodName = fullResult.class_name.replace(/_/g, ' ').replace(/-/g, ' ');
+                  setShareFoodName(foodName);
+                  setShareDescription('');
+                  setShowShareModal(true);
                 }}
                 style={styles.resultSecondaryBtn}
                 activeOpacity={0.8}
-                disabled={isSharing}
               >
-                <Text style={styles.resultSecondaryBtnText}>
-                  {isSharing ? '⏳' : '👥'} Paylaş
-                </Text>
+                <Text style={styles.resultSecondaryBtnText}>👥 Paylaş</Text>
               </TouchableOpacity>
 
               {/* New analysis */}
@@ -489,7 +567,128 @@ export const ScanScreen: React.FC = () => {
 
         {/* Meal type selector modal */}
         {renderMealModal()}
+
+        {/* Share to community modal */}
+        {renderShareModal()}
       </SafeAreaView>
+    );
+  }
+
+  // ─── Share modal ──────────────────────────────────────────────────────
+  function renderShareModal() {
+    const handleShareSubmit = async () => {
+      if (!profile.uid || !fullResult) return;
+      setIsSharing(true);
+      setShowShareModal(false);
+      try {
+        let publicImageUrl: string | undefined;
+        if (fullImageUri) {
+          try {
+            publicImageUrl = await uploadCommunityImage(profile.uid, fullImageUri);
+          } catch (uploadErr) {
+            console.warn('Community image upload failed:', uploadErr);
+          }
+        }
+        await createCommunityPost(
+          profile.uid,
+          profile.name || 'Kullanıcı',
+          {
+            postType: 'meal',
+            mealName: shareFoodName.trim() || fullResult.class_name.replace(/_/g, ' '),
+            calories: Math.round(fullResult.estimated_calories),
+            description: shareDescription.trim() || `${shareFoodName} • ${fullResult.estimated_weight_grams.toFixed(0)}g`,
+            imageUrl: publicImageUrl,
+          }
+        );
+        Alert.alert('Paylaşıldı! 🎉', 'Yemeğin toplulukta paylaşıldı.\nTopluluk sekmesinden görebilirsin.');
+      } catch (err) {
+        Alert.alert('Hata', 'Paylaşım başarısız oldu.');
+      } finally {
+        setIsSharing(false);
+      }
+    };
+
+    return (
+      <Modal visible={showShareModal} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.shareModalContent}>
+              <Text style={styles.shareModalTitle}>👥 Toplulukta Paylaş</Text>
+              <Text style={styles.shareModalSubtitle}>Yemeğini düzenle ve paylaş!</Text>
+
+              {/* Preview image */}
+              {fullImageUri && (
+                <Image
+                  source={{ uri: fullImageUri }}
+                  style={styles.sharePreviewImage}
+                  resizeMode="cover"
+                />
+              )}
+
+              {/* Food name */}
+              <View style={styles.shareInputGroup}>
+                <Text style={styles.shareInputLabel}>Yemek Adı</Text>
+                <TextInput
+                  style={styles.shareTextInput}
+                  value={shareFoodName}
+                  onChangeText={setShareFoodName}
+                  placeholder="Yemek adı"
+                  placeholderTextColor={Colors.text.light}
+                  maxLength={60}
+                />
+              </View>
+
+              {/* Calories display */}
+              {fullResult && (
+                <View style={styles.shareCalorieRow}>
+                  <Text style={styles.shareCalorieLabel}>🔥 Kalori:</Text>
+                  <Text style={styles.shareCalorieValue}>{Math.round(fullResult.estimated_calories)} kcal</Text>
+                  <Text style={styles.shareCalorieSep}>•</Text>
+                  <Text style={styles.shareCalorieLabel}>⚖️</Text>
+                  <Text style={styles.shareCalorieValue}>{fullResult.estimated_weight_grams.toFixed(0)}g</Text>
+                </View>
+              )}
+
+              {/* Description */}
+              <View style={styles.shareInputGroup}>
+                <Text style={styles.shareInputLabel}>Açıklama / Yorum</Text>
+                <TextInput
+                  style={[styles.shareTextInput, styles.shareTextArea]}
+                  value={shareDescription}
+                  onChangeText={setShareDescription}
+                  placeholder="Bu yemek hakkında bir şeyler yaz... Tarif, düşünceler, emoji 🎉"
+                  placeholderTextColor={Colors.text.light}
+                  multiline
+                  maxLength={500}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {/* Actions */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowShareModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.shareSubmitBtn}
+                  onPress={handleShareSubmit}
+                  disabled={isSharing}
+                >
+                  <Text style={styles.shareSubmitText}>
+                    {isSharing ? '⏳ Paylaşılıyor...' : '🚀 Paylaş'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     );
   }
 
@@ -500,6 +699,20 @@ export const ScanScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Öğün Seçin</Text>
+
+            {/* Date selector */}
+            <View style={styles.dateSelectorRow}>
+              <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.dateNavBtn}>
+                <Text style={styles.dateNavText}>◀</Text>
+              </TouchableOpacity>
+              <View style={styles.dateLabelWrap}>
+                <Text style={styles.dateLabel}>📅 {formatDateLabel(selectedDate)}</Text>
+              </View>
+              <TouchableOpacity onPress={() => shiftDate(1)} style={styles.dateNavBtn}>
+                <Text style={styles.dateNavText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
             {MEAL_TYPES.map((mt) => (
               <TouchableOpacity
                 key={mt.key}
@@ -529,7 +742,7 @@ export const ScanScreen: React.FC = () => {
                 <Text style={styles.modalCancelText}>İptal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleAddToMeal}>
-                <Text style={styles.modalConfirmText}>Ekle</Text>
+                <Text style={styles.modalConfirmText}>Kaydet</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -597,9 +810,6 @@ export const ScanScreen: React.FC = () => {
               </Text>
               <Text style={styles.liveResultDetail}>
                 ⚖️ {liveResult.estimated_weight_grams.toFixed(0)}g  •  🔥 {liveResult.estimated_calories.toFixed(0)} kcal
-              </Text>
-              <Text style={styles.liveResultConfidence}>
-                %{(liveResult.confidence * 100).toFixed(0)} güven
               </Text>
             </View>
           </View>
@@ -699,6 +909,71 @@ const styles = StyleSheet.create({
     borderColor: Colors.error,
   },
   cancelBtnText: { color: Colors.error, fontWeight: "600" },
+  // Saved success screen
+  savedContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing["2xl"],
+    backgroundColor: Colors.background,
+  },
+  savedIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.primary[50],
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.xl,
+    borderWidth: 3,
+    borderColor: Colors.primary[200],
+  },
+  savedIcon: { fontSize: 48 },
+  savedTitle: {
+    fontSize: FontSize["2xl"],
+    fontWeight: "900",
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  savedSub: {
+    fontSize: FontSize.base,
+    color: Colors.text.secondary,
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: Spacing["2xl"],
+    textTransform: "capitalize",
+  },
+  savedActions: {
+    width: "100%",
+    gap: 12,
+  },
+  savedPrimaryBtn: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  savedPrimaryBtnInner: {
+    paddingVertical: 16,
+    alignItems: "center",
+    borderRadius: 14,
+  },
+  savedPrimaryBtnText: {
+    color: "#fff",
+    fontSize: FontSize.lg,
+    fontWeight: "800",
+  },
+  savedSecondaryBtn: {
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+  },
+  savedSecondaryBtnText: {
+    color: Colors.text.secondary,
+    fontSize: FontSize.base,
+    fontWeight: "600",
+  },
   // Camera overlay
   cameraOverlay: {
     position: "absolute",
@@ -1066,6 +1341,40 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: "center" as const,
   },
+  // Date selector
+  dateSelectorRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginBottom: 16,
+    gap: 12,
+  },
+  dateNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.neutral[100],
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  dateNavText: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    fontWeight: "700" as const,
+  },
+  dateLabelWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.primary[50],
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+  },
+  dateLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: "700" as const,
+    color: Colors.primary[700],
+  },
   mealTypeOption: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1127,7 +1436,94 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     fontSize: FontSize.base,
   },
+  // Share modal styles
+  shareModalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === "ios" ? 44 : 24,
+    maxHeight: '90%',
+  },
+  shareModalTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: "700" as const,
+    color: Colors.text.primary,
+    textAlign: "center" as const,
+  },
+  shareModalSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    textAlign: "center" as const,
+    marginTop: 2,
+    marginBottom: 16,
+  },
+  sharePreviewImage: {
+    width: "100%" as const,
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 16,
+    backgroundColor: Colors.neutral[100],
+  },
+  shareInputGroup: {
+    marginBottom: 12,
+  },
+  shareInputLabel: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.text.secondary,
+    marginBottom: 6,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  shareTextInput: {
+    backgroundColor: Colors.neutral[50],
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: FontSize.base,
+    color: Colors.text.primary,
+    borderWidth: 1,
+    borderColor: Colors.neutral[200],
+  },
+  shareTextArea: {
+    height: 80,
+    paddingTop: 12,
+    textAlignVertical: "top" as const,
+  },
+  shareCalorieRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  shareCalorieLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: "600" as const,
+  },
+  shareCalorieValue: {
+    fontSize: FontSize.sm,
+    color: Colors.text.primary,
+    fontWeight: "700" as const,
+  },
+  shareCalorieSep: {
+    fontSize: FontSize.sm,
+    color: Colors.text.light,
+  },
+  shareSubmitBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.primary[500],
+    alignItems: "center" as const,
+  },
+  shareSubmitText: {
+    color: "#fff",
+    fontWeight: "700" as const,
+    fontSize: FontSize.base,
+  },
 });
 
 export default ScanScreen;
-

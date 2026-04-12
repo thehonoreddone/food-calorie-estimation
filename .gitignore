@@ -184,8 +184,19 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# =============== Test Results & Reports ===============
+test_results/
+model_test_report.py
+
+# =============== Thesis & Documentation Images ===============
+tez_gorselleri/
+
 # =============== Custom Ignores ===============
 acarken.txt
 tez_devami.txt
-gorseller_nereye.txt
 food_calorie_estimation/seg_dataset/dataset_labelstudio/
+
+# =============== Cached / Generated ===============
+**/__pycache__/
+*.pyc
+Untitled.zip

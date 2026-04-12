@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Image, TouchableOpacity, StyleSheet, ImageSourcePropType, Text } from 'react-native';
+import { View, Image, TouchableOpacity, StyleSheet, ImageSourcePropType, Text, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,13 +10,18 @@ import Animated, {
   withDelay,
   Easing,
   cancelAnimation,
-  interpolateColor,
   FadeIn,
+  FadeInDown,
+  interpolate,
+  useAnimatedReaction,
+  runOnJS,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MascotBubble } from './MascotBubble';
-import { getMascotMood, getRandomMessage, MascotMood } from './mascotMessages';
+import { getMascotMood, getRandomMessage, MascotMood, MascotContext } from './mascotMessages';
 import { Colors, Shadows, FontSize, BorderRadius, Spacing } from '@/constants/theme';
+
+const { width: SW } = Dimensions.get('window');
 
 // ─── Mascot image map ───────────────────────────────────────────────────────
 
@@ -27,17 +32,19 @@ const mascotImages: Record<MascotMood, ImageSourcePropType> = {
   overfull: require('../../../assets/mascot/overfull.png'),
   sleepy: require('../../../assets/mascot/sleepy.png'),
   idle: require('../../../assets/mascot/idle.png'),
+  thirsty: require('../../../assets/mascot/hungry.png'), // fallback to hungry image
 };
 
 // ─── Mood color mapping ─────────────────────────────────────────────────────
 
-const moodColors: Record<MascotMood, { glow: string; accent: string; bg: [string, string] }> = {
-  happy: { glow: '#22c55e', accent: '#16a34a', bg: ['#f0fdf4', '#dcfce7'] },
-  hungry: { glow: '#f97316', accent: '#ea580c', bg: ['#fff7ed', '#ffedd5'] },
-  excited: { glow: '#eab308', accent: '#ca8a04', bg: ['#fefce8', '#fef9c3'] },
-  overfull: { glow: '#ef4444', accent: '#dc2626', bg: ['#fef2f2', '#fee2e2'] },
-  sleepy: { glow: '#8b5cf6', accent: '#7c3aed', bg: ['#faf5ff', '#f3e8ff'] },
-  idle: { glow: Colors.primary[400], accent: Colors.primary[600], bg: [Colors.primary[50], '#e0f2fe'] },
+const moodColors: Record<MascotMood, { glow: string; accent: string; bg: [string, string]; emoji: string }> = {
+  happy: { glow: '#22c55e', accent: '#16a34a', bg: ['#f0fdf4', '#dcfce7'], emoji: '😊' },
+  hungry: { glow: '#f97316', accent: '#ea580c', bg: ['#fff7ed', '#ffedd5'], emoji: '🍽️' },
+  excited: { glow: '#eab308', accent: '#ca8a04', bg: ['#fefce8', '#fef9c3'], emoji: '🎉' },
+  overfull: { glow: '#ef4444', accent: '#dc2626', bg: ['#fef2f2', '#fee2e2'], emoji: '😅' },
+  sleepy: { glow: '#8b5cf6', accent: '#7c3aed', bg: ['#faf5ff', '#f3e8ff'], emoji: '😴' },
+  idle: { glow: Colors.primary[400], accent: Colors.primary[600], bg: [Colors.primary[50], '#e0f2fe'], emoji: '👋' },
+  thirsty: { glow: '#06b6d4', accent: '#0891b2', bg: ['#ecfeff', '#cffafe'], emoji: '💧' },
 };
 
 // ─── Mood label (Turkish) ───────────────────────────────────────────────────
@@ -49,6 +56,7 @@ const moodLabels: Record<MascotMood, string> = {
   overfull: '😅 Tok',
   sleepy: '😴 Uykulu',
   idle: '👋 Hazır',
+  thirsty: '💧 Susuz',
 };
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -57,13 +65,25 @@ interface MascotProps {
   caloriesEaten: number;
   calorieGoal: number;
   streak?: number;
+  waterMl?: number;
+  waterGoal?: number;
+  mealCount?: number;
   size?: number;
   compact?: boolean;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, compact = false }: MascotProps) {
+export function Mascot({
+  caloriesEaten,
+  calorieGoal,
+  streak = 0,
+  waterMl = 0,
+  waterGoal = 2500,
+  mealCount = 0,
+  size = 110,
+  compact = false,
+}: MascotProps) {
   const [showBubble, setShowBubble] = useState(true);
   const [message, setMessage] = useState('');
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,10 +92,20 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
   const scale = useSharedValue(1);
   const translateY = useSharedValue(0);
   const rotation = useSharedValue(0);
-  const glowOpacity = useSharedValue(0.4);
+  const glowOpacity = useSharedValue(0.3);
+  const glowScale = useSharedValue(1);
+  const sparkle = useSharedValue(0);
 
-  // Calculate mood
-  const mood = getMascotMood(caloriesEaten, calorieGoal);
+  // Calculate mood with full context
+  const ctx: MascotContext = {
+    caloriesEaten,
+    calorieGoal,
+    waterMl,
+    waterGoal,
+    mealCount,
+    hour: new Date().getHours(),
+  };
+  const mood = getMascotMood(ctx);
   const colors = moodColors[mood];
 
   // ─── Idle breathing animation ───────────────────────────────────────
@@ -83,18 +113,28 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
     // Gentle floating animation
     translateY.value = withRepeat(
       withSequence(
-        withTiming(-3, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
-        withTiming(3, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-5, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(5, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
       ),
-      -1, // infinite
+      -1,
       true,
     );
 
     // Glow pulse
     glowOpacity.value = withRepeat(
       withSequence(
-        withTiming(0.6, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.7, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.2, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      true,
+    );
+
+    // Glow scale breathing
+    glowScale.value = withRepeat(
+      withSequence(
+        withTiming(1.2, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.9, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
       ),
       -1,
       true,
@@ -103,6 +143,7 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
     return () => {
       cancelAnimation(translateY);
       cancelAnimation(glowOpacity);
+      cancelAnimation(glowScale);
     };
   }, []);
 
@@ -110,8 +151,15 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
   useEffect(() => {
     // Bounce when mood changes
     scale.value = withSequence(
-      withTiming(1.12, { duration: 200 }),
-      withSpring(1, { damping: 8, stiffness: 200 }),
+      withTiming(1.15, { duration: 200 }),
+      withSpring(1, { damping: 6, stiffness: 200 }),
+    );
+
+    // Sparkle effect
+    sparkle.value = 0;
+    sparkle.value = withSequence(
+      withTiming(1, { duration: 600 }),
+      withDelay(800, withTiming(0, { duration: 400 })),
     );
 
     // Update message on mood change
@@ -122,10 +170,10 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
   useEffect(() => {
     updateMessage();
 
-    // Refresh message every 30 seconds
+    // Refresh message every 25 seconds
     const interval = setInterval(() => {
       updateMessage();
-    }, 30000);
+    }, 25000);
 
     return () => {
       clearInterval(interval);
@@ -138,28 +186,38 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
     setMessage(newMessage);
     setShowBubble(true);
 
-    // Auto-hide after 8 seconds
+    // Auto-hide after 10 seconds
     if (bubbleTimer.current) clearTimeout(bubbleTimer.current);
     bubbleTimer.current = setTimeout(() => {
       setShowBubble(false);
-    }, 8000);
+    }, 10000);
   }, [mood, streak]);
 
   // ─── Tap interaction ──────────────────────────────────────────────
   const handleTap = useCallback(() => {
-    // Wiggle animation
+    // Dramatic wiggle animation
     rotation.value = withSequence(
-      withTiming(-6, { duration: 70 }),
-      withTiming(6, { duration: 70 }),
-      withTiming(-4, { duration: 70 }),
-      withTiming(4, { duration: 70 }),
-      withTiming(0, { duration: 70 }),
+      withTiming(-8, { duration: 60 }),
+      withTiming(8, { duration: 60 }),
+      withTiming(-6, { duration: 60 }),
+      withTiming(6, { duration: 60 }),
+      withTiming(-3, { duration: 60 }),
+      withTiming(3, { duration: 60 }),
+      withTiming(0, { duration: 60 }),
     );
 
-    // Bounce
+    // Big bounce
     scale.value = withSequence(
-      withTiming(0.85, { duration: 100 }),
-      withSpring(1, { damping: 6, stiffness: 300 }),
+      withTiming(0.8, { duration: 100 }),
+      withSpring(1.1, { damping: 4, stiffness: 300 }),
+      withSpring(1, { damping: 8, stiffness: 200 }),
+    );
+
+    // Sparkle
+    sparkle.value = 0;
+    sparkle.value = withSequence(
+      withTiming(1, { duration: 400 }),
+      withDelay(600, withTiming(0, { duration: 300 })),
     );
 
     // New message
@@ -177,6 +235,12 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
 
   const glowStyle = useAnimatedStyle(() => ({
     opacity: glowOpacity.value,
+    transform: [{ scale: glowScale.value }],
+  }));
+
+  const sparkleStyle = useAnimatedStyle(() => ({
+    opacity: sparkle.value,
+    transform: [{ scale: interpolate(sparkle.value, [0, 1], [0.5, 1.3]) }],
   }));
 
   if (compact) {
@@ -196,25 +260,50 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
   }
 
   return (
-    <Animated.View entering={FadeIn.duration(600)} style={styles.outerContainer}>
+    <Animated.View entering={FadeInDown.duration(700).springify()} style={styles.outerContainer}>
       <LinearGradient
         colors={colors.bg as [string, string]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.container}
       >
-        {/* Glow effect */}
-        <Animated.View style={[styles.glowCircle, { backgroundColor: colors.glow }, glowStyle]} />
+        {/* Background glow effects */}
+        <Animated.View
+          style={[
+            styles.glowCircle,
+            { backgroundColor: colors.glow },
+            glowStyle,
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.glowCircleRight,
+            { backgroundColor: colors.accent },
+            glowStyle,
+          ]}
+        />
 
-        <View style={styles.innerRow}>
-          {/* Mascot Image */}
+        {/* Sparkle particles */}
+        <Animated.View style={[styles.sparkleContainer, sparkleStyle]}>
+          <Text style={styles.sparkle1}>✨</Text>
+          <Text style={styles.sparkle2}>⭐</Text>
+          <Text style={styles.sparkle3}>✨</Text>
+        </Animated.View>
+
+        <View style={styles.contentRow}>
+          {/* Mascot Image - Bigger & Centered */}
           <TouchableOpacity
             onPress={handleTap}
-            activeOpacity={0.9}
+            activeOpacity={0.85}
             style={styles.touchable}
           >
             <Animated.View style={[styles.mascotWrapper, animatedStyle]}>
-              <View style={[styles.imageContainer, { width: size, height: size, borderColor: colors.glow + '40' }]}>
+              <View style={[styles.imageContainer, {
+                width: size,
+                height: size,
+                borderColor: colors.glow + '50',
+                shadowColor: colors.glow,
+              }]}>
                 <Image
                   source={mascotImages[mood]}
                   style={[styles.mascotImage, { width: size, height: size }]}
@@ -224,19 +313,40 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
             </Animated.View>
           </TouchableOpacity>
 
-          {/* Info + Bubble */}
+          {/* Info Column */}
           <View style={styles.infoCol}>
+            {/* Mood Badge */}
             <View style={styles.nameRow}>
-              <Text style={styles.mascotName}>Nutrino</Text>
-              <View style={[styles.moodBadge, { backgroundColor: colors.glow + '20', borderColor: colors.glow + '40' }]}>
-                <Text style={[styles.moodBadgeText, { color: colors.accent }]}>{moodLabels[mood]}</Text>
+              <View style={[styles.moodBadge, {
+                backgroundColor: colors.glow + '20',
+                borderColor: colors.glow + '50',
+              }]}>
+                <Text style={[styles.moodBadgeText, { color: colors.accent }]}>
+                  {moodLabels[mood]}
+                </Text>
               </View>
             </View>
+
+            {/* Message Bubble */}
             <MascotBubble
               message={message}
               visible={showBubble}
               position="inline"
+              accentColor={colors.accent}
             />
+
+            {/* Quick status indicators */}
+            <View style={styles.statusRow}>
+              {waterMl !== undefined && (
+                <View style={[styles.statusChip, {
+                  backgroundColor: waterMl > 0 ? '#06b6d420' : '#ef444420',
+                }]}>
+                  <Text style={styles.statusChipText}>
+                    💧 {waterMl > 0 ? `${waterMl}ml` : 'Su ekle'}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
       </LinearGradient>
@@ -249,32 +359,51 @@ export function Mascot({ caloriesEaten, calorieGoal, streak = 0, size = 72, comp
 const styles = StyleSheet.create({
   outerContainer: {
     marginHorizontal: Spacing.lg,
-    marginTop: -12,
-    marginBottom: Spacing.sm,
+    marginTop: -14,
+    marginBottom: Spacing.md,
     zIndex: 10,
   },
   container: {
     borderRadius: BorderRadius['2xl'],
-    padding: Spacing.md,
+    padding: Spacing.lg,
     overflow: 'hidden',
     position: 'relative',
-    ...Shadows.md,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    ...Shadows.lg,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   glowCircle: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    left: -30,
+    top: -30,
+  },
+  glowCircleRight: {
     position: 'absolute',
     width: 100,
     height: 100,
     borderRadius: 50,
-    left: -10,
-    top: -10,
-    transform: [{ scale: 1.5 }],
+    right: -20,
+    bottom: -20,
+    opacity: 0.15,
   },
-  innerRow: {
+  sparkleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
+  },
+  sparkle1: { position: 'absolute', top: 8, right: 30, fontSize: 16 },
+  sparkle2: { position: 'absolute', top: 20, left: 60, fontSize: 12 },
+  sparkle3: { position: 'absolute', bottom: 12, right: 60, fontSize: 14 },
+  contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.lg,
   },
   touchable: {
     alignItems: 'center',
@@ -285,39 +414,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imageContainer: {
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: '#fff',
-    ...Shadows.sm,
-    borderWidth: 2,
+    ...Shadows.md,
+    borderWidth: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   mascotImage: {
-    borderRadius: 18,
+    borderRadius: 21,
   },
   infoCol: {
     flex: 1,
-    gap: 6,
+    gap: 8,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   mascotName: {
-    fontSize: FontSize.base,
-    fontWeight: '800',
+    fontSize: FontSize.lg,
+    fontWeight: '900',
     color: Colors.text.primary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
   moodBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: BorderRadius.full,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   moodBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.text.secondary,
   },
   // Compact mode
   compactContainer: {

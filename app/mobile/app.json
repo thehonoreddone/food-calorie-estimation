@@ -71,8 +71,9 @@
       }
     },
     "updates": {
-      "enabled": true,
-      "fallbackToCacheTimeout": 3000
+      "enabled": false,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
     },
     "owner": "yunuswmp"
   }

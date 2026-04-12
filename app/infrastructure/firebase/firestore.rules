@@ -21,9 +21,19 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // Users collection - private to each user
+    // Users collection - public read for community profiles, write only by owner
     match /users/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // User follows - follow/unfollow system
+    match /user_follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.followerId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                      resource.data.followerId == request.auth.uid;
     }
     
     // Predictions history - private to each user (field: uid)
@@ -72,9 +82,58 @@ service cloud.firestore {
                       resource.data.uid == request.auth.uid;
     }
     
+    // Daily health data (steps, sleep, water) - private to each user
+    // Document ID format: {uid}_{date}
+    match /daily_health/{docId} {
+      allow read: if isAuthenticated() && 
+                    resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid;
+    }
+    
     // User achievements - one doc per user (docId = uid)
     match /user_achievements/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // App opens tracking
+    match /app_opens/{docId} {
+      allow read: if isAuthenticated() && 
+                    resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid;
+    }
+    
+    // Community posts - public read, auth create, owner manage
+    match /community_posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid;
+    }
+    
+    // Community likes
+    match /community_likes/{likeId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    // Community comments
+    match /community_comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                      request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid;
     }
     
     // App settings - admin only

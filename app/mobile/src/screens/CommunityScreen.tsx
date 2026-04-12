@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +25,7 @@ import Animated, {
   FadeInDown,
   FadeOut,
   SlideInUp,
+  SlideInRight,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
@@ -38,8 +40,16 @@ import {
   getPostComments,
   createCommunityPost,
   deleteCommunityPost,
+  getUserPosts,
+  getUserPublicProfile,
+  followUser,
+  unfollowUser,
+  isFollowingUser,
+  getFollowCounts,
   CommunityPost,
   CommunityComment,
+  PostType,
+  UserPublicProfile,
 } from '../services/firestoreService';
 import { uploadCommunityImage } from '../services/storageService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
@@ -49,14 +59,14 @@ const { width: SW } = Dimensions.get('window');
 // ─── Avatar Color Generator ─────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
-  ['#6366f1', '#8b5cf6'], // indigo-violet
-  ['#ec4899', '#f43f5e'], // pink-rose
-  ['#f97316', '#eab308'], // orange-yellow
-  ['#22c55e', '#14b8a6'], // green-teal
-  ['#3b82f6', '#06b6d4'], // blue-cyan
-  ['#ef4444', '#f97316'], // red-orange
-  ['#8b5cf6', '#ec4899'], // violet-pink
-  ['#14b8a6', '#22c55e'], // teal-green
+  ['#6366f1', '#8b5cf6'],
+  ['#ec4899', '#f43f5e'],
+  ['#f97316', '#eab308'],
+  ['#22c55e', '#14b8a6'],
+  ['#3b82f6', '#06b6d4'],
+  ['#ef4444', '#f97316'],
+  ['#8b5cf6', '#ec4899'],
+  ['#14b8a6', '#22c55e'],
 ];
 
 function getAvatarColors(name: string): [string, string] {
@@ -87,18 +97,179 @@ function SkeletonPost() {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <View style={[styles.skeletonCircle, { width: 40, height: 40 }]} />
+        <View style={[styles.skeletonCircle, { width: 44, height: 44 }]} />
         <View style={{ flex: 1, gap: 6 }}>
           <View style={[styles.skeletonRect, { width: '40%', height: 12 }]} />
           <View style={[styles.skeletonRect, { width: '25%', height: 10 }]} />
         </View>
       </View>
+      <View style={[styles.skeletonRect, { width: '100%', height: 14, marginHorizontal: 16, marginBottom: 8 }]} />
       <View style={[styles.skeletonRect, { width: '100%', height: SW * 0.55, borderRadius: 0 }]} />
       <View style={{ padding: Spacing.md, gap: 8 }}>
-        <View style={[styles.skeletonRect, { width: '50%', height: 14 }]} />
-        <View style={[styles.skeletonRect, { width: '80%', height: 12 }]} />
+        <View style={[styles.skeletonRect, { width: '30%', height: 14 }]} />
+        <View style={[styles.skeletonRect, { width: '60%', height: 12 }]} />
       </View>
     </View>
+  );
+}
+
+// ─── User Profile Modal ─────────────────────────────────────────────────────
+
+interface UserProfileModalProps {
+  visible: boolean;
+  onClose: () => void;
+  targetUid: string;
+  currentUid: string;
+  currentUsername: string;
+}
+
+function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUsername }: UserProfileModalProps) {
+  const [profile, setProfile] = useState<UserPublicProfile | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  useEffect(() => {
+    if (visible && targetUid) {
+      loadProfile();
+    }
+  }, [visible, targetUid]);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const [prof, following, posts] = await Promise.all([
+        getUserPublicProfile(targetUid),
+        currentUid ? isFollowingUser(currentUid, targetUid) : Promise.resolve(false),
+        getUserPosts(targetUid, 10, currentUid),
+      ]);
+      setProfile(prof);
+      setIsFollowing(following);
+      setUserPosts(posts);
+    } catch (err) {
+      console.warn('Profile load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleFollow = async () => {
+    if (!currentUid || !profile) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await unfollowUser(currentUid, targetUid);
+        setIsFollowing(false);
+        setProfile(p => p ? { ...p, followersCount: Math.max(0, (p.followersCount ?? 0) - 1) } : p);
+      } else {
+        await followUser(currentUid, currentUsername, targetUid, profile.name);
+        setIsFollowing(true);
+        setProfile(p => p ? { ...p, followersCount: (p.followersCount ?? 0) + 1 } : p);
+      }
+    } catch (err) {
+      Alert.alert('Hata', 'İşlem başarısız oldu.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const avatarColors = getAvatarColors(profile?.name || 'A');
+  const isSelf = currentUid === targetUid;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.profileModalOverlay}>
+        <Animated.View entering={SlideInUp.springify()} style={styles.profileModalContent}>
+          <View style={styles.modalHandle} />
+          
+          {loading ? (
+            <View style={{ alignItems: 'center', padding: 40 }}>
+              <ActivityIndicator size="large" color={Colors.primary[500]} />
+            </View>
+          ) : profile ? (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Profile header */}
+              <View style={styles.profileHeader}>
+                <LinearGradient
+                  colors={avatarColors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.profileAvatar}
+                >
+                  <Text style={styles.profileAvatarText}>
+                    {(profile.name || '?')[0].toUpperCase()}
+                  </Text>
+                </LinearGradient>
+                <Text style={styles.profileName}>{profile.name}</Text>
+              </View>
+
+              {/* Stats */}
+              <View style={styles.profileStatsRow}>
+                <View style={styles.profileStatItem}>
+                  <Text style={styles.profileStatNum}>{userPosts.length}</Text>
+                  <Text style={styles.profileStatLabel}>Paylaşım</Text>
+                </View>
+                <View style={styles.profileStatDivider} />
+                <View style={styles.profileStatItem}>
+                  <Text style={styles.profileStatNum}>{profile.followersCount ?? 0}</Text>
+                  <Text style={styles.profileStatLabel}>Takipçi</Text>
+                </View>
+                <View style={styles.profileStatDivider} />
+                <View style={styles.profileStatItem}>
+                  <Text style={styles.profileStatNum}>{profile.followingCount ?? 0}</Text>
+                  <Text style={styles.profileStatLabel}>Takip</Text>
+                </View>
+              </View>
+
+              {/* Follow button */}
+              {!isSelf && (
+                <TouchableOpacity
+                  style={[styles.followBtn, isFollowing && styles.followBtnActive]}
+                  onPress={handleToggleFollow}
+                  disabled={followLoading}
+                >
+                  {followLoading ? (
+                    <ActivityIndicator size="small" color={isFollowing ? Colors.primary[500] : '#fff'} />
+                  ) : (
+                    <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
+                      {isFollowing ? '✓ Takip Ediliyor' : '+ Takip Et'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* User's posts */}
+              {userPosts.length > 0 && (
+                <View style={styles.profilePostsSection}>
+                  <Text style={styles.profilePostsTitle}>Paylaşımlar</Text>
+                  {userPosts.map(post => (
+                    <View key={post.id} style={styles.profilePostCard}>
+                      {post.imageUrl ? (
+                        <Image source={{ uri: post.imageUrl }} style={styles.profilePostImage} resizeMode="cover" />
+                      ) : null}
+                      {post.description ? (
+                        <Text style={styles.profilePostDesc} numberOfLines={3}>{post.description}</Text>
+                      ) : null}
+                      {post.mealName ? (
+                        <Text style={styles.profilePostMeal}>🍽️ {post.mealName}</Text>
+                      ) : null}
+                      <Text style={styles.profilePostTime}>{timeAgo(post.createdAt || '')}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          ) : (
+            <Text style={styles.profileNotFound}>Profil bulunamadı</Text>
+          )}
+
+          <TouchableOpacity style={styles.profileCloseBtn} onPress={onClose}>
+            <Text style={styles.profileCloseBtnText}>Kapat</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -107,18 +278,22 @@ function SkeletonPost() {
 interface PostCardProps {
   post: CommunityPost;
   currentUserId: string;
+  currentUsername: string;
   onLikeToggle: (postId: string, isLiked: boolean) => void;
   onDelete: (postId: string) => void;
+  onUserPress: (uid: string) => void;
   index: number;
 }
 
-function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCardProps) {
+function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete, onUserPress, index }: PostCardProps) {
   const [liked, setLiked] = useState(post.likedByMe ?? false);
   const [likesCount, setLikesCount] = useState(post.likesCount ?? 0);
+  const [likedByUsers, setLikedByUsers] = useState<string[]>(post.likedByUsers ?? []);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const likeScale = useSharedValue(1);
   const avatarColors = getAvatarColors(post.username || 'A');
@@ -128,7 +303,16 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
     setLiked(!wasLiked);
     setLikesCount(prev => wasLiked ? prev - 1 : prev + 1);
 
-    // Heart pop animation
+    // Update likedByUsers
+    if (!wasLiked) {
+      setLikedByUsers(prev => {
+        const newList = [currentUsername, ...prev.filter(u => u !== currentUsername)];
+        return newList.slice(0, 5);
+      });
+    } else {
+      setLikedByUsers(prev => prev.filter(u => u !== currentUsername));
+    }
+
     likeScale.value = withSequence(
       withSpring(1.4, { damping: 4, stiffness: 400 }),
       withSpring(1, { damping: 6 }),
@@ -161,7 +345,6 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
       await addPostComment(post.id, currentUserId, newComment.trim());
       setNewComment('');
       Keyboard.dismiss();
-      // Refresh comments
       const cmts = await getPostComments(post.id);
       setComments(cmts);
     } catch (err) {
@@ -170,6 +353,7 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
   };
 
   const handleDelete = () => {
+    setShowMenu(false);
     Alert.alert(
       'Paylaşımı Sil',
       'Bu paylaşımı silmek istediğinizden emin misiniz?',
@@ -188,68 +372,108 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 80).duration(400).springify()}
+      entering={FadeInDown.delay(index * 60).duration(350).springify()}
       style={styles.card}
     >
       {/* Header */}
       <View style={styles.cardHeader}>
-        <LinearGradient
-          colors={avatarColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.avatarContainer}
-        >
-          <Text style={styles.avatarText}>
-            {(post.username || '?')[0].toUpperCase()}
-          </Text>
-        </LinearGradient>
-        <View style={{ flex: 1 }}>
+        <TouchableOpacity onPress={() => onUserPress(post.uid)} activeOpacity={0.7}>
+          <LinearGradient
+            colors={avatarColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatarContainer}
+          >
+            <Text style={styles.avatarText}>
+              {(post.username || '?')[0].toUpperCase()}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flex: 1 }} onPress={() => onUserPress(post.uid)} activeOpacity={0.7}>
           <Text style={styles.username}>{post.username || 'Anonim'}</Text>
           <Text style={styles.timeAgo}>{timeAgo(post.createdAt || '')}</Text>
-        </View>
+        </TouchableOpacity>
         {isOwnPost && (
-          <TouchableOpacity onPress={handleDelete} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity onPress={() => setShowMenu(!showMenu)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={styles.moreIcon}>•••</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Menu dropdown */}
+      {showMenu && isOwnPost && (
+        <Animated.View entering={FadeIn.duration(150)} style={styles.menuDropdown}>
+          <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
+            <Text style={styles.menuItemTextDanger}>🗑️ Paylaşımı Sil</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={() => setShowMenu(false)}>
+            <Text style={styles.menuItemText}>✕ Kapat</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Description / Text content */}
+      {post.description ? (
+        <Text style={styles.postText}>{post.description}</Text>
+      ) : null}
 
       {/* Image */}
       {post.imageUrl ? (
         <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
       ) : null}
 
-      {/* Meal info */}
-      <View style={styles.mealInfo}>
-        <Text style={styles.mealName}>{post.mealName || 'Yemek'}</Text>
-        {post.calories ? (
-          <View style={styles.calorieBadge}>
-            <Text style={styles.calorieText}>🔥 {post.calories} kcal</Text>
+      {/* Meal info badge */}
+      {post.mealName ? (
+        <View style={styles.mealInfoRow}>
+          <View style={styles.mealBadge}>
+            <Text style={styles.mealBadgeText}>🍽️ {post.mealName}</Text>
           </View>
-        ) : null}
-      </View>
-
-      {/* Description */}
-      {post.description ? (
-        <Text style={styles.description}>{post.description}</Text>
+          {post.calories ? (
+            <View style={styles.calorieBadge}>
+              <Text style={styles.calorieText}>🔥 {post.calories} kcal</Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
-      {/* Actions */}
+      {/* Actions bar */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.actionBtn} onPress={handleLike} activeOpacity={0.7}>
           <Animated.Text style={[styles.actionIcon, likeAnimStyle]}>
             {liked ? '❤️' : '🤍'}
           </Animated.Text>
-          <Text style={[styles.actionCount, liked && { color: '#ef4444' }]}>
-            {likesCount}
-          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleToggleComments} activeOpacity={0.7}>
           <Text style={styles.actionIcon}>💬</Text>
-          <Text style={styles.actionCount}>{post.commentsCount ?? 0}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Liked by list */}
+      {likesCount > 0 && (
+        <View style={styles.likedByRow}>
+          <Text style={styles.likedByIcon}>❤️</Text>
+          <Text style={styles.likedByText} numberOfLines={1}>
+            {likedByUsers.length > 0
+              ? likedByUsers.join(', ')
+              : `${likesCount} beğeni`
+            }
+            {likesCount > likedByUsers.length && likedByUsers.length > 0
+              ? ` ve ${likesCount - likedByUsers.length} diğer kişi`
+              : ''
+            }
+          </Text>
+        </View>
+      )}
+
+      {/* Comments count */}
+      {(post.commentsCount ?? 0) > 0 && !showComments && (
+        <TouchableOpacity onPress={handleToggleComments} style={styles.commentsCountRow}>
+          <Text style={styles.commentsCountText}>
+            💬 {post.commentsCount} yorum  ▸
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Comments section */}
       {showComments && (
@@ -262,6 +486,7 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
                 <View key={c.id} style={styles.commentItem}>
                   <Text style={styles.commentUser}>{c.username}</Text>
                   <Text style={styles.commentContent}>{c.content}</Text>
+                  <Text style={styles.commentTime}>{timeAgo(c.createdAt || '')}</Text>
                 </View>
               ))}
               {comments.length === 0 && (
@@ -277,8 +502,8 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
               value={newComment}
               onChangeText={setNewComment}
               placeholder="Yorum yaz..."
-              placeholderTextColor={Colors.text.light}
-              maxLength={200}
+              placeholderTextColor="#666"
+              maxLength={300}
             />
             <TouchableOpacity
               onPress={handleAddComment}
@@ -299,10 +524,11 @@ function PostCard({ post, currentUserId, onLikeToggle, onDelete, index }: PostCa
 interface CreatePostModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (data: { mealName: string; description: string; imageUri?: string; calories?: number }) => Promise<void>;
+  onSubmit: (data: { postType: PostType; mealName?: string; description: string; imageUri?: string; calories?: number }) => Promise<void>;
 }
 
 function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
+  const [postType, setPostType] = useState<PostType>('text');
   const [mealName, setMealName] = useState('');
   const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -319,6 +545,7 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
       });
       if (!result.canceled && result.assets[0]) {
         setImageUri(result.assets[0].uri);
+        if (postType === 'text') setPostType('photo');
       }
     } catch (err) {
       console.warn('Image pick failed:', err);
@@ -326,19 +553,25 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
   };
 
   const handleSubmit = async () => {
-    if (!mealName.trim()) {
+    if (postType === 'text' && !description.trim()) {
+      Alert.alert('Hata', 'Lütfen bir şeyler yazın.');
+      return;
+    }
+    if (postType === 'meal' && !mealName.trim()) {
       Alert.alert('Hata', 'Yemek adı boş olamaz.');
       return;
     }
     setIsSubmitting(true);
     try {
       await onSubmit({
-        mealName: mealName.trim(),
+        postType,
+        mealName: postType === 'meal' ? mealName.trim() : undefined,
         description: description.trim(),
         imageUri: imageUri || undefined,
-        calories: calories ? parseInt(calories, 10) : undefined,
+        calories: postType === 'meal' && calories ? parseInt(calories, 10) : undefined,
       });
       // Reset
+      setPostType('text');
       setMealName('');
       setDescription('');
       setImageUri(null);
@@ -351,6 +584,12 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
     }
   };
 
+  const POST_TYPE_OPTIONS: { key: PostType; icon: string; label: string }[] = [
+    { key: 'text', icon: '✍️', label: 'Yazı' },
+    { key: 'photo', icon: '📷', label: 'Fotoğraf' },
+    { key: 'meal', icon: '🍽️', label: 'Yemek' },
+  ];
+
   return (
     <Modal visible={visible} transparent animationType="slide">
       <KeyboardAvoidingView
@@ -359,65 +598,98 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
       >
         <View style={styles.modalOverlay}>
           <Animated.View entering={SlideInUp.springify()} style={styles.modalContent}>
-            {/* Handle bar */}
             <View style={styles.modalHandle} />
 
-            <Text style={styles.modalTitle}>📸 Yeni Paylaşım</Text>
-            <Text style={styles.modalSubtitle}>Yemeğini toplulukla paylaş!</Text>
+            <Text style={styles.modalTitle}>✨ Yeni Paylaşım</Text>
+            <Text style={styles.modalSubtitle}>Topluluğa bir şeyler paylaş!</Text>
 
-            {/* Image picker */}
-            <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickImage} activeOpacity={0.7}>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.pickedImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.imagePickerPlaceholder}>
-                  <Text style={styles.imagePickerIcon}>📷</Text>
-                  <Text style={styles.imagePickerText}>Fotoğraf Ekle</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Meal name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Yemek Adı *</Text>
-              <TextInput
-                style={styles.textInput}
-                value={mealName}
-                onChangeText={setMealName}
-                placeholder="Örn: Tavuk & Pirinç"
-                placeholderTextColor={Colors.text.light}
-                maxLength={60}
-              />
+            {/* Post type selector */}
+            <View style={styles.postTypeRow}>
+              {POST_TYPE_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.postTypeBtn, postType === opt.key && styles.postTypeBtnActive]}
+                  onPress={() => setPostType(opt.key)}
+                >
+                  <Text style={styles.postTypeIcon}>{opt.icon}</Text>
+                  <Text style={[styles.postTypeLabel, postType === opt.key && styles.postTypeLabelActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
-            {/* Calories */}
+            {/* Description / text content */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Kalori (opsiyonel)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={calories}
-                onChangeText={setCalories}
-                placeholder="Örn: 450"
-                placeholderTextColor={Colors.text.light}
-                keyboardType="numeric"
-                maxLength={5}
-              />
-            </View>
-
-            {/* Description */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Açıklama (opsiyonel)</Text>
+              <Text style={styles.inputLabel}>
+                {postType === 'text' ? 'Ne düşünüyorsun?' : 'Açıklama'}
+                {postType === 'text' ? ' *' : ' (opsiyonel)'}
+              </Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 value={description}
                 onChangeText={setDescription}
-                placeholder="Bugün ne yaptın?"
-                placeholderTextColor={Colors.text.light}
+                placeholder={postType === 'meal'
+                  ? "Bugün ne yaptın? Tarif, düşünceler..."
+                  : postType === 'text'
+                    ? "Ne düşünüyorsun? Neler oldu?"
+                    : "Fotoğraf hakkında bir şeyler yaz..."}
+                placeholderTextColor="#666"
                 multiline
-                maxLength={200}
+                maxLength={500}
                 textAlignVertical="top"
               />
             </View>
+
+            {/* Image picker (for photo & meal) */}
+            {(postType === 'photo' || postType === 'meal' || imageUri) && (
+              <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickImage} activeOpacity={0.7}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.pickedImage} resizeMode="cover" />
+                ) : (
+                  <View style={styles.imagePickerPlaceholder}>
+                    <Text style={styles.imagePickerIcon}>📷</Text>
+                    <Text style={styles.imagePickerText}>Fotoğraf Ekle</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Meal-specific fields */}
+            {postType === 'meal' && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Yemek Adı *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={mealName}
+                    onChangeText={setMealName}
+                    placeholder="Örn: Tavuk & Pirinç"
+                    placeholderTextColor="#666"
+                    maxLength={60}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Kalori (opsiyonel)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={calories}
+                    onChangeText={setCalories}
+                    placeholder="Örn: 450"
+                    placeholderTextColor="#666"
+                    keyboardType="numeric"
+                    maxLength={5}
+                  />
+                </View>
+              </>
+            )}
+
+            {/* Text posts can also add photo */}
+            {postType === 'text' && !imageUri && (
+              <TouchableOpacity style={styles.addPhotoBtn} onPress={handlePickImage}>
+                <Text style={styles.addPhotoBtnText}>📷 Fotoğraf da ekle</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Actions */}
             <View style={styles.modalActions}>
@@ -453,6 +725,7 @@ export function CommunityScreen() {
   const [activeTab, setActiveTab] = useState<'recent' | 'popular'>('recent');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPosts();
@@ -482,7 +755,7 @@ export function CommunityScreen() {
   const handleLikeToggle = async (postId: string, wasLiked: boolean) => {
     if (!profile.uid) return;
     try {
-      await togglePostLike(postId, profile.uid, wasLiked);
+      await togglePostLike(postId, profile.uid, wasLiked, profile.name || 'Kullanıcı');
     } catch (err) {
       console.warn('Like toggle failed:', err);
     }
@@ -497,12 +770,11 @@ export function CommunityScreen() {
     }
   };
 
-  const handleCreatePost = async (data: { mealName: string; description: string; imageUri?: string; calories?: number }) => {
+  const handleCreatePost = async (data: { postType: PostType; mealName?: string; description: string; imageUri?: string; calories?: number }) => {
     if (!profile.uid) return;
 
     let imageUrl: string | undefined;
 
-    // Upload image to Firebase Storage if provided
     if (data.imageUri) {
       try {
         setUploadProgress('Fotoğraf yükleniyor...');
@@ -511,7 +783,6 @@ export function CommunityScreen() {
       } catch (uploadErr) {
         console.warn('Image upload failed, posting without image:', uploadErr);
         setUploadProgress(null);
-        // Continue without image rather than failing the post
       }
     }
 
@@ -519,48 +790,60 @@ export function CommunityScreen() {
       profile.uid,
       profile.name || 'Kullanıcı',
       {
+        postType: data.postType,
         mealName: data.mealName,
         calories: data.calories,
         description: data.description,
         imageUrl,
       }
     );
-    // Refresh feed
     fetchPosts();
+  };
+
+  const handleUserPress = (uid: string) => {
+    setSelectedProfileUid(uid);
   };
 
   const renderPost = ({ item, index }: { item: CommunityPost; index: number }) => (
     <PostCard
       post={item}
       currentUserId={profile.uid || ''}
+      currentUsername={profile.name || 'Kullanıcı'}
       onLikeToggle={handleLikeToggle}
       onDelete={handleDeletePost}
+      onUserPress={handleUserPress}
       index={index}
     />
   );
 
+  const avatarColors = getAvatarColors(profile.name || 'A');
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#6366f1', '#8b5cf6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
+      {/* Header — dark, minimal like reference */}
+      <View style={styles.header}>
         <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.headerTitle}>👥 Topluluk</Text>
-            <Text style={styles.headerSub}>Yemeklerini paylaş, ilham al!</Text>
-          </View>
-          <View style={styles.headerStats}>
-            <View style={styles.statBubble}>
-              <Text style={styles.statNum}>{posts.length}</Text>
-              <Text style={styles.statLabel}>paylaşım</Text>
+          <View style={styles.headerLeft}>
+            <LinearGradient
+              colors={avatarColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.headerAvatar}
+            >
+              <Text style={styles.headerAvatarText}>
+                {(profile.name || '?')[0].toUpperCase()}
+              </Text>
+            </LinearGradient>
+            <View>
+              <Text style={styles.headerTitle}>Topluluk</Text>
+              <Text style={styles.headerSub}>Yemeklerini paylaş, ilham al!</Text>
             </View>
           </View>
+          <TouchableOpacity style={styles.headerNotifBtn}>
+            <Text style={styles.headerNotifIcon}>🔔</Text>
+          </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
       {/* Tabs */}
       <View style={styles.tabBar}>
@@ -603,6 +886,7 @@ export function CommunityScreen() {
               refreshing={refreshing}
               onRefresh={handleRefresh}
               tintColor={Colors.primary[500]}
+              colors={[Colors.primary[500]]}
             />
           }
           ListEmptyComponent={
@@ -645,6 +929,15 @@ export function CommunityScreen() {
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreatePost}
       />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        visible={!!selectedProfileUid}
+        onClose={() => setSelectedProfileUid(null)}
+        targetUid={selectedProfileUid || ''}
+        currentUid={profile.uid || ''}
+        currentUsername={profile.name || 'Kullanıcı'}
+      />
     </SafeAreaView>
   );
 }
@@ -654,64 +947,75 @@ export function CommunityScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#0a0a0a',
   },
+  // Header
   header: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xl,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    backgroundColor: '#111',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e1e1e',
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+  },
   headerTitle: {
-    fontSize: FontSize['2xl'],
+    fontSize: FontSize.xl,
     fontWeight: '800',
     color: '#fff',
   },
   headerSub: {
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2,
+    fontSize: 11,
+    color: '#888',
+    marginTop: 1,
   },
-  headerStats: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  statBubble: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  headerNotifBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1e1e1e',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statNum: {
-    fontSize: FontSize.lg,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  statLabel: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.7)',
-    fontWeight: '600',
+  headerNotifIcon: {
+    fontSize: 18,
   },
   // Tabs
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
     gap: 8,
+    backgroundColor: '#0a0a0a',
   },
   tab: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: '#1a1a1a',
   },
   activeTab: {
     backgroundColor: '#6366f1',
@@ -719,7 +1023,7 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: FontSize.sm,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: '#888',
   },
   activeTabText: {
     color: '#fff',
@@ -730,36 +1034,37 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   skeletonCircle: {
-    borderRadius: 20,
-    backgroundColor: Colors.neutral[200],
+    borderRadius: 22,
+    backgroundColor: '#1e1e1e',
   },
   skeletonRect: {
     borderRadius: 8,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: '#1e1e1e',
   },
   // List
   listContent: {
-    padding: Spacing.lg,
+    padding: Spacing.md,
     paddingBottom: 100,
   },
   // Card
   card: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius['2xl'],
+    backgroundColor: '#151515',
+    borderRadius: 20,
     marginBottom: Spacing.md,
     overflow: 'hidden',
-    ...Shadows.md,
+    borderWidth: 1,
+    borderColor: '#1e1e1e',
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.md,
-    gap: Spacing.md,
+    gap: 12,
   },
   avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -771,69 +1076,97 @@ const styles = StyleSheet.create({
   username: {
     fontSize: FontSize.sm,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#e0e0e0',
   },
   timeAgo: {
-    fontSize: FontSize.xs,
-    color: Colors.text.light,
+    fontSize: 11,
+    color: '#666',
     marginTop: 1,
   },
   moreIcon: {
     fontSize: FontSize.lg,
-    color: Colors.text.light,
+    color: '#666',
     fontWeight: '900',
     letterSpacing: 1,
   },
-  // Post image
+  // Menu dropdown
+  menuDropdown: {
+    backgroundColor: '#1e1e1e',
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  menuItemText: {
+    color: '#ccc',
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  menuItemTextDanger: {
+    color: '#ef4444',
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  // Post content
+  postText: {
+    fontSize: FontSize.base,
+    color: '#e0e0e0',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+    lineHeight: 22,
+  },
   postImage: {
     width: '100%',
-    height: SW * 0.55,
-    backgroundColor: Colors.neutral[100],
+    height: SW * 0.6,
+    backgroundColor: '#111',
   },
   // Meal info
-  mealInfo: {
+  mealInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.sm,
   },
-  mealName: {
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    flex: 1,
-    textTransform: 'capitalize',
-  },
-  calorieBadge: {
-    backgroundColor: Colors.accent.orange + '15',
+  mealBadge: {
+    backgroundColor: 'rgba(34,197,94,0.15)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: Colors.accent.orange + '30',
+    borderColor: 'rgba(34,197,94,0.3)',
+  },
+  mealBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: '#22c55e',
+  },
+  calorieBadge: {
+    backgroundColor: 'rgba(249,115,22,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(249,115,22,0.3)',
   },
   calorieText: {
     fontSize: FontSize.xs,
     fontWeight: '700',
-    color: Colors.accent.orange,
-  },
-  description: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
-    lineHeight: 20,
+    color: '#f97316',
   },
   // Actions
   actions: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    gap: Spacing.xl,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    marginTop: Spacing.sm,
+    paddingTop: Spacing.md,
+    paddingBottom: 6,
+    gap: 16,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -841,38 +1174,67 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   actionIcon: {
-    fontSize: 20,
+    fontSize: 22,
   },
-  actionCount: {
-    fontSize: FontSize.sm,
+  // Liked by
+  likedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: 4,
+    gap: 6,
+  },
+  likedByIcon: {
+    fontSize: 12,
+  },
+  likedByText: {
+    fontSize: 12,
+    color: '#ccc',
     fontWeight: '600',
-    color: Colors.text.secondary,
+    flex: 1,
+  },
+  // Comments count
+  commentsCountRow: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  commentsCountText: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '600',
   },
   // Comments
   commentSection: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: '#1e1e1e',
+    marginTop: 4,
   },
   commentItem: {
-    flexDirection: 'row',
-    paddingVertical: 6,
-    gap: 6,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
   },
   commentUser: {
     fontSize: FontSize.xs,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#e0e0e0',
+    marginBottom: 2,
   },
   commentContent: {
     fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    flex: 1,
+    color: '#bbb',
+    lineHeight: 18,
+  },
+  commentTime: {
+    fontSize: 10,
+    color: '#555',
+    marginTop: 2,
   },
   noComments: {
     fontSize: FontSize.xs,
-    color: Colors.text.light,
+    color: '#666',
     textAlign: 'center',
     paddingVertical: Spacing.md,
   },
@@ -884,12 +1246,14 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: '#1a1a1a',
     borderRadius: BorderRadius.lg,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: FontSize.sm,
-    color: Colors.text.primary,
+    color: '#e0e0e0',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
   },
   sendBtn: {
     backgroundColor: '#6366f1',
@@ -901,17 +1265,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.xs,
     fontWeight: '700',
-  },
-  // Loading
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-  },
-  loadingText: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
   },
   // Empty state
   emptyState: {
@@ -926,11 +1279,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    color: Colors.text.primary,
+    color: '#e0e0e0',
   },
   emptyDesc: {
     fontSize: FontSize.sm,
-    color: Colors.text.secondary,
+    color: '#888',
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 20,
@@ -968,91 +1321,140 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: Colors.surface,
+    backgroundColor: '#151515',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: Spacing.xl,
     paddingBottom: Platform.OS === 'ios' ? 44 : 24,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   modalHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: '#333',
     alignSelf: 'center',
     marginBottom: Spacing.lg,
   },
   modalTitle: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    color: Colors.text.primary,
+    color: '#e0e0e0',
     textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: FontSize.sm,
-    color: Colors.text.secondary,
+    color: '#888',
     textAlign: 'center',
     marginTop: 2,
     marginBottom: Spacing.lg,
+  },
+  // Post type
+  postTypeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: Spacing.lg,
+  },
+  postTypeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  postTypeBtnActive: {
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    borderColor: '#6366f1',
+  },
+  postTypeIcon: {
+    fontSize: 16,
+  },
+  postTypeLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: '#888',
+  },
+  postTypeLabelActive: {
+    color: '#6366f1',
   },
   // Image picker
   imagePickerBtn: {
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 2,
-    borderColor: Colors.neutral[200],
+    borderColor: '#2a2a2a',
     borderStyle: 'dashed',
   },
   imagePickerPlaceholder: {
-    height: 140,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: '#1a1a1a',
   },
   imagePickerIcon: {
-    fontSize: 40,
+    fontSize: 36,
     marginBottom: 6,
   },
   imagePickerText: {
     fontSize: FontSize.sm,
-    color: Colors.text.light,
+    color: '#666',
     fontWeight: '600',
   },
   pickedImage: {
     width: '100%',
     height: 180,
   },
+  addPhotoBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: '#1a1a1a',
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  addPhotoBtnText: {
+    color: '#888',
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
   // Input
   inputGroup: {
     marginBottom: Spacing.md,
   },
   inputLabel: {
-    fontSize: FontSize.xs,
+    fontSize: 11,
     fontWeight: '700',
-    color: Colors.text.secondary,
+    color: '#888',
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   textInput: {
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: '#1a1a1a',
     borderRadius: BorderRadius.lg,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: FontSize.base,
-    color: Colors.text.primary,
+    color: '#e0e0e0',
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: '#2a2a2a',
   },
   textArea: {
-    height: 80,
+    height: 100,
     paddingTop: 12,
+    textAlignVertical: 'top',
   },
   // Modal actions
   modalActions: {
@@ -1065,11 +1467,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#2a2a2a',
     alignItems: 'center',
   },
   modalCancelText: {
-    color: Colors.text.secondary,
+    color: '#888',
     fontWeight: '600',
     fontSize: FontSize.base,
   },
@@ -1102,5 +1504,149 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.sm,
     fontWeight: '600',
+  },
+  // Profile Modal
+  profileModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  profileModalContent: {
+    backgroundColor: '#151515',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
+    maxHeight: '85%',
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  profileAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  profileAvatarText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  profileName: {
+    fontSize: FontSize.xl,
+    fontWeight: '800',
+    color: '#e0e0e0',
+  },
+  profileStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: Spacing.lg,
+    gap: 0,
+  },
+  profileStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  profileStatNum: {
+    fontSize: FontSize.xl,
+    fontWeight: '800',
+    color: '#e0e0e0',
+  },
+  profileStatLabel: {
+    fontSize: 11,
+    color: '#888',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  profileStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#2a2a2a',
+  },
+  followBtn: {
+    paddingVertical: 12,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  followBtnActive: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#6366f1',
+  },
+  followBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: FontSize.base,
+  },
+  followBtnTextActive: {
+    color: '#6366f1',
+  },
+  profilePostsSection: {
+    marginTop: Spacing.sm,
+  },
+  profilePostsTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: '#e0e0e0',
+    marginBottom: Spacing.md,
+  },
+  profilePostCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  profilePostImage: {
+    width: '100%',
+    height: 150,
+  },
+  profilePostDesc: {
+    fontSize: FontSize.sm,
+    color: '#ccc',
+    padding: 12,
+    lineHeight: 20,
+  },
+  profilePostMeal: {
+    fontSize: FontSize.xs,
+    color: '#22c55e',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    fontWeight: '600',
+  },
+  profilePostTime: {
+    fontSize: 10,
+    color: '#555',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+  },
+  profileNotFound: {
+    color: '#888',
+    textAlign: 'center',
+    padding: 40,
+    fontSize: FontSize.base,
+  },
+  profileCloseBtn: {
+    paddingVertical: 14,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
+  profileCloseBtnText: {
+    color: '#888',
+    fontWeight: '600',
+    fontSize: FontSize.base,
   },
 });

@@ -26,7 +26,7 @@ class PredictionHistoryService:
                 self.db = firestore.client()
                 try:
                     self.bucket = storage.bucket()
-                except:
+                except Exception:
                     pass
                 logger.info("PredictionHistoryService: Firestore client initialized")
         except Exception as e:
@@ -201,7 +201,7 @@ class PredictionHistoryService:
                     blob_path = f"predictions/{user_id}/{prediction_id}.jpg"
                     blob = self.bucket.blob(blob_path)
                     blob.delete()
-                except:
+                except Exception:
                     pass
             
             # Delete document

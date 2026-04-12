@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useUser } from '@/contexts/UserContext';
 import { useTranslation, TranslationKey } from '@/i18n';
@@ -41,6 +42,7 @@ import {
   getUnitLabel,
   getUnitPlaceholder,
 } from '../src/constants/foodDatabase';
+import { searchOFF, OFFFood, calculateOFFCalories } from '../src/services/openFoodFactsService';
 
 const MEAL_SECTIONS: { key: MealType; label: string; icon: string; color: string }[] = [
   { key: 'breakfast', label: 'Kahvaltı', icon: '🌅', color: '#f59e0b' },
@@ -91,6 +93,12 @@ export default function DayDetailScreen() {
   const [selectedFood, setSelectedFood] = useState<FoodInfo | null>(null);
   const [showFoodSuggestions, setShowFoodSuggestions] = useState(false);
 
+  // Open Food Facts integration
+  const [offResults, setOffResults] = useState<OFFFood[]>([]);
+  const [offSearching, setOffSearching] = useState(false);
+  const [selectedOFF, setSelectedOFF] = useState<OFFFood | null>(null);
+  const offTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Exercise modal
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [exerciseName, setExerciseName] = useState('');
@@ -100,38 +108,69 @@ export default function DayDetailScreen() {
 
   const manualCaloriesComputed = useMemo(() => {
     const amount = parseFloat(manualAmount) || 0;
-    if (!selectedFood || amount <= 0) return 0;
-    return calculateCalories(selectedFood, amount, manualUnit);
-  }, [selectedFood, manualAmount, manualUnit]);
+    if (amount <= 0) return 0;
+    if (selectedFood) return calculateCalories(selectedFood, amount, manualUnit);
+    // Open Food Facts selected item
+    if (selectedOFF) {
+      const grams = manualUnit === 'ml' ? amount : amount;
+      return calculateOFFCalories(selectedOFF, grams).calories;
+    }
+    return 0;
+  }, [selectedFood, selectedOFF, manualAmount, manualUnit]);
 
   const foodSuggestions = useMemo(() => searchFoods(manualFoodName, 8), [manualFoodName]);
+
+  // Debounced Open Food Facts search
+  const searchOFFDebounced = useCallback((query: string) => {
+    if (offTimerRef.current) clearTimeout(offTimerRef.current);
+    if (!query || query.length < 2) { setOffResults([]); setOffSearching(false); return; }
+    setOffSearching(true);
+    offTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchOFF(query, 6);
+        setOffResults(results);
+      } catch { setOffResults([]); }
+      finally { setOffSearching(false); }
+    }, 800);
+  }, []);
+
+  // Cleanup timer
+  useEffect(() => {
+    return () => { if (offTimerRef.current) clearTimeout(offTimerRef.current); };
+  }, []);
 
   // ─── Load ──────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     if (!profile.uid) return;
     setIsLoading(true);
     try {
-      const [ml, ex] = await Promise.all([
-        getMealsForDate(profile.uid, dateKey),
-        getExercisesForDate(profile.uid, dateKey),
-      ]);
+      let ml: MealEntry[] = [];
+      let ex: ExerciseEntry[] = [];
+      try { ml = await getMealsForDate(profile.uid, dateKey); }
+      catch (e) { console.warn('[DayDetail] getMealsForDate failed:', e); }
+      try { ex = await getExercisesForDate(profile.uid, dateKey); }
+      catch (e) { console.warn('[DayDetail] getExercisesForDate failed:', e); }
       setMeals(ml);
       setExercises(ex);
     } catch (e) { console.error('DayDetail load error:', e); }
     finally { setIsLoading(false); setDataLoaded(true); }
   }, [profile.uid, dateKey]);
 
-  const loadedRef = React.useRef(false);
-  if (!loadedRef.current && profile.uid) { loadedRef.current = true; loadData(); }
+  // Reload data when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (profile.uid) { loadData(); }
+    }, [profile.uid, loadData])
+  );
 
   // ─── Calculations ──────────────────────────────────────────────────
   const dailyTarget = calculateDailyCalories();
-  const consumedCalories = meals.reduce((s, m) => s + m.calories, 0);
-  const burnedCalories = exercises.reduce((s, e) => s + e.caloriesBurned, 0);
+  const consumedCalories = meals.reduce((s, m) => s + (Number(m.calories) || 0), 0);
+  const burnedCalories = exercises.reduce((s, e) => s + (Number(e.caloriesBurned) || 0), 0);
   const remainingCalories = Math.max(0, dailyTarget - consumedCalories + burnedCalories);
   const calorieProgress = dailyTarget > 0 ? Math.min(consumedCalories / dailyTarget, 1) : 0;
   const getMealsForType = (type: MealType) => meals.filter(m => m.mealType === type);
-  const getMealTypeCalories = (type: MealType) => getMealsForType(type).reduce((s, m) => s + m.calories, 0);
+  const getMealTypeCalories = (type: MealType) => getMealsForType(type).reduce((s, m) => s + (Number(m.calories) || 0), 0);
 
   // ─── Handlers ──────────────────────────────────────────────────────
   const handleSwipeDelete = async (id: string) => {
@@ -185,37 +224,59 @@ export default function DayDetailScreen() {
     if (!profile.uid || !manualFoodName.trim()) { Alert.alert('Hata', 'Yemek adı girmelisiniz.'); return; }
     const amount = parseFloat(manualAmount) || 0;
     if (amount <= 0) { Alert.alert('Hata', `Lütfen miktar girin (${getUnitLabel(manualUnit)}).`); return; }
-    let cal: number, weight: number;
-    if (selectedFood) { cal = calculateCalories(selectedFood, amount, manualUnit); weight = calculateWeightGrams(selectedFood, amount, manualUnit); }
-    else { weight = Math.round(amount); cal = Math.round(1.5 * weight); }
+    let cal: number, weight: number, prot: number, carb: number, fatVal: number;
+    if (selectedFood) {
+      cal = calculateCalories(selectedFood, amount, manualUnit);
+      weight = calculateWeightGrams(selectedFood, amount, manualUnit);
+      prot = Math.round(cal * 0.25 / 4); carb = Math.round(cal * 0.45 / 4); fatVal = Math.round(cal * 0.30 / 9);
+    } else if (selectedOFF) {
+      const grams = Math.round(amount);
+      const macros = calculateOFFCalories(selectedOFF, grams);
+      cal = macros.calories; weight = grams;
+      prot = Math.round(macros.protein); carb = Math.round(macros.carbs); fatVal = Math.round(macros.fat);
+    } else {
+      // Unknown food — estimate based on 1.5 kcal/g
+      weight = Math.round(amount); cal = Math.round(1.5 * weight);
+      prot = Math.round(cal * 0.25 / 4); carb = Math.round(cal * 0.45 / 4); fatVal = Math.round(cal * 0.30 / 9);
+    }
     try {
       const id = await logMeal(profile.uid, {
         date: dateKey, mealType: manualMealType, foodName: manualFoodName.trim(), calories: cal,
-        protein: Math.round(cal * 0.25 / 4), carbs: Math.round(cal * 0.45 / 4), fat: Math.round(cal * 0.30 / 9),
+        protein: prot, carbs: carb, fat: fatVal,
         weight, quantity: amount, unit: manualUnit, foodKey: selectedFood?.key,
       });
       setMeals(prev => [{ id, uid: profile.uid!, date: dateKey, mealType: manualMealType, foodName: manualFoodName.trim(),
-        calories: cal, protein: Math.round(cal * 0.25 / 4), carbs: Math.round(cal * 0.45 / 4), fat: Math.round(cal * 0.30 / 9),
+        calories: cal, protein: prot, carbs: carb, fat: fatVal,
         weight, quantity: amount, unit: manualUnit, foodKey: selectedFood?.key }, ...prev]);
       try { await recordMealLog(profile.uid); } catch {}
-      setShowManualModal(false); setManualFoodName(''); setManualAmount(''); setSelectedFood(null);
-    } catch { Alert.alert('Hata', 'Kayıt eklenemedi.'); }
+      setShowManualModal(false); setManualFoodName(''); setManualAmount(''); setSelectedFood(null); setSelectedOFF(null); setOffResults([]);
+    } catch (e) { console.error('Meal log error:', e); Alert.alert('Hata', 'Kayıt eklenemedi.'); }
   };
 
   const handleAddExercise = async () => {
     if (!profile.uid || !exerciseName.trim()) { Alert.alert('Hata', 'Egzersiz adı girmelisiniz.'); return; }
     const duration = parseInt(exerciseDuration) || 30;
-    const cal = parseInt(exerciseCalories) || 0;
+    // Auto-calculate calories if not set
+    let cal = parseInt(exerciseCalories) || 0;
+    if (cal <= 0) {
+      const found = ALL_EXERCISES.find(e => e.name === exerciseName.trim());
+      if (found) cal = Math.round(found.calPer30 * duration / 30);
+      else cal = Math.round(5 * duration); // fallback: ~5 kcal/min
+    }
     try {
       const id = await logExercise(profile.uid, { date: dateKey, name: exerciseName.trim(), duration, caloriesBurned: cal });
       setExercises(prev => [{ id, uid: profile.uid!, date: dateKey, name: exerciseName.trim(), duration, caloriesBurned: cal }, ...prev]);
-      setShowExerciseModal(false); setExerciseName(''); setExerciseDuration(''); setExerciseCalories('');
-    } catch { Alert.alert('Hata', 'Egzersiz eklenemedi.'); }
+      setShowExerciseModal(false); setExerciseName(''); setExerciseDuration(''); setExerciseCalories(''); setExpandedExerciseCategory(null);
+    } catch (e) {
+      console.error('Exercise log error:', e);
+      const errMsg = (e as any)?.code === 'permission-denied' ? 'Firebase izin hatası. Lütfen tekrar giriş yapın.' : 'Egzersiz eklenemedi. Tekrar deneyin.';
+      Alert.alert('Hata', errMsg);
+    }
   };
 
   const openManualModal = (mealType: MealType) => {
-    setManualMealType(mealType); setManualFoodName(''); setManualAmount(''); setSelectedFood(null); setManualUnit('gram');
-    setShowFoodSuggestions(false); setShowManualModal(true);
+    setManualMealType(mealType); setManualFoodName(''); setManualAmount(''); setSelectedFood(null); setSelectedOFF(null); setManualUnit('gram');
+    setShowFoodSuggestions(false); setOffResults([]); setShowManualModal(true);
   };
 
   // Date display
@@ -230,7 +291,9 @@ export default function DayDetailScreen() {
           <Text style={{ fontSize: 22 }}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{dateLabel}</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => router.back()} style={styles.doneBtn}>
+          <Text style={styles.doneBtnText}>✓ Tamam</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Summary bar */}
@@ -318,6 +381,7 @@ export default function DayDetailScreen() {
                         <View style={styles.mealItem}>
                           <TouchableOpacity style={{ flex: 1 }}
                             onPress={() => router.push({ pathname: '/food-detail', params: {
+                              mealId: meal.id ?? '', date: dateKey,
                               foodName: meal.foodName, foodKey: meal.foodKey ?? '', calories: String(meal.calories),
                               weight: String(meal.weight), quantity: String(meal.quantity ?? ''), unit: meal.unit ?? '',
                               protein: String(meal.protein ?? 0), carbs: String(meal.carbs ?? 0), fat: String(meal.fat ?? 0),
@@ -377,6 +441,15 @@ export default function DayDetailScreen() {
             </View>
 
             <Text style={styles.footer}>{t('home.swipeHint')}</Text>
+
+            {/* Floating done button */}
+            <TouchableOpacity
+              style={styles.floatingDoneBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.floatingDoneBtnText}>✓ Tamam — Anasayfaya Dön</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -391,30 +464,55 @@ export default function DayDetailScreen() {
               {MEAL_SECTIONS.find(s => s.key === manualMealType)?.label}
             </Text>
 
-            <TextInput style={styles.input} placeholder="Yemek adı (ör: mercimek çorbası, döner, baklava)"
+            <TextInput style={styles.input} placeholder="Yemek adı (ör: mercimek çorbası, döner, süt, çikolata)"
               placeholderTextColor={Colors.text.light} value={manualFoodName}
               onChangeText={(text) => {
-                setManualFoodName(text); setShowFoodSuggestions(true);
+                setManualFoodName(text); setShowFoodSuggestions(true); setSelectedOFF(null);
                 const results = searchFoods(text, 1);
                 if (results.length > 0 && results[0].displayName.toLowerCase() === text.toLowerCase()) {
                   setSelectedFood(results[0]); setManualUnit(results[0].unit); setManualAmount(String(results[0].defaultPortion));
+                } else {
+                  // Trigger debounced OFF search when local DB has few results
+                  if (searchFoods(text, 3).length < 3) searchOFFDebounced(text);
                 }
               }}
             />
 
-            {showFoodSuggestions && foodSuggestions.length > 0 && (
+            {showFoodSuggestions && (foodSuggestions.length > 0 || offResults.length > 0) && (
               <ScrollView style={styles.suggestBox} nestedScrollEnabled>
                 {foodSuggestions.map((food) => (
                   <TouchableOpacity key={food.key} style={styles.suggestItem}
                     onPress={() => {
-                      setManualFoodName(food.displayName); setSelectedFood(food); setManualUnit(food.unit);
-                      setManualAmount(String(food.defaultPortion)); setShowFoodSuggestions(false);
+                      setManualFoodName(food.displayName); setSelectedFood(food); setSelectedOFF(null); setManualUnit(food.unit);
+                      setManualAmount(String(food.defaultPortion)); setShowFoodSuggestions(false); setOffResults([]);
                     }}>
                     <Text style={{ fontSize: 20, marginRight: 8 }}>{food.emoji}</Text>
                     <Text style={styles.suggestTxt}>{food.displayName}</Text>
                     <Text style={styles.suggestKcal}>{food.kcalPer100g} kcal/100g</Text>
                   </TouchableOpacity>
                 ))}
+                {/* Open Food Facts results */}
+                {offResults.length > 0 && (
+                  <View style={{ borderTopWidth: 1, borderTopColor: Colors.primary[200], paddingTop: 4, marginTop: 2 }}>
+                    <Text style={{ fontSize: 10, color: Colors.text.light, paddingHorizontal: 12, paddingVertical: 2 }}>🌐 Open Food Facts</Text>
+                    {offResults.map((off, i) => (
+                      <TouchableOpacity key={`off-${i}`} style={styles.suggestItem}
+                        onPress={() => {
+                          setManualFoodName(off.name + (off.brand ? ` (${off.brand})` : '')); setSelectedOFF(off); setSelectedFood(null);
+                          setManualUnit('gram'); setManualAmount(String(off.servingGrams ?? 100));
+                          setShowFoodSuggestions(false);
+                        }}>
+                        <Text style={{ fontSize: 20, marginRight: 8 }}>🌐</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestTxt} numberOfLines={1}>{off.name}</Text>
+                          {off.brand ? <Text style={{ fontSize: 10, color: Colors.text.light }}>{off.brand}</Text> : null}
+                        </View>
+                        <Text style={styles.suggestKcal}>{off.kcalPer100g} kcal/100g</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {offSearching && <ActivityIndicator size="small" color={Colors.primary[400]} style={{ paddingVertical: 8 }} />}
               </ScrollView>
             )}
 
@@ -424,11 +522,8 @@ export default function DayDetailScreen() {
                 {[selectedFood.unit, ...selectedFood.altUnits].map((u) => (
                   <TouchableOpacity key={u} style={[styles.unitChip, manualUnit === u && styles.unitChipActive]}
                     onPress={() => {
+                      // Preserve the user's entered quantity - only reset if there's no user input yet
                       setManualUnit(u);
-                      if (u === 'kase') setManualAmount(String(selectedFood.defaultPortion));
-                      else if (u === 'ml') setManualAmount(String(selectedFood.portionGrams));
-                      else if (u === 'kucuk' || u === 'buyuk') setManualAmount(String(selectedFood.defaultPortion));
-                      else if (u === 'porsiyon') setManualAmount('1');
                     }}>
                     <Text style={[styles.unitChipTxt, manualUnit === u && styles.unitChipTxtActive]}>{getUnitLabel(u)}</Text>
                   </TouchableOpacity>
@@ -458,11 +553,16 @@ export default function DayDetailScreen() {
             <View style={styles.calDisplay}>
               <Text style={styles.calDisplayLbl}>Tahmini Kalori:</Text>
               <Text style={styles.calDisplayVal}>
-                {manualCaloriesComputed > 0 ? `${manualCaloriesComputed} kcal` : selectedFood ? 'Miktar girin' : 'Yemek seçin'}
+                {manualCaloriesComputed > 0 ? `${manualCaloriesComputed} kcal` : (selectedFood || selectedOFF) ? 'Miktar girin' : 'Yemek seçin'}
               </Text>
               {selectedFood && manualCaloriesComputed > 0 && (
                 <Text style={styles.calDisplayHint}>
                   ({parseFloat(manualAmount) || 0} {getUnitLabel(manualUnit)} = ~{calculateWeightGrams(selectedFood, parseFloat(manualAmount) || 0, manualUnit)}g)
+                </Text>
+              )}
+              {selectedOFF && manualCaloriesComputed > 0 && (
+                <Text style={styles.calDisplayHint}>
+                  ({parseFloat(manualAmount) || 0}g • P:{calculateOFFCalories(selectedOFF, parseFloat(manualAmount) || 0).protein}g K:{calculateOFFCalories(selectedOFF, parseFloat(manualAmount) || 0).carbs}g Y:{calculateOFFCalories(selectedOFF, parseFloat(manualAmount) || 0).fat}g)
                 </Text>
               )}
             </View>
@@ -553,6 +653,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
+  doneBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: Colors.primary[500] },
+  doneBtnText: { color: '#fff', fontSize: FontSize.sm, fontWeight: '700' },
+  floatingDoneBtn: { backgroundColor: Colors.primary[500], borderRadius: BorderRadius.xl, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg, marginBottom: Spacing.xl, ...Shadows.md },
+  floatingDoneBtnText: { color: '#fff', fontSize: FontSize.base, fontWeight: '800' },
   headerTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text.primary },
   summaryBar: { flexDirection: 'row', backgroundColor: Colors.surface, paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, justifyContent: 'space-between', alignItems: 'center' },
   summaryItem: { flex: 1, alignItems: 'center' },

@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --clear",
+    "tunnel": "expo start --tunnel --clear",
+    "lan": "expo start --lan --clear",
+    "local": "expo start --localhost --clear",
     "dev": "expo start --android --clear",
     "android": "set \"JAVA_HOME=C:\\Program Files\\Android\\Android Studio\\jbr\" & npx expo run:android",
     "adb-setup": "adb reverse --remove-all & adb reverse tcp:8081 tcp:8081 & adb reverse tcp:8000 tcp:8000 & adb reverse --list",

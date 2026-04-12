@@ -323,8 +323,6 @@ class FoodClassifier:
             
             return model
             
-            return model
-            
         except ImportError:
             logger.warning("timm not available, trying torchvision models")
             

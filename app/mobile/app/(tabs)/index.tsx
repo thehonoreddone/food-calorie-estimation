@@ -11,7 +11,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  Easing,
+} from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
 import { useUser } from '@/contexts/UserContext';
 import { useTranslation } from '@/i18n';
@@ -51,6 +60,11 @@ function dayLabels(l: string) {
     ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
     : ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
 }
+function dayLabelsShort(l: string) {
+  return l === 'en'
+    ? ['S','M','T','W','T','F','S']
+    : ['P','P','S','Ç','P','C','C'];
+}
 function monthLabels(l: string) {
   return l === 'en'
     ? ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -60,6 +74,21 @@ function calDays(center: Date) {
   const d: Date[] = [];
   for (let i = -7; i <= 7; i++) { const x = new Date(center); x.setDate(x.getDate()+i); d.push(x); }
   return d;
+}
+
+// Get all days of a specific month as grid (with leading/trailing blanks for alignment)
+function getMonthGrid(year: number, month: number) {
+  const first = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const startDow = first.getDay(); // 0=Sun
+  const grid: (Date | null)[] = [];
+  // Leading blanks
+  for (let i = 0; i < startDow; i++) grid.push(null);
+  // Actual days
+  for (let d = 1; d <= lastDay; d++) grid.push(new Date(year, month, d));
+  // Trailing blanks
+  while (grid.length % 7 !== 0) grid.push(null);
+  return grid;
 }
 
 // ─── Calorie Ring (SVG) ────────────────────────────────────────────────────
@@ -141,6 +170,7 @@ export default function HomeTab() {
   const { profile, calculateDailyCalories, calculateMacros } = useUser();
   const { t, lang } = useTranslation();
   const today = new Date();
+  const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
   const [selDate, setSelDate] = useState(today);
   const [meals, setMeals] = useState<MealEntry[]>([]);
@@ -155,6 +185,12 @@ export default function HomeTab() {
   const [water, setWater] = useState(0);
   const [loginStreak, setLoginStreak] = useState(0);
 
+  // Calendar expansion state
+  const [calExpanded, setCalExpanded] = useState(false);
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const calHeight = useSharedValue(0);
+
   const stGoal = health.stepsGoal ?? 10000;
   const wGoal = health.waterGoal ?? 2500;
 
@@ -166,24 +202,17 @@ export default function HomeTab() {
       const dk = fmtDate(d);
       const td = sameDay(d, new Date());
 
-      // Firestore calls — wrapped individually so permission errors don't crash everything
+      // Firestore calls — each wrapped individually so one failure doesn't block others
       let ml: MealEntry[] = [];
       let ex: ExerciseEntry[] = [];
       let dh: DailyHealthData | null = null;
-      try {
-        [ml, ex, dh] = await Promise.all([
-          getMealsForDate(profile.uid, dk),
-          getExercisesForDate(profile.uid, dk),
-          getDailyHealth(profile.uid, dk),
-        ]);
-      } catch (fsErr: unknown) {
-        // Firestore permission errors — use empty data silently
-        const msg = fsErr instanceof Error ? fsErr.message : String(fsErr);
-        if (!msg.includes('permission') && !msg.includes('Permission')) {
-          console.warn('Firestore load failed:', msg);
-        }
-        // Don't log permission errors at all — they repeat on every date change
-      }
+      try { ml = await getMealsForDate(profile.uid, dk); }
+      catch (e) { console.warn('[Home] getMealsForDate failed:', e); }
+      try { ex = await getExercisesForDate(profile.uid, dk); }
+      catch (e) { console.warn('[Home] getExercisesForDate failed:', e); }
+      try { dh = await getDailyHealth(profile.uid, dk); }
+      catch (e) { console.warn('[Home] getDailyHealth failed:', e); }
+      console.log(`[Home] Loaded ${ml.length} meals for ${dk}, total cal: ${ml.reduce((s, m) => s + (Number(m.calories) || 0), 0)}`, ml.length > 0 ? { first: { foodName: ml[0].foodName, cal: ml[0].calories, type: ml[0].mealType } } : 'no meals');
       setMeals(ml); setExercises(ex); setHealth(dh ?? {}); setWater(dh?.waterMl ?? 0);
 
       // Health Connect
@@ -221,22 +250,31 @@ export default function HomeTab() {
     }
   }, [profile.uid]);
 
-  const lastDk = useRef('');
-  const dk = fmtDate(selDate);
-  if (dk !== lastDk.current && profile.uid) { lastDk.current = dk; load(selDate); }
+  // Reload data when the tab gains focus OR when selDate changes
+  useFocusEffect(
+    useCallback(() => {
+      if (profile.uid) {
+        load(selDate);
+      }
+    }, [profile.uid, selDate, load])
+  );
 
   // ─── Calc ──────────────────────────────────────────────────────────
   const tgt = calculateDailyCalories();
-  const eaten = meals.reduce((s, m) => s + m.calories, 0);
-  const burned = exercises.reduce((s, e) => s + e.caloriesBurned, 0);
+  const eaten = meals.reduce((s, m) => s + (Number(m.calories) || 0), 0);
+  const burned = exercises.reduce((s, e) => s + (Number(e.caloriesBurned) || 0), 0);
   const macros = calculateMacros();
-  const eProt = meals.reduce((s, m) => s + (m.protein ?? 0), 0);
-  const eCarb = meals.reduce((s, m) => s + (m.carbs ?? 0), 0);
-  const eFat = meals.reduce((s, m) => s + (m.fat ?? 0), 0);
+  const eProt = meals.reduce((s, m) => s + (Number(m.protein) || 0), 0);
+  const eCarb = meals.reduce((s, m) => s + (Number(m.carbs) || 0), 0);
+  const eFat = meals.reduce((s, m) => s + (Number(m.fat) || 0), 0);
 
   const days = calDays(today);
   const dN = dayLabels(lang);
+  const dNShort = dayLabelsShort(lang);
   const mN = monthLabels(lang);
+
+  // Month grid for expanded calendar
+  const monthGrid = getMonthGrid(viewYear, viewMonth);
 
   const addWater = async (ml: number) => {
     if (!profile.uid) return;
@@ -246,6 +284,14 @@ export default function HomeTab() {
   };
 
   const connectHC = async () => {
+    if (isExpoGo) {
+      Alert.alert(
+        'Health Connect',
+        'Health Connect özelliği Expo Go ile çalışmaz. Adım ve uyku verilerinizi şu an manuel olarak ayarlar sayfasından girebilirsiniz.\n\nOtomatik takip için uygulamayı EAS Build ile derlemeniz gerekir.',
+        [{ text: 'Anladım' }]
+      );
+      return;
+    }
     const a = await isHealthConnectAvailable();
     if (!a) { Alert.alert('Health Connect', 'Google Health Connect uygulaması yüklü değil. Lütfen Play Store\'dan yükleyin.'); return; }
     const ok = await requestHealthPermissions();
@@ -257,6 +303,50 @@ export default function HomeTab() {
     router.push({ pathname: '/day-detail', params: { date: fmtDate(d) } });
   };
 
+  // Calendar animation
+  const calExpandAnim = useAnimatedStyle(() => ({
+    maxHeight: withTiming(calExpanded ? 350 : 0, { duration: 300, easing: Easing.inOut(Easing.ease) }),
+    opacity: withTiming(calExpanded ? 1 : 0, { duration: 250 }),
+    overflow: 'hidden' as const,
+  }));
+
+  const toggleCalendar = () => {
+    hapticLight();
+    if (!calExpanded) {
+      // When expanding, set month/year to currently selected date
+      setViewMonth(selDate.getMonth());
+      setViewYear(selDate.getFullYear());
+    }
+    setCalExpanded(!calExpanded);
+  };
+
+  const prevMonth = () => {
+    hapticSelection();
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  };
+
+  const nextMonth = () => {
+    hapticSelection();
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  const selectCalDay = (d: Date) => {
+    hapticSelection();
+    setSelDate(d);
+    setCalExpanded(false);
+  };
+
+  // Scroll ref for auto-scrolling to today in compact strip
+  const stripScrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    // Auto scroll to center (today) in the strip on mount
+    setTimeout(() => {
+      stripScrollRef.current?.scrollTo({ x: 7 * 54, animated: false });
+    }, 100);
+  }, []);
+
   // ─── Render ────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={S.container} edges={['top']}>
@@ -266,27 +356,91 @@ export default function HomeTab() {
             <Text style={S.greeting}>{t('home.greeting', { name: profile.name ?? (lang === 'en' ? 'User' : 'Kullanıcı') })}</Text>
             <Text style={S.headerSub}>{mN[selDate.getMonth()]} {selDate.getDate()}, {selDate.getFullYear()}</Text>
           </View>
-          <TouchableOpacity style={S.settingsBtn} onPress={() => router.push('/settings')}>
-            <Text style={{ fontSize: 20 }}>⚙️</Text>
+        </View>
+
+        {/* Compact strip calendar */}
+        <View style={S.calStripRow}>
+          <ScrollView
+            ref={stripScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={S.calStrip}
+          >
+            {days.map((day, i) => {
+              const sel = sameDay(day, selDate), td = sameDay(day, today);
+              return (
+                <TouchableOpacity key={i} style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
+                  onPress={() => { hapticSelection(); setSelDate(day); }} onLongPress={() => goDayDetail(day)}>
+                  <Text style={[S.calDayN, sel && S.calDayA]}>{dN[day.getDay()]}</Text>
+                  <Text style={[S.calDayNum, sel && S.calDayA]}>{day.getDate()}</Text>
+                  {td && <View style={[S.tdDot, sel && S.tdDotA]} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {/* Expand/Collapse button */}
+          <TouchableOpacity style={S.calExpandBtn} onPress={toggleCalendar} activeOpacity={0.7}>
+            <Text style={S.calExpandIcon}>{calExpanded ? '▲' : '▼'}</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.calStrip}>
-          {days.map((day, i) => {
-            const sel = sameDay(day, selDate), td = sameDay(day, today);
-            return (
-              <TouchableOpacity key={i} style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
-                onPress={() => { hapticSelection(); setSelDate(day); }} onLongPress={() => goDayDetail(day)}>
-                <Text style={[S.calDayN, sel && S.calDayA]}>{dN[day.getDay()]}</Text>
-                <Text style={[S.calDayNum, sel && S.calDayA]}>{day.getDate()}</Text>
-                {td && <View style={[S.tdDot, sel && S.tdDotA]} />}
+
+        {/* Expanded full month calendar */}
+        <Animated.View style={[calExpandAnim]}>
+          <View style={S.monthCalContainer}>
+            {/* Month navigation */}
+            <View style={S.monthNav}>
+              <TouchableOpacity onPress={prevMonth} style={S.monthNavBtn}>
+                <Text style={S.monthNavText}>◀</Text>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+              <Text style={S.monthNavTitle}>
+                {mN[viewMonth]} {viewYear}
+              </Text>
+              <TouchableOpacity onPress={nextMonth} style={S.monthNavBtn}>
+                <Text style={S.monthNavText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Day headers */}
+            <View style={S.monthDayHeaders}>
+              {dN.map((d, i) => (
+                <Text key={i} style={S.monthDayHeader}>{dNShort[i]}</Text>
+              ))}
+            </View>
+
+            {/* Day grid */}
+            <View style={S.monthGrid}>
+              {monthGrid.map((day, i) => {
+                if (!day) return <View key={`e${i}`} style={S.monthDayEmpty} />;
+                const sel = sameDay(day, selDate);
+                const td = sameDay(day, today);
+                return (
+                  <TouchableOpacity
+                    key={fmtDate(day)}
+                    style={[S.monthDay, sel && S.monthDaySel, td && !sel && S.monthDayTd]}
+                    onPress={() => selectCalDay(day)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[S.monthDayText, sel && S.monthDayTextSel, td && !sel && S.monthDayTextTd]}>
+                      {day.getDate()}
+                    </Text>
+                    {td && <View style={[S.monthTdDot, sel && S.monthTdDotSel]} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </Animated.View>
       </LinearGradient>
 
       {/* ─── Mascot ───────────────────────────────────────────── */}
-      <Mascot caloriesEaten={eaten} calorieGoal={tgt} streak={loginStreak} />
+      <Mascot
+        caloriesEaten={eaten}
+        calorieGoal={tgt}
+        streak={loginStreak}
+        waterMl={water}
+        waterGoal={wGoal}
+        mealCount={meals.length}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
         {loading && !loaded ? (
@@ -352,7 +506,7 @@ export default function HomeTab() {
                 <Text style={S.hcIcon}>🔗</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={S.hcTitle}>Health Connect Bağla</Text>
-                  <Text style={S.hcSub}>Adım ve uyku verilerini otomatik izleyin</Text>
+                  <Text style={S.hcSub}>Adım ve uyku verilerini otomatik izleyin{isExpoGo ? ' (EAS Build gerekli)' : ''}</Text>
                 </View>
                 <Text style={{ fontSize: 20, color: Colors.primary[500] }}>›</Text>
               </TouchableOpacity>
@@ -423,7 +577,9 @@ const S = StyleSheet.create({
   greeting: { fontSize: FontSize['2xl'], fontWeight: '800', color: '#fff' },
   headerSub: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   settingsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  calStrip: { paddingVertical: Spacing.sm, gap: 6 },
+  // Calendar strip
+  calStripRow: { flexDirection: 'row', alignItems: 'center' },
+  calStrip: { paddingVertical: Spacing.sm, gap: 6, paddingRight: 48 },
   calDay: { width: 48, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' },
   calDaySel: { backgroundColor: '#fff' },
   calDayTd: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)' },
@@ -432,6 +588,27 @@ const S = StyleSheet.create({
   calDayA: { color: Colors.primary[700] },
   tdDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff', marginTop: 2 },
   tdDotA: { backgroundColor: Colors.primary[500] },
+  calExpandBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  calExpandIcon: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  // Month calendar
+  monthCalContainer: { marginTop: Spacing.md, paddingBottom: Spacing.sm },
+  monthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md, paddingHorizontal: Spacing.sm },
+  monthNavBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  monthNavText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  monthNavTitle: { color: '#fff', fontSize: FontSize.base, fontWeight: '800' },
+  monthDayHeaders: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 6 },
+  monthDayHeader: { width: (SW - Spacing.xl * 2) / 7, textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: FontSize.xs, fontWeight: '600' },
+  monthGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  monthDay: { width: (SW - Spacing.xl * 2) / 7, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  monthDaySel: { backgroundColor: '#fff' },
+  monthDayTd: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10 },
+  monthDayEmpty: { width: (SW - Spacing.xl * 2) / 7, height: 38 },
+  monthDayText: { color: 'rgba(255,255,255,0.9)', fontSize: FontSize.sm, fontWeight: '600' },
+  monthDayTextSel: { color: Colors.primary[700], fontWeight: '800' },
+  monthDayTextTd: { color: '#fff', fontWeight: '800' },
+  monthTdDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#fff', position: 'absolute', bottom: 4 },
+  monthTdDotSel: { backgroundColor: Colors.primary[500] },
+  // Scroll
   scroll: { padding: Spacing.lg, paddingBottom: 20 },
   loadWrap: { alignItems: 'center', paddingVertical: Spacing['3xl'] },
   loadTxt: { color: Colors.text.secondary, marginTop: Spacing.md, fontSize: FontSize.sm },

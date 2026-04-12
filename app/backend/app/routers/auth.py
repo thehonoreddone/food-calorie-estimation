@@ -108,24 +108,26 @@ async def register(request: RegisterRequest):
         
         result = await auth_service.create_user(user_data)
         
-        if result:
+        if result and result.get("success"):
+            user_info = result.get("user", {})
             user_response = UserResponse(
-                uid=result["uid"],
-                email=result["email"],
-                display_name=result.get("display_name"),
-                created_at=result.get("created_at")
+                uid=user_info.get("uid", ""),
+                email=user_info.get("email", ""),
+                display_name=user_info.get("display_name"),
+                created_at=user_info.get("created_at")
             )
             
             return LoginResponse(
                 success=True,
                 message="Registration successful",
                 user=user_response,
-                custom_token=result.get("custom_token")
+                custom_token=result.get("token")
             )
         else:
+            error_msg = result.get("error", "Registration failed") if result else "Registration failed"
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed"
+                detail=error_msg
             )
             
     except HTTPException:

@@ -1,8 +1,9 @@
 // ─── Mascot Message Pool ────────────────────────────────────────────────────
 // Mood-based Turkish messages for the Nutrino mascot
+// Smart mood system: considers time, water, meals, and calories
 // ────────────────────────────────────────────────────────────────────────────
 
-export type MascotMood = 'happy' | 'hungry' | 'excited' | 'overfull' | 'sleepy' | 'idle';
+export type MascotMood = 'happy' | 'hungry' | 'excited' | 'overfull' | 'sleepy' | 'idle' | 'thirsty';
 
 interface MascotMessagePool {
   [key: string]: string[];
@@ -16,11 +17,20 @@ export const mascotMessages: MascotMessagePool = {
     "Kahvaltı yapmadan güne başlanmaz! ☀️",
     "Aç karnına düşünmek zor, haydi ye bir şeyler! 🤔",
   ],
+  thirsty: [
+    "Su içmeyi unutma! Vücut suya ihtiyaç duyar 💧",
+    "Bugün hiç su eklemedin, susadım! 🏜️",
+    "Bir bardak su iç, kendini daha iyi hissedeceksin 💦",
+    "Suyunu ihmal etme! Sağlığın için çok önemli 🚰",
+    "Hey! Su içtin mi bugün? Ben çok susadım! 😰",
+    "Günde en az 2 litre su içmelisin! 💧",
+  ],
   sleepy: [
-    "Az yedin bugün, biraz daha yesen mi? 😴",
+    "Geç oldu, dinlenme zamanı geldi 😴",
     "Enerji seviyem düşük... seninkisi de mi? 💤",
-    "Bir meyve veya atıştırmalık iyi gider! 🍎",
-    "Metabolizmayı hızlandırmak için bir şeyler ye! ⚡",
+    "Yarın güzel bir güne başlamak için uyu 🌙",
+    "Gece geç yemek yeme, metabolizman yavaşlar 🛌",
+    "Uyku saati yaklaşıyor, iyi geceler! 🌜",
   ],
   happy: [
     "Süpersin! Hedefe doğru gidiyorsun! 💪",
@@ -89,7 +99,7 @@ export function getStreakMessage(days: number): string {
 
 // ─── Get time period ────────────────────────────────────────────────────────
 
-function getTimePeriod(): string {
+export function getTimePeriod(): string {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 11) return 'morning';
   if (hour >= 11 && hour < 17) return 'afternoon';
@@ -97,15 +107,63 @@ function getTimePeriod(): string {
   return 'night';
 }
 
-// ─── Mood calculator ────────────────────────────────────────────────────────
+// ─── Smart Mood Calculator ──────────────────────────────────────────────────
+// Takes into account: calories, water, time of day, meal count
 
-export function getMascotMood(caloriesEaten: number, calorieGoal: number): MascotMood {
+export interface MascotContext {
+  caloriesEaten: number;
+  calorieGoal: number;
+  waterMl?: number;
+  waterGoal?: number;
+  mealCount?: number;
+  hour?: number;
+}
+
+export function getMascotMood(
+  caloriesEatenOrCtx: number | MascotContext,
+  calorieGoalArg?: number,
+): MascotMood {
+  // Support both old (two-arg) and new (context object) signatures
+  let caloriesEaten: number;
+  let calorieGoal: number;
+  let waterMl = 0;
+  let waterGoal = 2500;
+  let mealCount = -1; // -1 = unknown
+  let hour = new Date().getHours();
+
+  if (typeof caloriesEatenOrCtx === 'object') {
+    const ctx = caloriesEatenOrCtx;
+    caloriesEaten = ctx.caloriesEaten;
+    calorieGoal = ctx.calorieGoal;
+    waterMl = ctx.waterMl ?? 0;
+    waterGoal = ctx.waterGoal ?? 2500;
+    mealCount = ctx.mealCount ?? -1;
+    hour = ctx.hour ?? hour;
+  } else {
+    caloriesEaten = caloriesEatenOrCtx;
+    calorieGoal = calorieGoalArg ?? 0;
+  }
+
   if (calorieGoal <= 0) return 'idle';
 
   const ratio = caloriesEaten / calorieGoal;
 
-  if (caloriesEaten === 0) return 'hungry';
-  if (ratio < 0.3) return 'sleepy';
+  // Night time (22:00 - 04:59) → sleepy
+  if (hour >= 22 || hour < 5) return 'sleepy';
+
+  // No water at all and it's past noon → thirsty
+  if (waterMl === 0 && hour >= 12) return 'thirsty';
+
+  // Very low water (less than 20% of goal) and past 15:00 → thirsty
+  if (waterGoal > 0 && waterMl < waterGoal * 0.2 && hour >= 15) return 'thirsty';
+
+  // Calorie-based moods
+  if (caloriesEaten === 0) {
+    // Morning and no food yet → hungry but gentle
+    if (hour < 10) return 'idle';
+    return 'hungry';
+  }
+  if (ratio < 0.3) return 'hungry';
   if (ratio >= 0.3 && ratio < 0.7) return 'happy';
   if (ratio >= 0.7 && ratio <= 1.05) return 'excited';
   if (ratio > 1.05) return 'overfull';
@@ -122,8 +180,8 @@ export function getRandomMessage(mood: MascotMood, streak: number = 0): string {
     if (streakMsg) return streakMsg;
   }
 
-  // 25% chance: time-based greeting
-  if (Math.random() < 0.25) {
+  // 20% chance: time-based greeting
+  if (Math.random() < 0.2) {
     const period = getTimePeriod();
     const timeMessages = timeGreetings[period];
     if (timeMessages && timeMessages.length > 0) {

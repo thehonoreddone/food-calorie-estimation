@@ -1,4 +1,3 @@
 export { Mascot } from './Mascot';
 export { MascotBubble } from './MascotBubble';
-export { getMascotMood, getRandomMessage, getStreakMessage } from './mascotMessages';
-export type { MascotMood } from './mascotMessages';
+export { getMascotMood, getRandomMessage, type MascotMood, type MascotContext } from './mascotMessages';

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
+  FadeInUp,
   Easing,
 } from 'react-native-reanimated';
 import { Colors, FontSize, BorderRadius, Shadows } from '@/constants/theme';
@@ -12,19 +13,21 @@ interface MascotBubbleProps {
   visible: boolean;
   /** Position relative to mascot: 'right', 'top', or 'inline' */
   position?: 'right' | 'top' | 'inline';
+  /** Accent color for inline mode */
+  accentColor?: string;
 }
 
-export function MascotBubble({ message, visible, position = 'right' }: MascotBubbleProps) {
+export function MascotBubble({ message, visible, position = 'right', accentColor }: MascotBubbleProps) {
   if (!visible || !message) return null;
 
   if (position === 'inline') {
     return (
       <Animated.View
-        entering={FadeIn.duration(400).easing(Easing.out(Easing.cubic))}
+        entering={FadeInUp.duration(500).easing(Easing.out(Easing.cubic))}
         exiting={FadeOut.duration(300)}
-        style={styles.inlineBubble}
+        style={[styles.inlineBubble, accentColor ? { borderLeftColor: accentColor } : {}]}
       >
-        <Text style={styles.inlineText}>{message}</Text>
+        <Text style={[styles.inlineText, accentColor ? { color: Colors.text.primary } : {}]}>{message}</Text>
       </Animated.View>
     );
   }
@@ -102,16 +105,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 18,
   },
-  // Inline mode — no card, just text
+  // Inline mode — elegant left-border style
   inlineBubble: {
-    paddingVertical: 2,
-    paddingRight: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary[400],
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   inlineText: {
-    fontSize: FontSize.xs,
+    fontSize: FontSize.sm,
     color: Colors.text.secondary,
-    fontWeight: '500',
-    lineHeight: 17,
-    fontStyle: 'italic',
+    fontWeight: '600',
+    lineHeight: 20,
   },
 });

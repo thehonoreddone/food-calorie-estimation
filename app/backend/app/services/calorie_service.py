@@ -273,7 +273,7 @@ class CalorieService:
             "kcal_per_100g": kcal_per_100g,
         }
         self.densities[class_name] = density
-        self.kcal_per_gram[class_name] = kcal_per_100g / 100.0
+        self.kcal_per_100g[class_name] = kcal_per_100g
 
 
 # Global calorie service instance
