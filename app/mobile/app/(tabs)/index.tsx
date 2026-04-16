@@ -19,6 +19,8 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
+  withRepeat,
+  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
@@ -46,7 +48,17 @@ import {
   requestHealthPermissions,
   initHealthConnect,
 } from '../../src/services/healthService';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import {
+  Colors,
+  MacroColors,
+  FontSize,
+  FontWeight,
+  Spacing,
+  BorderRadius,
+  Shadows,
+  Glass,
+  GradientPresets,
+} from '@/constants/theme';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -75,96 +87,163 @@ function calDays(center: Date) {
   for (let i = -7; i <= 7; i++) { const x = new Date(center); x.setDate(x.getDate()+i); d.push(x); }
   return d;
 }
-
-// Get all days of a specific month as grid (with leading/trailing blanks for alignment)
 function getMonthGrid(year: number, month: number) {
   const first = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0).getDate();
-  const startDow = first.getDay(); // 0=Sun
+  const startDow = first.getDay();
   const grid: (Date | null)[] = [];
-  // Leading blanks
   for (let i = 0; i < startDow; i++) grid.push(null);
-  // Actual days
   for (let d = 1; d <= lastDay; d++) grid.push(new Date(year, month, d));
-  // Trailing blanks
   while (grid.length % 7 !== 0) grid.push(null);
   return grid;
 }
 
-// ─── Calorie Ring (SVG) ────────────────────────────────────────────────────
+// ─── Premium Calorie Ring ───────────────────────────────────────────────────
 
-function CalRing({ eaten, target, sz = 150 }: { eaten: number; target: number; sz?: number }) {
-  const sw = 14, r = (sz - sw) / 2, c = 2 * Math.PI * r;
+function CalRing({ eaten, target, sz = 190 }: { eaten: number; target: number; sz?: number }) {
+  const sw = 14;
+  const r = (sz - sw) / 2;
+  const c = 2 * Math.PI * r;
   const rem = Math.max(0, target - eaten);
   const p = target > 0 ? Math.min(eaten / target, 1) : 0;
+  const isOver = eaten > target;
+
+  // Dynamic gradient colors based on progress
+  const getColors = () => {
+    if (isOver) return { start: '#FB923C', end: '#F472B6' };
+    if (p >= 0.7) return { start: '#22c55e', end: '#16a34a' };
+    if (p >= 0.5) return { start: '#3b82f6', end: '#22c55e' };
+    return { start: '#8b5cf6', end: '#3b82f6' };
+  };
+  const gradColors = getColors();
+
+  return (
+    <View style={{ width: sz, height: sz, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Outer glow */}
+      <View style={[
+        {
+          position: 'absolute',
+          width: sz + 40,
+          height: sz + 40,
+          borderRadius: (sz + 40) / 2,
+          backgroundColor: `${gradColors.start}15`,
+        },
+      ]} />
+      <View style={[
+        {
+          position: 'absolute',
+          width: sz + 20,
+          height: sz + 20,
+          borderRadius: (sz + 20) / 2,
+          backgroundColor: `${gradColors.start}08`,
+        },
+      ]} />
+      <Svg width={sz} height={sz}>
+        <Defs>
+          <SvgGrad id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0%" stopColor={gradColors.start} />
+            <Stop offset="100%" stopColor={gradColors.end} />
+          </SvgGrad>
+        </Defs>
+        {/* Track */}
+        <Circle
+          cx={sz / 2} cy={sz / 2} r={r}
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth={sw} fill="none"
+        />
+        {/* Progress */}
+        <Circle
+          cx={sz / 2} cy={sz / 2} r={r}
+          stroke="url(#ringGrad)"
+          strokeWidth={sw} fill="none"
+          strokeDasharray={`${c}`}
+          strokeDashoffset={c * (1 - p)}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${sz / 2} ${sz / 2})`}
+        />
+      </Svg>
+      {/* Center content */}
+      <View style={{ position: 'absolute', alignItems: 'center' }}>
+        <Text style={S.ringValue}>{eaten.toLocaleString('tr-TR')}</Text>
+        <Text style={S.ringLabel}>of {target.toLocaleString('tr-TR')} kcal</Text>
+        <View style={S.ringRemRow}>
+          <View style={[S.ringDot, { backgroundColor: gradColors.start }]} />
+          <Text style={S.ringRemText}>{rem.toLocaleString('tr-TR')} left</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─── Macro Progress Bar ─────────────────────────────────────────────────────
+
+function MacroBar({ label, eaten, goal, color }: {
+  label: string; eaten: number; goal: number; color: string;
+}) {
+  const p = goal > 0 ? Math.min(eaten / goal, 1) : 0;
+  return (
+    <View style={S.macroBarItem}>
+      <View style={S.macroBarHeader}>
+        <Text style={S.macroBarLabel}>{label}</Text>
+        <Text style={[S.macroBarVal, { color: Colors.text.primary }]}>{eaten}/{goal}g</Text>
+      </View>
+      <View style={S.macroBarTrack}>
+        <View style={[S.macroBarFill, {
+          width: `${p * 100}%` as any,
+          backgroundColor: color,
+          shadowColor: color,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.6,
+          shadowRadius: 6,
+          elevation: 4,
+        }]} />
+      </View>
+    </View>
+  );
+}
+
+// ─── Water Drop Bars ─────────────────────────────────────────────────────────
+
+function WaterDropBars({ glasses, goal }: { glasses: number; goal: number }) {
+  return (
+    <View style={S.waterDropRow}>
+      {Array.from({ length: goal }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            S.waterDropBar,
+            i < glasses
+              ? S.waterDropFilled
+              : S.waterDropEmpty,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ─── Steps Mini Progress Ring ────────────────────────────────────────────────
+
+function StepsBadge({ percent }: { percent: number }) {
+  const sz = 32;
+  const sw = 3;
+  const r = (sz - sw) / 2;
+  const c = 2 * Math.PI * r;
   return (
     <View style={{ width: sz, height: sz, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={sz} height={sz}>
-        <Defs>
-          <SvgGrad id="rg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor={Colors.primary[400]} />
-            <Stop offset="100%" stopColor={Colors.primary[600]} />
-          </SvgGrad>
-        </Defs>
-        <Circle cx={sz/2} cy={sz/2} r={r} stroke={Colors.neutral[200]} strokeWidth={sw} fill="none" />
-        <Circle cx={sz/2} cy={sz/2} r={r} stroke="url(#rg)" strokeWidth={sw} fill="none"
-          strokeDasharray={`${c}`} strokeDashoffset={c*(1-p)} strokeLinecap="round"
-          transform={`rotate(-90 ${sz/2} ${sz/2})`} />
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke="rgba(255,255,255,0.1)" strokeWidth={sw} fill="none" />
+        <Circle cx={sz/2} cy={sz/2} r={r} stroke="#22c55e" strokeWidth={sw} fill="none"
+          strokeDasharray={`${c}`} strokeDashoffset={c * (1 - percent / 100)}
+          strokeLinecap="round" transform={`rotate(-90 ${sz/2} ${sz/2})`}
+        />
       </Svg>
-      <View style={{ position:'absolute', alignItems:'center' }}>
-        <Text style={{ fontSize: 30, fontWeight: '900', color: Colors.text.primary }}>{rem.toLocaleString('tr-TR')}</Text>
-        <Text style={{ fontSize: 12, color: Colors.text.secondary, fontWeight: '500' }}>Kalan</Text>
-      </View>
+      <Text style={S.stepsBadgeText}>{percent}%</Text>
     </View>
   );
 }
 
-// ─── Small ring for macros ──────────────────────────────────────────────────
-
-function MiniRing({ p, sz = 42, clr, children }: { p: number; sz?: number; clr: string; children: React.ReactNode }) {
-  const w = 4, r = (sz-w)/2, c = 2*Math.PI*r;
-  return (
-    <View style={{ width: sz, height: sz, alignItems:'center', justifyContent:'center' }}>
-      <Svg width={sz} height={sz}>
-        <Circle cx={sz/2} cy={sz/2} r={r} stroke={Colors.neutral[100]} strokeWidth={w} fill="none" />
-        <Circle cx={sz/2} cy={sz/2} r={r} stroke={clr} strokeWidth={w} fill="none"
-          strokeDasharray={`${c}`} strokeDashoffset={c*(1-Math.min(p,1))} strokeLinecap="round"
-          transform={`rotate(-90 ${sz/2} ${sz/2})`} />
-      </Svg>
-      <View style={{ position:'absolute' }}>{children}</View>
-    </View>
-  );
-}
-
-// ─── Macro bar item ─────────────────────────────────────────────────────────
-
-function MacroItem({ label, eaten, goal, clr }: { label: string; eaten: number; goal: number; clr: string }) {
-  const p = goal > 0 ? eaten / goal : 0;
-  return (
-    <View style={S.macroItem}>
-      <MiniRing p={p} clr={clr}><Text style={{ fontSize:10, fontWeight:'700', color: clr }}>{Math.round(p*100)}%</Text></MiniRing>
-      <View style={{ marginLeft: 8 }}>
-        <Text style={{ fontSize:11, color: Colors.text.secondary, fontWeight:'500' }}>{label}</Text>
-        <Text style={{ fontSize:13, fontWeight:'800', color: Colors.text.primary }}>{eaten}/{goal}g</Text>
-      </View>
-    </View>
-  );
-}
-
-// ─── Dashboard card ─────────────────────────────────────────────────────────
-
-function DCard({ icon, title, val, sub, clr, onPress }: { icon: string; title: string; val: string; sub: string; clr: string; onPress?: () => void }) {
-  return (
-    <TouchableOpacity style={[S.dCard, Shadows.sm]} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
-      <View style={[S.dCardIcon, { backgroundColor: clr + '18' }]}><Text style={{ fontSize:22 }}>{icon}</Text></View>
-      <Text style={S.dCardTitle}>{title}</Text>
-      <Text style={[S.dCardVal, { color: clr }]}>{val}</Text>
-      <Text style={S.dCardSub}>{sub}</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function HomeTab() {
   const { profile, calculateDailyCalories, calculateMacros } = useUser();
@@ -185,14 +264,15 @@ export default function HomeTab() {
   const [water, setWater] = useState(0);
   const [loginStreak, setLoginStreak] = useState(0);
 
-  // Calendar expansion state
+  // Calendar
   const [calExpanded, setCalExpanded] = useState(false);
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
-  const calHeight = useSharedValue(0);
 
   const stGoal = health.stepsGoal ?? 10000;
   const wGoal = health.waterGoal ?? 2500;
+  const waterGlasses = Math.round(water / 250); // Convert ml to glasses (250ml each)
+  const waterGlassGoal = Math.round(wGoal / 250);
 
   // ─── Load ──────────────────────────────────────────────────────────
   const load = useCallback(async (d: Date) => {
@@ -202,20 +282,14 @@ export default function HomeTab() {
       const dk = fmtDate(d);
       const td = sameDay(d, new Date());
 
-      // Firestore calls — each wrapped individually so one failure doesn't block others
       let ml: MealEntry[] = [];
       let ex: ExerciseEntry[] = [];
       let dh: DailyHealthData | null = null;
-      try { ml = await getMealsForDate(profile.uid, dk); }
-      catch (e) { console.warn('[Home] getMealsForDate failed:', e); }
-      try { ex = await getExercisesForDate(profile.uid, dk); }
-      catch (e) { console.warn('[Home] getExercisesForDate failed:', e); }
-      try { dh = await getDailyHealth(profile.uid, dk); }
-      catch (e) { console.warn('[Home] getDailyHealth failed:', e); }
-      console.log(`[Home] Loaded ${ml.length} meals for ${dk}, total cal: ${ml.reduce((s, m) => s + (Number(m.calories) || 0), 0)}`, ml.length > 0 ? { first: { foodName: ml[0].foodName, cal: ml[0].calories, type: ml[0].mealType } } : 'no meals');
+      try { ml = await getMealsForDate(profile.uid, dk); } catch (e) { console.warn('[Home] meals:', e); }
+      try { ex = await getExercisesForDate(profile.uid, dk); } catch (e) { console.warn('[Home] exercises:', e); }
+      try { dh = await getDailyHealth(profile.uid, dk); } catch (e) { console.warn('[Home] health:', e); }
       setMeals(ml); setExercises(ex); setHealth(dh ?? {}); setWater(dh?.waterMl ?? 0);
 
-      // Health Connect
       try {
         const [sd, sl] = await Promise.all([
           td ? getTodaySteps() : getStepsForDate(dk),
@@ -232,10 +306,7 @@ export default function HomeTab() {
       } catch {
         setSteps(dh?.steps ?? 0); setSleepH(dh?.sleepHours ?? 0); setSleepM(dh?.sleepMins ?? 0);
       }
-    } catch (e) {
-      // Catch-all for any other unexpected errors
-      console.warn('Dashboard load issue:', e);
-    }
+    } catch (e) { console.warn('Dashboard load issue:', e); }
     finally { setLoading(false); setLoaded(true); }
   }, [profile.uid]);
 
@@ -243,19 +314,15 @@ export default function HomeTab() {
     (async () => { const a = await isHealthConnectAvailable(); setHcOn(a); if (a) await initHealthConnect(); })();
   }, []);
 
-  // Load login streak for mascot
   useEffect(() => {
     if (profile.uid) {
       getUserAchievements(profile.uid).then(a => setLoginStreak(a.loginStreakCurrent)).catch(() => {});
     }
   }, [profile.uid]);
 
-  // Reload data when the tab gains focus OR when selDate changes
   useFocusEffect(
     useCallback(() => {
-      if (profile.uid) {
-        load(selDate);
-      }
+      if (profile.uid) load(selDate);
     }, [profile.uid, selDate, load])
   );
 
@@ -267,43 +334,18 @@ export default function HomeTab() {
   const eProt = meals.reduce((s, m) => s + (Number(m.protein) || 0), 0);
   const eCarb = meals.reduce((s, m) => s + (Number(m.carbs) || 0), 0);
   const eFat = meals.reduce((s, m) => s + (Number(m.fat) || 0), 0);
+  const stepsPercent = stGoal > 0 ? Math.min(Math.round((steps / stGoal) * 100), 100) : 0;
+  const stepsBurned = Math.round(steps * 0.04); // approx kcal burned
 
   const days = calDays(today);
   const dN = dayLabels(lang);
   const dNShort = dayLabelsShort(lang);
   const mN = monthLabels(lang);
-
-  // Month grid for expanded calendar
   const monthGrid = getMonthGrid(viewYear, viewMonth);
 
-  const addWater = async (ml: number) => {
-    if (!profile.uid) return;
-    const nw = Math.max(0, water + ml);
-    setWater(nw);
-    saveDailyHealth(profile.uid, fmtDate(selDate), { waterMl: nw, waterGoal: wGoal }).catch(() => {});
-  };
+  // Average calories (simple: eaten today as proxy)
+  const avgCal = eaten > 0 ? eaten : tgt;
 
-  const connectHC = async () => {
-    if (isExpoGo) {
-      Alert.alert(
-        'Health Connect',
-        'Health Connect özelliği Expo Go ile çalışmaz. Adım ve uyku verilerinizi şu an manuel olarak ayarlar sayfasından girebilirsiniz.\n\nOtomatik takip için uygulamayı EAS Build ile derlemeniz gerekir.',
-        [{ text: 'Anladım' }]
-      );
-      return;
-    }
-    const a = await isHealthConnectAvailable();
-    if (!a) { Alert.alert('Health Connect', 'Google Health Connect uygulaması yüklü değil. Lütfen Play Store\'dan yükleyin.'); return; }
-    const ok = await requestHealthPermissions();
-    if (ok) { setHcOn(true); load(selDate); }
-  };
-
-  const goDayDetail = (d: Date) => {
-    setSelDate(d);
-    router.push({ pathname: '/day-detail', params: { date: fmtDate(d) } });
-  };
-
-  // Calendar animation
   const calExpandAnim = useAnimatedStyle(() => ({
     maxHeight: withTiming(calExpanded ? 350 : 0, { duration: 300, easing: Easing.inOut(Easing.ease) }),
     opacity: withTiming(calExpanded ? 1 : 0, { duration: 250 }),
@@ -312,11 +354,7 @@ export default function HomeTab() {
 
   const toggleCalendar = () => {
     hapticLight();
-    if (!calExpanded) {
-      // When expanding, set month/year to currently selected date
-      setViewMonth(selDate.getMonth());
-      setViewYear(selDate.getFullYear());
-    }
+    if (!calExpanded) { setViewMonth(selDate.getMonth()); setViewYear(selDate.getFullYear()); }
     setCalExpanded(!calExpanded);
   };
 
@@ -332,33 +370,63 @@ export default function HomeTab() {
     else setViewMonth(viewMonth + 1);
   };
 
-  const selectCalDay = (d: Date) => {
-    hapticSelection();
-    setSelDate(d);
-    setCalExpanded(false);
+  const selectCalDay = (d: Date) => { hapticSelection(); setSelDate(d); setCalExpanded(false); };
+  const stripScrollRef = useRef<ScrollView>(null);
+  useEffect(() => { setTimeout(() => { stripScrollRef.current?.scrollTo({ x: 7 * 56, animated: false }); }, 100); }, []);
+
+  const addWater = async (ml: number) => {
+    if (!profile.uid) return;
+    hapticLight();
+    const nw = Math.max(0, water + ml);
+    setWater(nw);
+    saveDailyHealth(profile.uid, fmtDate(selDate), { waterMl: nw, waterGoal: wGoal }).catch(() => {});
   };
 
-  // Scroll ref for auto-scrolling to today in compact strip
-  const stripScrollRef = useRef<ScrollView>(null);
-  useEffect(() => {
-    // Auto scroll to center (today) in the strip on mount
-    setTimeout(() => {
-      stripScrollRef.current?.scrollTo({ x: 7 * 54, animated: false });
-    }, 100);
-  }, []);
+  const connectHC = async () => {
+    if (isExpoGo) {
+      Alert.alert('Health Connect', 'Health Connect özelliği Expo Go ile çalışmaz. Adım ve uyku verilerini şu an ayarlar sayfasından girebilirsiniz.\n\nOtomatik takip için EAS Build gerekir.', [{ text: 'Anladım' }]);
+      return;
+    }
+    const a = await isHealthConnectAvailable();
+    if (!a) { Alert.alert('Health Connect', 'Google Health Connect uygulaması yüklü değil.'); return; }
+    const ok = await requestHealthPermissions();
+    if (ok) { setHcOn(true); load(selDate); }
+  };
+
+  const goDayDetail = (d: Date) => {
+    setSelDate(d);
+    router.push({ pathname: '/day-detail', params: { date: fmtDate(d) } });
+  };
+
+  const greetingHour = new Date().getHours();
+  const greeting = greetingHour < 12 ? 'Günaydın' : greetingHour < 18 ? 'İyi öğleden sonralar' : 'İyi akşamlar';
 
   // ─── Render ────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={S.container} edges={['top']}>
-      <LinearGradient colors={[Colors.primary[500], Colors.primary[700]]} start={{x:0,y:0}} end={{x:1,y:1}} style={S.header}>
-        <View style={S.headerTop}>
+      {/* ── Ambient Background Glows ───────── */}
+      <View style={S.ambientTop} pointerEvents="none" />
+      <View style={S.ambientMid} pointerEvents="none" />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
+
+        {/* ── Header ─────────────────────────── */}
+        <View style={S.header}>
           <View>
-            <Text style={S.greeting}>{t('home.greeting', { name: profile.name ?? (lang === 'en' ? 'User' : 'Kullanıcı') })}</Text>
-            <Text style={S.headerSub}>{mN[selDate.getMonth()]} {selDate.getDate()}, {selDate.getFullYear()}</Text>
+            <Text style={S.greetingSub}>{greeting}</Text>
+            <Text style={S.greetingName}>{profile.name?.split(' ')[0] ?? 'Nutrino'}</Text>
+          </View>
+          <View style={S.headerRight}>
+            <TouchableOpacity style={S.headerBtn} onPress={() => router.push('/notifications')} activeOpacity={0.7}>
+              <Text style={S.headerBtnIcon}>🔔</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={S.headerBtn} onPress={() => router.push('/settings')} activeOpacity={0.7}>
+              <Text style={S.headerBtnIcon}>⚙️</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Compact strip calendar */}
+        {/* ── Calendar Strip ─────────────────── */}
         <View style={S.calStripRow}>
           <ScrollView
             ref={stripScrollRef}
@@ -369,50 +437,45 @@ export default function HomeTab() {
             {days.map((day, i) => {
               const sel = sameDay(day, selDate), td = sameDay(day, today);
               return (
-                <TouchableOpacity key={i} style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
-                  onPress={() => { hapticSelection(); setSelDate(day); }} onLongPress={() => goDayDetail(day)}>
-                  <Text style={[S.calDayN, sel && S.calDayA]}>{dN[day.getDay()]}</Text>
-                  <Text style={[S.calDayNum, sel && S.calDayA]}>{day.getDate()}</Text>
-                  {td && <View style={[S.tdDot, sel && S.tdDotA]} />}
+                <TouchableOpacity
+                  key={i}
+                  style={[S.calDay, sel && S.calDaySel, td && !sel && S.calDayTd]}
+                  onPress={() => { hapticSelection(); setSelDate(day); }}
+                  onLongPress={() => goDayDetail(day)}
+                >
+                  <Text style={[S.calDayN, sel && S.calDayTextSel]}>{dN[day.getDay()]}</Text>
+                  <Text style={[S.calDayNum, sel && S.calDayTextSel]}>{day.getDate()}</Text>
+                  {td && <View style={[S.tdDot, sel && S.tdDotSel]} />}
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
-          {/* Expand/Collapse button */}
           <TouchableOpacity style={S.calExpandBtn} onPress={toggleCalendar} activeOpacity={0.7}>
             <Text style={S.calExpandIcon}>{calExpanded ? '▲' : '▼'}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Expanded full month calendar */}
-        <Animated.View style={[calExpandAnim]}>
-          <View style={S.monthCalContainer}>
-            {/* Month navigation */}
+        {/* ── Expanded Month Calendar ─────────── */}
+        <Animated.View style={calExpandAnim}>
+          <View style={[S.monthCal, Glass.card]}>
             <View style={S.monthNav}>
               <TouchableOpacity onPress={prevMonth} style={S.monthNavBtn}>
-                <Text style={S.monthNavText}>◀</Text>
+                <Text style={S.monthNavArrow}>◀</Text>
               </TouchableOpacity>
-              <Text style={S.monthNavTitle}>
-                {mN[viewMonth]} {viewYear}
-              </Text>
+              <Text style={S.monthNavTitle}>{mN[viewMonth]} {viewYear}</Text>
               <TouchableOpacity onPress={nextMonth} style={S.monthNavBtn}>
-                <Text style={S.monthNavText}>▶</Text>
+                <Text style={S.monthNavArrow}>▶</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Day headers */}
             <View style={S.monthDayHeaders}>
-              {dN.map((d, i) => (
+              {dN.map((_, i) => (
                 <Text key={i} style={S.monthDayHeader}>{dNShort[i]}</Text>
               ))}
             </View>
-
-            {/* Day grid */}
             <View style={S.monthGrid}>
               {monthGrid.map((day, i) => {
                 if (!day) return <View key={`e${i}`} style={S.monthDayEmpty} />;
-                const sel = sameDay(day, selDate);
-                const td = sameDay(day, today);
+                const sel = sameDay(day, selDate), td = sameDay(day, today);
                 return (
                   <TouchableOpacity
                     key={fmtDate(day)}
@@ -430,121 +493,216 @@ export default function HomeTab() {
             </View>
           </View>
         </Animated.View>
-      </LinearGradient>
 
-      {/* ─── Mascot ───────────────────────────────────────────── */}
-      <Mascot
-        caloriesEaten={eaten}
-        calorieGoal={tgt}
-        streak={loginStreak}
-        waterMl={water}
-        waterGoal={wGoal}
-        mealCount={meals.length}
-      />
+        {/* ── Mascot (Centered) ────────────────── */}
+        <Mascot
+          caloriesEaten={eaten}
+          calorieGoal={tgt}
+          streak={loginStreak}
+          waterMl={water}
+          waterGoal={wGoal}
+          mealCount={meals.length}
+        />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
+        {/* ── Loading Skeleton ─────────────────── */}
         {loading && !loaded ? (
           <View style={S.loadWrap}>
-            {/* Skeleton calorie ring */}
             <SkeletonCalorieRing />
-            {/* Skeleton macro row */}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
               <Skeleton width="30%" height={50} borderRadius={12} />
               <Skeleton width="30%" height={50} borderRadius={12} />
               <Skeleton width="30%" height={50} borderRadius={12} />
             </View>
-            {/* Skeleton stat cards */}
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16, width: '100%' }}>
               <SkeletonCard style={{ flex: 1 }} />
               <SkeletonCard style={{ flex: 1 }} />
             </View>
           </View>
         ) : (
           <>
-            {/* ─── Calorie Card ──────────────────────────────────── */}
-            <View style={[S.calCard, Shadows.md]}>
-              <Text style={S.calCardTitle}>Kaloriler</Text>
-              <Text style={S.calFormula}>Kalan = Hedef - Yiyecek + Egzersiz</Text>
-              <View style={S.calBody}>
-                <CalRing eaten={eaten} target={tgt} />
-                <View style={S.calStatsCol}>
-                  <CalStat icon="🏁" label="Temel Hedef" value={tgt} color={Colors.text.primary} />
-                  <CalStat icon="🍴" label="Yiyecek" value={eaten} color={Colors.primary[600]} />
-                  <CalStat icon="🔥" label="Egzersiz" value={burned} color={Colors.accent.orange} />
+            {/* ── Hero Calorie Ring ────────────── */}
+            <View style={S.ringSection}>
+              <CalRing eaten={eaten} target={tgt} sz={190} />
+            </View>
+
+            {/* ── Macros Card ─────────────────── */}
+            <View style={[S.macroCard, Glass.card]}>
+              {/* Glow accent */}
+              <View style={S.macroCardGlow} />
+              <View style={S.macroCardHeader}>
+                <LinearGradient
+                  colors={['#8b5cf6', '#6d28d9'] as any}
+                  style={S.macroCardIcon}
+                >
+                  <Text style={{ fontSize: 16, color: '#fff' }}>📊</Text>
+                </LinearGradient>
+                <Text style={S.macroCardTitle}>Macros</Text>
+              </View>
+              <View style={S.macroList}>
+                <MacroBar label="Protein" eaten={eProt} goal={macros.protein} color="#22c55e" />
+                <MacroBar label="Carbs" eaten={eCarb} goal={macros.carbs} color="#3b82f6" />
+                <MacroBar label="Fat" eaten={eFat} goal={macros.fat} color="#f59e0b" />
+              </View>
+            </View>
+
+            {/* ── Water + Steps Row ───────────── */}
+            <View style={S.dualCardRow}>
+              {/* Water Card */}
+              <View style={[S.halfCard, Glass.card]}>
+                <View style={S.halfCardGlow} />
+                <View style={S.halfCardHeader}>
+                  <View style={S.halfCardIconRow}>
+                    <LinearGradient colors={['#3b82f6', '#06b6d4'] as any} style={S.halfCardIconBg}>
+                      <Text style={{ fontSize: 14, color: '#fff' }}>💧</Text>
+                    </LinearGradient>
+                    <Text style={S.halfCardTitle}>Water</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={S.waterAddBtn}
+                    onPress={() => addWater(250)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={S.waterAddIcon}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={S.waterContent}>
+                  <View>
+                    <Text style={S.waterValue}>{waterGlasses}</Text>
+                    <Text style={S.waterGoalText}>/{waterGlassGoal} glasses</Text>
+                  </View>
+                  <WaterDropBars glasses={waterGlasses} goal={waterGlassGoal} />
+                </View>
+                {/* Progress bar */}
+                <View style={S.miniProgressTrack}>
+                  <View style={[S.miniProgressFill, {
+                    width: `${Math.min((waterGlasses / waterGlassGoal) * 100, 100)}%` as any,
+                    backgroundColor: '#3b82f6',
+                    shadowColor: '#3b82f6',
+                    shadowOpacity: 0.5,
+                    shadowRadius: 4,
+                  }]} />
+                </View>
+              </View>
+
+              {/* Steps Card */}
+              <View style={[S.halfCard, Glass.card]}>
+                <View style={[S.halfCardGlow, { backgroundColor: 'rgba(34,197,94,0.06)' }]} />
+                <View style={S.halfCardHeader}>
+                  <View style={S.halfCardIconRow}>
+                    <LinearGradient colors={['#22c55e', '#16a34a'] as any} style={S.halfCardIconBg}>
+                      <Text style={{ fontSize: 14, color: '#fff' }}>👟</Text>
+                    </LinearGradient>
+                    <Text style={S.halfCardTitle}>Steps</Text>
+                  </View>
+                </View>
+                <Text style={S.stepsValue}>{steps.toLocaleString('tr-TR')}</Text>
+                <Text style={S.stepsGoalText}>/{stGoal.toLocaleString('tr-TR')}</Text>
+                <View style={S.stepsExtraRow}>
+                  <Text style={S.stepsBurnedText}>• {stepsBurned} kcal burned</Text>
+                </View>
+                <View style={S.stepsProgressRow}>
+                  <StepsBadge percent={stepsPercent} />
+                  <View style={{ flex: 1 }}>
+                    <View style={S.miniProgressTrack}>
+                      <LinearGradient
+                        colors={['#22c55e', '#f59e0b'] as any}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[S.miniProgressFill, {
+                          width: `${stepsPercent}%` as any,
+                        }]}
+                      />
+                    </View>
+                    <Text style={S.stepsToGoText}>{Math.max(stGoal - steps, 0).toLocaleString('tr-TR')} to go</Text>
+                  </View>
                 </View>
               </View>
             </View>
 
-            {/* ─── Macros ────────────────────────────────────────── */}
-            <View style={[S.macroRow, Shadows.sm]}>
-              <MacroItem label="Protein" eaten={eProt} goal={macros.protein} clr="#ef4444" />
-              <View style={S.macroDivider} />
-              <MacroItem label="Karb" eaten={eCarb} goal={macros.carbs} clr={Colors.accent.amber} />
-              <View style={S.macroDivider} />
-              <MacroItem label="Yağ" eaten={eFat} goal={macros.fat} clr="#3b82f6" />
+            {/* ── Stats Row ───────────────────── */}
+            <View style={S.statsRow}>
+              <View style={S.statCard}>
+                <Text style={S.statValue}>{loginStreak}<Text style={S.statUnit}> days</Text></Text>
+                <Text style={S.statLabel}>Streak</Text>
+              </View>
+              <View style={S.statCard}>
+                <Text style={S.statValue}>{avgCal >= 1000 ? `${(avgCal / 1000).toFixed(1)}k` : avgCal}<Text style={S.statUnit}> /day</Text></Text>
+                <Text style={S.statLabel}>Avg Cal</Text>
+              </View>
+              <View style={S.statCard}>
+                <Text style={S.statValue}>{profile.weight ?? '—'}<Text style={S.statUnit}> kg</Text></Text>
+                <Text style={S.statLabel}>Weight</Text>
+              </View>
             </View>
 
-            {/* ─── Stats Grid ────────────────────────────────────── */}
-            <View style={S.grid}>
-              <DCard icon="👟" title="Adım" val={steps.toLocaleString('tr-TR')}
-                sub={`Hedef: ${stGoal.toLocaleString('tr-TR')}`} clr={Colors.primary[500]}
-                onPress={hcOn ? undefined : connectHC} />
-              <DCard icon="🔥" title="Egzersiz" val={`${burned} kal`}
-                sub={exercises.length > 0 ? `${exercises.reduce((s,e) => s + e.duration, 0)} dk` : 'Ekle →'}
-                clr={Colors.accent.orange} onPress={() => goDayDetail(selDate)} />
-              <DCard icon="🌙" title="Uyku"
-                val={sleepH > 0 || sleepM > 0 ? `${sleepH}sa ${sleepM}dk` : '—'}
-                sub={sleepH >= 7 ? 'İyi uyku 👍' : sleepH > 0 ? 'Daha fazla uyu' : 'Bağlan →'}
-                clr="#8b5cf6" onPress={hcOn ? undefined : connectHC} />
-              <DCard icon="💧" title="Su" val={`${water} ml`}
-                sub={`Hedef: ${wGoal} ml`} clr="#06b6d4" onPress={() => addWater(250)} />
-            </View>
-
-            {/* ─── Connect HC ────────────────────────────────────── */}
-            {!hcOn && (
-              <TouchableOpacity style={[S.hcCard, Shadows.sm]} onPress={connectHC}>
-                <Text style={S.hcIcon}>🔗</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={S.hcTitle}>Health Connect Bağla</Text>
-                  <Text style={S.hcSub}>Adım ve uyku verilerini otomatik izleyin{isExpoGo ? ' (EAS Build gerekli)' : ''}</Text>
+            {/* ── Meals Summary ─────────────────── */}
+            <TouchableOpacity
+              style={[S.mealsSummary, Glass.card]}
+              onPress={() => goDayDetail(selDate)}
+              activeOpacity={0.7}
+            >
+              <View style={S.mealsSummaryLeft}>
+                <LinearGradient colors={['#A3E635', '#65a30d'] as any} style={S.mealsSummaryIconBg}>
+                  <Text style={{ fontSize: 18 }}>🍽️</Text>
+                </LinearGradient>
+                <View>
+                  <Text style={S.mealsSummaryTitle}>Öğünleri Görüntüle</Text>
+                  <Text style={S.mealsSummarySub}>
+                    {meals.length > 0 ? `${meals.length} kayıt • ${eaten} kcal` : 'Yemek eklemek için dokunun'}
+                  </Text>
                 </View>
-                <Text style={{ fontSize: 20, color: Colors.primary[500] }}>›</Text>
+              </View>
+              <Text style={S.mealsSummaryArrow}>›</Text>
+            </TouchableOpacity>
+
+            {/* ── Quick Actions Row ─────────────── */}
+            <View style={[S.quickActionsCard, Glass.card]}>
+              <Text style={S.sectionTitle}>Hızlı İşlemler</Text>
+              <View style={S.quickActionsRow}>
+                <TouchableOpacity style={S.quickAction} onPress={() => goDayDetail(selDate)} activeOpacity={0.7}>
+                  <LinearGradient colors={[`${Colors.neon.lime}22`, `${Colors.neon.lime}08`] as any} style={S.quickActionGrad}>
+                    <Text style={{ fontSize: 24 }}>🍽️</Text>
+                  </LinearGradient>
+                  <Text style={S.quickActionLabel}>Öğünler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={S.quickAction} onPress={() => router.push('/diet-recommendation')} activeOpacity={0.7}>
+                  <LinearGradient colors={[`${Colors.neon.cyan}22`, `${Colors.neon.cyan}08`] as any} style={S.quickActionGrad}>
+                    <Text style={{ fontSize: 24 }}>🥗</Text>
+                  </LinearGradient>
+                  <Text style={S.quickActionLabel}>Diyet</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={S.quickAction} onPress={() => router.push('/weight-tracking')} activeOpacity={0.7}>
+                  <LinearGradient colors={[`${Colors.neon.purple}22`, `${Colors.neon.purple}08`] as any} style={S.quickActionGrad}>
+                    <Text style={{ fontSize: 24 }}>⚖️</Text>
+                  </LinearGradient>
+                  <Text style={S.quickActionLabel}>Kilo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={S.quickAction} onPress={() => router.push('/achievements')} activeOpacity={0.7}>
+                  <LinearGradient colors={[`${Colors.neon.orange}22`, `${Colors.neon.orange}08`] as any} style={S.quickActionGrad}>
+                    <Text style={{ fontSize: 24 }}>🏆</Text>
+                  </LinearGradient>
+                  <Text style={S.quickActionLabel}>Başarımlar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ── Health Connect Banner ─────────── */}
+            {!hcOn && (
+              <TouchableOpacity style={[S.hcBanner, Glass.card]} onPress={connectHC} activeOpacity={0.7}>
+                <LinearGradient colors={['#A3E63520', '#22D3EE20'] as any} style={S.hcBannerIconBg}>
+                  <Text style={{ fontSize: 20 }}>🔗</Text>
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={S.hcBannerTitle}>Health Connect Bağla</Text>
+                  <Text style={S.hcBannerSub}>
+                    Adım ve uyku verilerini otomatik izleyin{isExpoGo ? ' (EAS Build gerekli)' : ''}
+                  </Text>
+                </View>
+                <Text style={[S.mealsSummaryArrow, { color: Colors.neon.lime }]}>›</Text>
               </TouchableOpacity>
             )}
 
-            {/* ─── Meals Link ────────────────────────────────────── */}
-            <TouchableOpacity style={[S.linkCard, Shadows.sm]} onPress={() => goDayDetail(selDate)} activeOpacity={0.7}>
-              <Text style={S.linkIcon}>🍽️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={S.linkTitle}>Öğünleri Görüntüle</Text>
-                <Text style={S.linkSub}>
-                  {meals.length > 0 ? `${meals.length} kayıt • ${eaten} kcal` : 'Yemek eklemek için dokunun'}
-                </Text>
-              </View>
-              <Text style={{ fontSize: 20, color: Colors.text.light }}>›</Text>
-            </TouchableOpacity>
-
-            {/* ─── Diet ──────────────────────────────────────────── */}
-            <TouchableOpacity style={[S.dietBtn, Shadows.sm]} onPress={() => router.push('/diet-recommendation')} activeOpacity={0.8}>
-              <Text style={{ fontSize: 28 }}>🥗</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={S.dietTxt}>{t('home.dietSuggestion')}</Text>
-                <Text style={S.dietSub}>{t('home.personalPlan')}</Text>
-              </View>
-              <Text style={{ fontSize: 16, color: Colors.text.light }}>›</Text>
-            </TouchableOpacity>
-
-            {/* ─── Weight ────────────────────────────────────────── */}
-            <TouchableOpacity style={[S.wCard, Shadows.sm]} onPress={() => router.push('/weight-tracking')} activeOpacity={0.7}>
-              <View style={S.wHead}>
-                <Text style={S.wTitle}>⚖️ Ağırlık</Text>
-                <Text style={S.wAction}>+</Text>
-              </View>
-              <Text style={S.wVal}>{profile.weight ? `${profile.weight} kg` : '— kg'}</Text>
-              <Text style={S.wSub}>{profile.targetWeight ? `Hedef: ${profile.targetWeight} kg` : 'Hedef belirle'}</Text>
-            </TouchableOpacity>
-
-            <View style={{ height: 30 }} />
+            <View style={{ height: 40 }} />
           </>
         )}
       </ScrollView>
@@ -552,102 +710,588 @@ export default function HomeTab() {
   );
 }
 
-// ─── CalStat helper ─────────────────────────────────────────────────────────
-
-function CalStat({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <Text style={{ fontSize: 18, marginRight: 8 }}>{icon}</Text>
-      <View>
-        <Text style={{ fontSize: 11, color: Colors.text.secondary, fontWeight: '500' }}>{label}</Text>
-        <Text style={{ fontSize: FontSize.lg, fontWeight: '800', color }}>{value.toLocaleString('tr-TR')}</Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const cardW = (SW - Spacing.lg * 2 - Spacing.md) / 2;
+const HALF_W = (SW - Spacing.lg * 2 - Spacing.sm) / 2;
 
 const S = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  header: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, paddingBottom: Spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
-  greeting: { fontSize: FontSize['2xl'], fontWeight: '800', color: '#fff' },
-  headerSub: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  settingsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  // Calendar strip
-  calStripRow: { flexDirection: 'row', alignItems: 'center' },
-  calStrip: { paddingVertical: Spacing.sm, gap: 6, paddingRight: 48 },
-  calDay: { width: 48, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' },
-  calDaySel: { backgroundColor: '#fff' },
-  calDayTd: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)' },
-  calDayN: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
-  calDayNum: { fontSize: FontSize.lg, color: '#fff', fontWeight: '700', marginTop: 2 },
-  calDayA: { color: Colors.primary[700] },
-  tdDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff', marginTop: 2 },
-  tdDotA: { backgroundColor: Colors.primary[500] },
-  calExpandBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
-  calExpandIcon: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  // Month calendar
-  monthCalContainer: { marginTop: Spacing.md, paddingBottom: Spacing.sm },
-  monthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md, paddingHorizontal: Spacing.sm },
-  monthNavBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  monthNavText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  monthNavTitle: { color: '#fff', fontSize: FontSize.base, fontWeight: '800' },
-  monthDayHeaders: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 6 },
-  monthDayHeader: { width: (SW - Spacing.xl * 2) / 7, textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: FontSize.xs, fontWeight: '600' },
+  // ── Base ──────────────────────────────────────────────────────────
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 24,
+  },
+
+  // ── Ambient glows ─────────────────────────────────────────────────
+  ambientTop: {
+    position: 'absolute',
+    top: -80,
+    right: -60,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(139,92,246,0.06)',
+  },
+  ambientMid: {
+    position: 'absolute',
+    top: '40%',
+    left: -80,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(34,211,238,0.05)',
+  },
+
+  // ── Header ─────────────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+  },
+  greetingSub: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+  },
+  greetingName: {
+    fontSize: FontSize['2xl'],
+    fontWeight: FontWeight.extrabold,
+    color: Colors.text.primary,
+    letterSpacing: -0.3,
+    marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  headerBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBtnIcon: {
+    fontSize: 18,
+  },
+
+  // ── Calendar Strip ─────────────────────────────────────────────────
+  calStripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  calStrip: {
+    paddingVertical: Spacing.sm,
+    gap: 6,
+    paddingRight: 48,
+  },
+  calDay: {
+    width: 50,
+    height: 66,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.glass,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  calDaySel: {
+    backgroundColor: Colors.neon.lime,
+    borderColor: Colors.neon.lime,
+  },
+  calDayTd: {
+    borderWidth: 1.5,
+    borderColor: `${Colors.neon.lime}60`,
+  },
+  calDayN: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  calDayNum: {
+    fontSize: FontSize.lg,
+    color: Colors.text.primary,
+    fontWeight: FontWeight.bold,
+    marginTop: 2,
+  },
+  calDayTextSel: {
+    color: Colors.text.inverse,
+  },
+  tdDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.neon.lime,
+    marginTop: 3,
+  },
+  tdDotSel: {
+    backgroundColor: Colors.text.inverse,
+  },
+  calExpandBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.glass,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  calExpandIcon: {
+    color: Colors.neon.lime,
+    fontSize: 11,
+    fontWeight: FontWeight.bold,
+  },
+
+  // ── Month Calendar ─────────────────────────────────────────────────
+  monthCal: {
+    marginBottom: Spacing.md,
+    padding: Spacing.lg,
+  },
+  monthNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  monthNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.glass,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthNavArrow: { color: Colors.neon.lime, fontSize: 12, fontWeight: FontWeight.bold },
+  monthNavTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
+  },
+  monthDayHeaders: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  monthDayHeader: {
+    width: (SW - Spacing.lg * 2 - Spacing.lg * 2) / 7,
+    textAlign: 'center',
+    color: Colors.text.muted,
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+  },
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  monthDay: { width: (SW - Spacing.xl * 2) / 7, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-  monthDaySel: { backgroundColor: '#fff' },
-  monthDayTd: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10 },
-  monthDayEmpty: { width: (SW - Spacing.xl * 2) / 7, height: 38 },
-  monthDayText: { color: 'rgba(255,255,255,0.9)', fontSize: FontSize.sm, fontWeight: '600' },
-  monthDayTextSel: { color: Colors.primary[700], fontWeight: '800' },
-  monthDayTextTd: { color: '#fff', fontWeight: '800' },
-  monthTdDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#fff', position: 'absolute', bottom: 4 },
-  monthTdDotSel: { backgroundColor: Colors.primary[500] },
-  // Scroll
-  scroll: { padding: Spacing.lg, paddingBottom: 20 },
+  monthDay: {
+    width: (SW - Spacing.lg * 2 - Spacing.lg * 2) / 7,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  monthDaySel: { backgroundColor: Colors.neon.lime },
+  monthDayTd: { backgroundColor: Colors.neon.limeGlow, borderRadius: 10 },
+  monthDayEmpty: { width: (SW - Spacing.lg * 2 - Spacing.lg * 2) / 7, height: 36 },
+  monthDayText: { color: Colors.text.secondary, fontSize: FontSize.sm, fontWeight: FontWeight.medium },
+  monthDayTextSel: { color: Colors.text.inverse, fontWeight: FontWeight.bold },
+  monthDayTextTd: { color: Colors.neon.lime, fontWeight: FontWeight.bold },
+  monthTdDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.neon.lime, position: 'absolute', bottom: 2 },
+  monthTdDotSel: { backgroundColor: Colors.text.inverse },
+
+  // ── Skeleton ─────────────────────────────────────────────────────
   loadWrap: { alignItems: 'center', paddingVertical: Spacing['3xl'] },
-  loadTxt: { color: Colors.text.secondary, marginTop: Spacing.md, fontSize: FontSize.sm },
-  // Calorie card
-  calCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius['2xl'], padding: Spacing.xl, marginBottom: Spacing.md },
-  calCardTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text.primary },
-  calFormula: { fontSize: FontSize.xs, color: Colors.text.light, marginTop: 2, marginBottom: Spacing.md },
-  calBody: { flexDirection: 'row', alignItems: 'center' },
-  calStatsCol: { flex: 1, marginLeft: Spacing.xl, gap: Spacing.md },
-  // Macros
-  macroRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.md, marginBottom: Spacing.md },
-  macroItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  macroDivider: { width: 1, height: 36, backgroundColor: Colors.border },
-  // Grid
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.md },
-  dCard: { width: cardW, backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg },
-  dCardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.sm },
-  dCardTitle: { fontSize: FontSize.xs, color: Colors.text.secondary, fontWeight: '600', marginBottom: 2 },
-  dCardVal: { fontSize: FontSize.xl, fontWeight: '800' },
-  dCardSub: { fontSize: 11, color: Colors.text.light, marginTop: 2 },
-  // HC card
-  hcCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary[50], borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.primary[200], gap: Spacing.md },
-  hcIcon: { fontSize: 28 },
-  hcTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary[700] },
-  hcSub: { fontSize: FontSize.xs, color: Colors.primary[500], marginTop: 1 },
-  // Link card
-  linkCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, gap: Spacing.md },
-  linkIcon: { fontSize: 28 },
-  linkTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text.primary },
-  linkSub: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 1 },
-  // Diet
-  dietBtn: { backgroundColor: Colors.primary[50], borderRadius: BorderRadius.xl, padding: Spacing.md, marginBottom: Spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.primary[200], gap: Spacing.md },
-  dietTxt: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary[700] },
-  dietSub: { fontSize: FontSize.xs, color: Colors.primary[500], marginTop: 1 },
-  // Weight
-  wCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md },
-  wHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
-  wTitle: { fontSize: FontSize.base, fontWeight: '700', color: Colors.text.primary },
-  wAction: { fontSize: 22, color: Colors.text.light, fontWeight: '600' },
-  wVal: { fontSize: FontSize['2xl'], fontWeight: '900', color: Colors.text.primary },
-  wSub: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 2 },
+
+  // ── Calorie Ring Hero ────────────────────────────────────────────
+  ringSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+  },
+  ringValue: {
+    fontSize: 42,
+    fontWeight: FontWeight.black,
+    color: Colors.text.primary,
+    letterSpacing: -1.5,
+  },
+  ringLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+    marginTop: 2,
+  },
+  ringRemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  ringDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  ringRemText: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+  },
+
+  // ── Section titles ────────────────────────────────────────────────
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+
+  // ── Macro Card ────────────────────────────────────────────────────
+  macroCard: {
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+  },
+  macroCardGlow: {
+    position: 'absolute',
+    top: -30,
+    right: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(139,92,246,0.08)',
+  },
+  macroCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  macroCardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  macroCardTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
+  },
+  macroList: {
+    gap: Spacing.lg,
+  },
+  macroBarItem: {
+    gap: 6,
+  },
+  macroBarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  macroBarLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+  },
+  macroBarVal: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
+  macroBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  macroBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+
+  // ── Dual Card Row ─────────────────────────────────────────────────
+  dualCardRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  halfCard: {
+    width: HALF_W,
+    padding: Spacing.md,
+    overflow: 'hidden',
+  },
+  halfCardGlow: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(59,130,246,0.08)',
+  },
+  halfCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  halfCardIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  halfCardIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  halfCardTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
+  },
+
+  // Water
+  waterAddBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(59,130,246,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waterAddIcon: {
+    color: '#60a5fa',
+    fontSize: 16,
+    fontWeight: FontWeight.bold,
+    marginTop: -1,
+  },
+  waterContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  waterValue: {
+    fontSize: FontSize['2xl'],
+    fontWeight: FontWeight.extrabold,
+    color: Colors.text.primary,
+  },
+  waterGoalText: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+  },
+  waterDropRow: {
+    flexDirection: 'row',
+    gap: 3,
+    alignItems: 'flex-end',
+  },
+  waterDropBar: {
+    width: 6,
+    height: 22,
+    borderRadius: 3,
+  },
+  waterDropFilled: {
+    backgroundColor: '#3b82f6',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  waterDropEmpty: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+
+  // Steps
+  stepsValue: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.extrabold,
+    color: Colors.text.primary,
+  },
+  stepsGoalText: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+    marginTop: 1,
+  },
+  stepsExtraRow: {
+    marginTop: 4,
+  },
+  stepsBurnedText: {
+    fontSize: 10,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.medium,
+  },
+  stepsProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+  },
+  stepsBadgeText: {
+    position: 'absolute',
+    fontSize: 8,
+    fontWeight: FontWeight.bold,
+    color: '#22c55e',
+  },
+  stepsToGoText: {
+    fontSize: 9,
+    color: Colors.text.muted,
+    marginTop: 3,
+    fontWeight: FontWeight.medium,
+  },
+
+  // Mini progress bar (shared)
+  miniProgressTrack: {
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  miniProgressFill: {
+    height: '100%',
+    borderRadius: 2.5,
+  },
+
+  // ── Stats Row ─────────────────────────────────────────────────────
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius['2xl'],
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.extrabold,
+    color: Colors.text.primary,
+    letterSpacing: -0.5,
+  },
+  statUnit: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.medium,
+    color: Colors.text.secondary,
+  },
+  statLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.text.muted,
+    fontWeight: FontWeight.medium,
+    marginTop: 4,
+  },
+
+  // ── Meals Summary ─────────────────────────────────────────────────
+  mealsSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  mealsSummaryLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  mealsSummaryIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mealsSummaryTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
+  },
+  mealsSummarySub: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  mealsSummaryArrow: {
+    fontSize: 24,
+    color: Colors.text.muted,
+    fontWeight: FontWeight.medium,
+  },
+
+  // ── Quick Actions ─────────────────────────────────────────────────
+  quickActionsCard: {
+    padding: Spacing.xl,
+    marginBottom: Spacing.md,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
+  },
+  quickAction: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  quickActionGrad: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  quickActionLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    fontWeight: FontWeight.semibold,
+  },
+
+  // ── Health Connect Banner ─────────────────────────────────────────
+  hcBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    marginBottom: Spacing.sm,
+    gap: Spacing.md,
+  },
+  hcBannerIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hcBannerTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.neon.lime,
+  },
+  hcBannerSub: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
 });

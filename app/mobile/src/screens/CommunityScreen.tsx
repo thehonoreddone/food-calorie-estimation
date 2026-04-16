@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,13 +23,10 @@ import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   FadeIn,
   FadeInDown,
-  FadeOut,
   SlideInUp,
-  SlideInRight,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withTiming,
   withSequence,
 } from 'react-native-reanimated';
 import { useUser } from '../contexts/UserContext';
@@ -45,20 +42,39 @@ import {
   followUser,
   unfollowUser,
   isFollowingUser,
-  getFollowCounts,
   CommunityPost,
   CommunityComment,
   PostType,
   UserPublicProfile,
 } from '../services/firestoreService';
 import { uploadCommunityImage } from '../services/storageService';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { Spacing } from '../constants/theme';
 
 const { width: SW } = Dimensions.get('window');
 
-// ─── Avatar Color Generator ─────────────────────────────────────────────────
+// ─── Brand Colors ────────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = [
+const BRAND = {
+  green: '#22C55E',
+  greenDark: '#16A34A',
+  greenLight: '#DCFCE7',
+  orange: '#F97316',
+  orangeLight: '#FFF7ED',
+  blue: '#3B82F6',
+  blueLight: '#EFF6FF',
+  pink: '#EC4899',
+  pinkLight: '#FDF2F8',
+  bg: '#F0F0EA',
+  card: '#FFFFFF',
+  border: '#E5E7EB',
+  text: '#111827',
+  textSub: '#6B7280',
+  textMuted: '#9CA3AF',
+};
+
+// ─── Avatar Color Generator ──────────────────────────────────────────────────
+
+const AVATAR_COLORS: [string, string][] = [
   ['#6366f1', '#8b5cf6'],
   ['#ec4899', '#f43f5e'],
   ['#f97316', '#eab308'],
@@ -74,16 +90,15 @@ function getAvatarColors(name: string): [string, string] {
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length] as [string, string];
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-// ─── Time ago helper ────────────────────────────────────────────────────────
+// ─── Time ago helper ─────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diff = Math.floor((now - then) / 1000);
-
   if (diff < 60) return 'Az önce';
   if (diff < 3600) return `${Math.floor(diff / 60)} dk önce`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} sa önce`;
@@ -91,7 +106,123 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('tr-TR');
 }
 
-// ─── Skeleton Loader ────────────────────────────────────────────────────────
+// ─── Macro Pill ──────────────────────────────────────────────────────────────
+
+type MacroColor = 'green' | 'orange' | 'blue' | 'pink';
+
+interface MacroPillProps {
+  label: string;
+  value: string;
+  color: MacroColor;
+}
+
+const MACRO_COLORS = {
+  green:  { bg: BRAND.green,  text: '#fff' },
+  orange: { bg: BRAND.orange, text: '#fff' },
+  blue:   { bg: BRAND.blue,   text: '#fff' },
+  pink:   { bg: BRAND.pink,   text: '#fff' },
+};
+
+function MacroPill({ label, value, color }: MacroPillProps) {
+  const c = MACRO_COLORS[color];
+  return (
+    <View style={[styles.macroPill, { backgroundColor: c.bg }]}>
+      <Text style={[styles.macroPillText, { color: c.text }]}>
+        {label ? `${value} ${label}` : value}
+      </Text>
+    </View>
+  );
+}
+
+// ─── Stories Row (Daily Goals Hit) ──────────────────────────────────────────
+
+interface StoryUser {
+  id: string;
+  name: string;
+  uid: string;
+  streak?: number;
+  goalCompleted?: boolean;
+  hasNewStory?: boolean;
+}
+
+interface StoriesRowProps {
+  currentUserId: string;
+  onUserPress: (uid: string) => void;
+}
+
+// Static story placeholders (in real app, fetch from the following feed)
+const STORY_PLACEHOLDERS: StoryUser[] = [
+  { id: 's1', name: 'Sarah', uid: 'placeholder1', streak: 12, goalCompleted: true, hasNewStory: true },
+  { id: 's2', name: 'Mike', uid: 'placeholder2', streak: 7, goalCompleted: true, hasNewStory: true },
+  { id: 's3', name: 'Emma', uid: 'placeholder3', streak: 21, goalCompleted: true, hasNewStory: true },
+  { id: 's4', name: 'James', uid: 'placeholder4', streak: 5, goalCompleted: true, hasNewStory: false },
+  { id: 's5', name: 'Lily', uid: 'placeholder5', streak: 14, goalCompleted: true, hasNewStory: true },
+  { id: 's6', name: 'Alex', uid: 'placeholder6', streak: 3, goalCompleted: true, hasNewStory: false },
+];
+
+function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
+  return (
+    <View style={styles.storiesContainer}>
+      <View style={styles.storiesHeader}>
+        <Text style={styles.storiesHeaderIcon}>🔥</Text>
+        <Text style={styles.storiesHeaderText}>DAILY GOALS HIT</Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.storiesList}
+      >
+        {STORY_PLACEHOLDERS.map(user => {
+          const avatarColors = getAvatarColors(user.name);
+          return (
+            <TouchableOpacity
+              key={user.id}
+              style={styles.storyItem}
+              onPress={() => onUserPress(user.uid)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.storyAvatarWrap}>
+                {/* Ring */}
+                <View style={[
+                  styles.storyRing,
+                  user.hasNewStory ? styles.storyRingActive : styles.storyRingInactive
+                ]}>
+                  <LinearGradient
+                    colors={avatarColors}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.storyAvatar}
+                  >
+                    <Text style={styles.storyAvatarText}>
+                      {user.name[0].toUpperCase()}
+                    </Text>
+                  </LinearGradient>
+                </View>
+
+                {/* Goal completed tick */}
+                {user.goalCompleted && (
+                  <View style={styles.storyTick}>
+                    <Text style={styles.storyTickIcon}>✓</Text>
+                  </View>
+                )}
+
+                {/* Streak badge (>=7) */}
+                {user.streak && user.streak >= 7 && (
+                  <View style={styles.storyStreak}>
+                    <Text style={styles.storyStreakText}>🔥{user.streak}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.storyName} numberOfLines={1}>{user.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── Skeleton Post ───────────────────────────────────────────────────────────
 
 function SkeletonPost() {
   return (
@@ -103,17 +234,17 @@ function SkeletonPost() {
           <View style={[styles.skeletonRect, { width: '25%', height: 10 }]} />
         </View>
       </View>
-      <View style={[styles.skeletonRect, { width: '100%', height: 14, marginHorizontal: 16, marginBottom: 8 }]} />
-      <View style={[styles.skeletonRect, { width: '100%', height: SW * 0.55, borderRadius: 0 }]} />
+      <View style={[styles.skeletonRect, { width: '100%', height: SW * 0.6, borderRadius: 0 }]} />
       <View style={{ padding: Spacing.md, gap: 8 }}>
         <View style={[styles.skeletonRect, { width: '30%', height: 14 }]} />
+        <View style={[styles.skeletonRect, { width: '75%', height: 12 }]} />
         <View style={[styles.skeletonRect, { width: '60%', height: 12 }]} />
       </View>
     </View>
   );
 }
 
-// ─── User Profile Modal ─────────────────────────────────────────────────────
+// ─── User Profile Modal ──────────────────────────────────────────────────────
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -182,14 +313,13 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
       <View style={styles.profileModalOverlay}>
         <Animated.View entering={SlideInUp.springify()} style={styles.profileModalContent}>
           <View style={styles.modalHandle} />
-          
+
           {loading ? (
             <View style={{ alignItems: 'center', padding: 40 }}>
-              <ActivityIndicator size="large" color={Colors.primary[500]} />
+              <ActivityIndicator size="large" color={BRAND.green} />
             </View>
           ) : profile ? (
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Profile header */}
               <View style={styles.profileHeader}>
                 <LinearGradient
                   colors={avatarColors}
@@ -204,7 +334,6 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
                 <Text style={styles.profileName}>{profile.name}</Text>
               </View>
 
-              {/* Stats */}
               <View style={styles.profileStatsRow}>
                 <View style={styles.profileStatItem}>
                   <Text style={styles.profileStatNum}>{userPosts.length}</Text>
@@ -222,7 +351,6 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
                 </View>
               </View>
 
-              {/* Follow button */}
               {!isSelf && (
                 <TouchableOpacity
                   style={[styles.followBtn, isFollowing && styles.followBtnActive]}
@@ -230,7 +358,7 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
                   disabled={followLoading}
                 >
                   {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? Colors.primary[500] : '#fff'} />
+                    <ActivityIndicator size="small" color={isFollowing ? BRAND.green : '#fff'} />
                   ) : (
                     <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
                       {isFollowing ? '✓ Takip Ediliyor' : '+ Takip Et'}
@@ -239,7 +367,6 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
                 </TouchableOpacity>
               )}
 
-              {/* User's posts */}
               {userPosts.length > 0 && (
                 <View style={styles.profilePostsSection}>
                   <Text style={styles.profilePostsTitle}>Paylaşımlar</Text>
@@ -273,7 +400,7 @@ function UserProfileModal({ visible, onClose, targetUid, currentUid, currentUser
   );
 }
 
-// ─── Post Card ──────────────────────────────────────────────────────────────
+// ─── Post Card ───────────────────────────────────────────────────────────────
 
 interface PostCardProps {
   post: CommunityPost;
@@ -288,7 +415,8 @@ interface PostCardProps {
 function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete, onUserPress, index }: PostCardProps) {
   const [liked, setLiked] = useState(post.likedByMe ?? false);
   const [likesCount, setLikesCount] = useState(post.likesCount ?? 0);
-  const [likedByUsers, setLikedByUsers] = useState<string[]>(post.likedByUsers ?? []);
+  const [inspired, setInspired] = useState(false);
+  const [inspireCount, setInspireCount] = useState(Math.floor(Math.random() * 80) + 10);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -302,23 +430,18 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
     const wasLiked = liked;
     setLiked(!wasLiked);
     setLikesCount(prev => wasLiked ? prev - 1 : prev + 1);
-
-    // Update likedByUsers
-    if (!wasLiked) {
-      setLikedByUsers(prev => {
-        const newList = [currentUsername, ...prev.filter(u => u !== currentUsername)];
-        return newList.slice(0, 5);
-      });
-    } else {
-      setLikedByUsers(prev => prev.filter(u => u !== currentUsername));
-    }
-
     likeScale.value = withSequence(
       withSpring(1.4, { damping: 4, stiffness: 400 }),
       withSpring(1, { damping: 6 }),
     );
-
     onLikeToggle(post.id!, wasLiked);
+  };
+
+  const handleInspire = () => {
+    setInspired(prev => {
+      setInspireCount(c => prev ? c - 1 : c + 1);
+      return !prev;
+    });
   };
 
   const likeAnimStyle = useAnimatedStyle(() => ({
@@ -359,16 +482,25 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
       'Bu paylaşımı silmek istediğinizden emin misiniz?',
       [
         { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: () => onDelete(post.id!),
-        },
+        { text: 'Sil', style: 'destructive', onPress: () => onDelete(post.id!) },
       ]
     );
   };
 
   const isOwnPost = post.uid === currentUserId;
+
+  // Build macro pills from post data
+  const macroPills: { label: string; value: string; color: MacroColor }[] = [];
+  if (post.mealName) {
+    // Show protein if available
+    macroPills.push({ label: 'Protein', value: '—', color: 'green' });
+  }
+  if (post.calories) {
+    macroPills.push({ label: '', value: `${post.calories} kcal`, color: 'orange' });
+  }
+  if (post.mealName && !post.calories) {
+    // Meal without calories just show meal badge
+  }
 
   return (
     <Animated.View
@@ -391,10 +523,14 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
         </TouchableOpacity>
         <TouchableOpacity style={{ flex: 1 }} onPress={() => onUserPress(post.uid)} activeOpacity={0.7}>
           <Text style={styles.username}>{post.username || 'Anonim'}</Text>
-          <Text style={styles.timeAgo}>{timeAgo(post.createdAt || '')}</Text>
+          <Text style={styles.usernameHandle}>@{(post.username || 'user').toLowerCase().replace(/\s+/g, '')}</Text>
         </TouchableOpacity>
         {isOwnPost && (
-          <TouchableOpacity onPress={() => setShowMenu(!showMenu)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity
+            onPress={() => setShowMenu(!showMenu)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.moreBtn}
+          >
             <Text style={styles.moreIcon}>•••</Text>
           </TouchableOpacity>
         )}
@@ -412,27 +548,51 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
         </Animated.View>
       )}
 
-      {/* Description / Text content */}
-      {post.description ? (
-        <Text style={styles.postText}>{post.description}</Text>
-      ) : null}
-
-      {/* Image */}
+      {/* Image with macro overlay */}
       {post.imageUrl ? (
-        <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
-      ) : null}
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
 
-      {/* Meal info badge */}
-      {post.mealName ? (
-        <View style={styles.mealInfoRow}>
-          <View style={styles.mealBadge}>
-            <Text style={styles.mealBadgeText}>🍽️ {post.mealName}</Text>
+          {/* Avatar overlay bottom-right */}
+          <View style={styles.imageAvatarOverlay}>
+            <LinearGradient
+              colors={avatarColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.imageAvatarSmall}
+            >
+              <Text style={styles.imageAvatarSmallText}>
+                {(post.username || '?')[0].toUpperCase()}
+              </Text>
+            </LinearGradient>
           </View>
-          {post.calories ? (
-            <View style={styles.calorieBadge}>
-              <Text style={styles.calorieText}>🔥 {post.calories} kcal</Text>
+
+          {/* Macro pills overlay */}
+          {(post.mealName || post.calories) ? (
+            <View style={styles.macroPillsOverlay}>
+              {post.calories ? (
+                <MacroPill label="Protein" value="—" color="green" />
+              ) : null}
+              {post.calories ? (
+                <MacroPill label="" value={`${post.calories} kcal`} color="orange" />
+              ) : null}
+              {post.mealName ? (
+                <MacroPill label="" value={`🍽️ ${post.mealName}`} color="blue" />
+              ) : null}
             </View>
           ) : null}
+        </View>
+      ) : null}
+
+      {/* Text content */}
+      {post.description ? (
+        <View style={styles.captionContainer}>
+          <Text style={styles.captionText} numberOfLines={3}>
+            <Text style={styles.captionUsername}>
+              {(post.username || 'user').toLowerCase().replace(/\s+/g, '')}
+            </Text>
+            {' '}{post.description}
+          </Text>
         </View>
       ) : null}
 
@@ -442,44 +602,28 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
           <Animated.Text style={[styles.actionIcon, likeAnimStyle]}>
             {liked ? '❤️' : '🤍'}
           </Animated.Text>
+          <Text style={[styles.actionCount, liked && { color: '#ef4444' }]}>{likesCount}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleToggleComments} activeOpacity={0.7}>
           <Text style={styles.actionIcon}>💬</Text>
+          <Text style={styles.actionCount}>{post.commentsCount ?? 0}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtn} onPress={handleInspire} activeOpacity={0.7}>
+          <Text style={styles.actionIcon}>{inspired ? '⭐' : '✨'}</Text>
+          <Text style={[styles.actionCount, inspired && { color: '#f59e0b' }]}>{inspireCount}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Liked by list */}
-      {likesCount > 0 && (
-        <View style={styles.likedByRow}>
-          <Text style={styles.likedByIcon}>❤️</Text>
-          <Text style={styles.likedByText} numberOfLines={1}>
-            {likedByUsers.length > 0
-              ? likedByUsers.join(', ')
-              : `${likesCount} beğeni`
-            }
-            {likesCount > likedByUsers.length && likedByUsers.length > 0
-              ? ` ve ${likesCount - likedByUsers.length} diğer kişi`
-              : ''
-            }
-          </Text>
-        </View>
-      )}
-
-      {/* Comments count */}
-      {(post.commentsCount ?? 0) > 0 && !showComments && (
-        <TouchableOpacity onPress={handleToggleComments} style={styles.commentsCountRow}>
-          <Text style={styles.commentsCountText}>
-            💬 {post.commentsCount} yorum  ▸
-          </Text>
-        </TouchableOpacity>
-      )}
+      {/* Time ago */}
+      <Text style={styles.timeAgoText}>{timeAgo(post.createdAt || '')}</Text>
 
       {/* Comments section */}
       {showComments && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.commentSection}>
           {loadingComments ? (
-            <ActivityIndicator size="small" color={Colors.primary[500]} style={{ padding: 8 }} />
+            <ActivityIndicator size="small" color={BRAND.green} style={{ padding: 8 }} />
           ) : (
             <>
               {comments.map(c => (
@@ -495,14 +639,13 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
             </>
           )}
 
-          {/* Comment input */}
           <View style={styles.commentInputRow}>
             <TextInput
               style={styles.commentInput}
               value={newComment}
               onChangeText={setNewComment}
               placeholder="Yorum yaz..."
-              placeholderTextColor="#666"
+              placeholderTextColor={BRAND.textMuted}
               maxLength={300}
             />
             <TouchableOpacity
@@ -519,7 +662,7 @@ function PostCard({ post, currentUserId, currentUsername, onLikeToggle, onDelete
   );
 }
 
-// ─── Create Post Modal ──────────────────────────────────────────────────────
+// ─── Create Post Modal ───────────────────────────────────────────────────────
 
 interface CreatePostModalProps {
   visible: boolean;
@@ -570,7 +713,6 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
         imageUri: imageUri || undefined,
         calories: postType === 'meal' && calories ? parseInt(calories, 10) : undefined,
       });
-      // Reset
       setPostType('text');
       setMealName('');
       setDescription('');
@@ -592,18 +734,13 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
           <Animated.View entering={SlideInUp.springify()} style={styles.modalContent}>
             <View style={styles.modalHandle} />
-
             <Text style={styles.modalTitle}>✨ Yeni Paylaşım</Text>
             <Text style={styles.modalSubtitle}>Topluluğa bir şeyler paylaş!</Text>
 
-            {/* Post type selector */}
             <View style={styles.postTypeRow}>
               {POST_TYPE_OPTIONS.map(opt => (
                 <TouchableOpacity
@@ -619,7 +756,6 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
               ))}
             </View>
 
-            {/* Description / text content */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>
                 {postType === 'text' ? 'Ne düşünüyorsun?' : 'Açıklama'}
@@ -629,19 +765,20 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
                 style={[styles.textInput, styles.textArea]}
                 value={description}
                 onChangeText={setDescription}
-                placeholder={postType === 'meal'
-                  ? "Bugün ne yaptın? Tarif, düşünceler..."
-                  : postType === 'text'
-                    ? "Ne düşünüyorsun? Neler oldu?"
-                    : "Fotoğraf hakkında bir şeyler yaz..."}
-                placeholderTextColor="#666"
+                placeholder={
+                  postType === 'meal'
+                    ? 'Bugün ne yaptın? Tarif, düşünceler...'
+                    : postType === 'text'
+                    ? 'Ne düşünüyorsun? Neler oldu?'
+                    : 'Fotoğraf hakkında bir şeyler yaz...'
+                }
+                placeholderTextColor={BRAND.textMuted}
                 multiline
                 maxLength={500}
                 textAlignVertical="top"
               />
             </View>
 
-            {/* Image picker (for photo & meal) */}
             {(postType === 'photo' || postType === 'meal' || imageUri) && (
               <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickImage} activeOpacity={0.7}>
                 {imageUri ? (
@@ -655,7 +792,6 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
               </TouchableOpacity>
             )}
 
-            {/* Meal-specific fields */}
             {postType === 'meal' && (
               <>
                 <View style={styles.inputGroup}>
@@ -665,7 +801,7 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
                     value={mealName}
                     onChangeText={setMealName}
                     placeholder="Örn: Tavuk & Pirinç"
-                    placeholderTextColor="#666"
+                    placeholderTextColor={BRAND.textMuted}
                     maxLength={60}
                   />
                 </View>
@@ -676,7 +812,7 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
                     value={calories}
                     onChangeText={setCalories}
                     placeholder="Örn: 450"
-                    placeholderTextColor="#666"
+                    placeholderTextColor={BRAND.textMuted}
                     keyboardType="numeric"
                     maxLength={5}
                   />
@@ -684,14 +820,12 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
               </>
             )}
 
-            {/* Text posts can also add photo */}
             {postType === 'text' && !imageUri && (
               <TouchableOpacity style={styles.addPhotoBtn} onPress={handlePickImage}>
                 <Text style={styles.addPhotoBtnText}>📷 Fotoğraf da ekle</Text>
               </TouchableOpacity>
             )}
 
-            {/* Actions */}
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose}>
                 <Text style={styles.modalCancelText}>İptal</Text>
@@ -715,14 +849,16 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
   );
 }
 
-// ─── Community Screen ───────────────────────────────────────────────────────
+// ─── Community Screen ─────────────────────────────────────────────────────────
+
+type FeedTab = 'forYou' | 'following' | 'trending';
 
 export function CommunityScreen() {
   const { profile } = useUser();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'recent' | 'popular'>('recent');
+  const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
@@ -733,11 +869,8 @@ export function CommunityScreen() {
 
   const fetchPosts = async () => {
     try {
-      const data = await getCommunityPosts(
-        activeTab === 'popular' ? 'popular' : 'recent',
-        20,
-        profile.uid
-      );
+      const sortBy = activeTab === 'trending' ? 'popular' : 'recent';
+      const data = await getCommunityPosts(sortBy, 20, profile.uid);
       setPosts(data);
     } catch (err) {
       console.warn('Failed to load posts:', err);
@@ -770,11 +903,15 @@ export function CommunityScreen() {
     }
   };
 
-  const handleCreatePost = async (data: { postType: PostType; mealName?: string; description: string; imageUri?: string; calories?: number }) => {
+  const handleCreatePost = async (data: {
+    postType: PostType;
+    mealName?: string;
+    description: string;
+    imageUri?: string;
+    calories?: number;
+  }) => {
     if (!profile.uid) return;
-
     let imageUrl: string | undefined;
-
     if (data.imageUri) {
       try {
         setUploadProgress('Fotoğraf yükleniyor...');
@@ -785,18 +922,13 @@ export function CommunityScreen() {
         setUploadProgress(null);
       }
     }
-
-    await createCommunityPost(
-      profile.uid,
-      profile.name || 'Kullanıcı',
-      {
-        postType: data.postType,
-        mealName: data.mealName,
-        calories: data.calories,
-        description: data.description,
-        imageUrl,
-      }
-    );
+    await createCommunityPost(profile.uid, profile.name || 'Kullanıcı', {
+      postType: data.postType,
+      mealName: data.mealName,
+      calories: data.calories,
+      description: data.description,
+      imageUrl,
+    });
     fetchPosts();
   };
 
@@ -816,48 +948,37 @@ export function CommunityScreen() {
     />
   );
 
-  const avatarColors = getAvatarColors(profile.name || 'A');
+  const TABS: { key: FeedTab; label: string }[] = [
+    { key: 'forYou', label: 'For You' },
+    { key: 'following', label: 'Following' },
+    { key: 'trending', label: 'Trending' },
+  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header — dark, minimal like reference */}
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <LinearGradient
-              colors={avatarColors}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.headerAvatar}
-            >
-              <Text style={styles.headerAvatarText}>
-                {(profile.name || '?')[0].toUpperCase()}
-              </Text>
-            </LinearGradient>
-            <View>
-              <Text style={styles.headerTitle}>Topluluk</Text>
-              <Text style={styles.headerSub}>Yemeklerini paylaş, ilham al!</Text>
-            </View>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerLogoCircle}>
+            <Text style={styles.headerLogoText}>N</Text>
           </View>
-          <TouchableOpacity style={styles.headerNotifBtn}>
-            <Text style={styles.headerNotifIcon}>🔔</Text>
+          <Text style={styles.headerTitle}>NourishFeed</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerIconBtn}>
+            <Text style={styles.headerIconText}>🔍</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn}>
+            <View style={styles.notifBadge} />
+            <Text style={styles.headerIconText}>🔔</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerAddBtn}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Text style={styles.headerAddIcon}>+</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabBar}>
-        {(['recent', 'popular'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => { setActiveTab(tab); setLoading(true); }}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab === 'recent' ? '🕒 Son' : '🔥 Popüler'}
-            </Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
       {/* Upload progress */}
@@ -868,28 +989,56 @@ export function CommunityScreen() {
         </Animated.View>
       )}
 
-      {/* Post list */}
-      {loading ? (
-        <View style={styles.skeletonWrap}>
-          <SkeletonPost />
-          <SkeletonPost />
-        </View>
-      ) : (
-        <FlatList
-          data={posts}
-          keyExtractor={item => item.id || Math.random().toString()}
-          renderItem={renderPost}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={Colors.primary[500]}
-              colors={[Colors.primary[500]]}
+      <FlatList
+        data={loading ? [] : posts}
+        keyExtractor={item => item.id || Math.random().toString()}
+        renderItem={renderPost}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={BRAND.green}
+            colors={[BRAND.green]}
+          />
+        }
+        ListHeaderComponent={
+          <>
+            {/* Stories / Daily Goals Row */}
+            <StoriesRow
+              currentUserId={profile.uid || ''}
+              onUserPress={handleUserPress}
             />
-          }
-          ListEmptyComponent={
+
+            {/* Tab bar */}
+            <View style={styles.tabBar}>
+              {TABS.map(tab => (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={styles.tab}
+                  onPress={() => { setActiveTab(tab.key); setLoading(true); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>
+                    {tab.label}
+                  </Text>
+                  {activeTab === tab.key && <View style={styles.tabIndicator} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Loading skeletons */}
+            {loading && (
+              <View style={{ gap: 0 }}>
+                <SkeletonPost />
+                <SkeletonPost />
+              </View>
+            )}
+          </>
+        }
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          !loading ? (
             <Animated.View entering={FadeIn.delay(200)} style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📭</Text>
               <Text style={styles.emptyTitle}>Henüz paylaşım yok</Text>
@@ -903,25 +1052,9 @@ export function CommunityScreen() {
                 <Text style={styles.emptyCreateText}>✍️ İlk Paylaşımı Yap</Text>
               </TouchableOpacity>
             </Animated.View>
-          }
-        />
-      )}
-
-      {/* FAB - Create Post */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowCreateModal(true)}
-        activeOpacity={0.85}
-      >
-        <LinearGradient
-          colors={['#6366f1', '#8b5cf6']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.fabGradient}
-        >
-          <Text style={styles.fabIcon}>✏️</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+          ) : null
+        }
+      />
 
       {/* Create Post Modal */}
       <CreatePostModal
@@ -942,124 +1075,279 @@ export function CommunityScreen() {
   );
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: BRAND.bg,
   },
-  // Header
+
+  // ── Header ──────────────────────────────────────────────────────────────
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.md,
-    backgroundColor: '#111',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e1e1e',
-  },
-  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: BRAND.card,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.border,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerLogoCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: BRAND.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerAvatarText: {
-    fontSize: 18,
-    fontWeight: '800',
+  headerLogoText: {
     color: '#fff',
+    fontWeight: '900',
+    fontSize: 18,
   },
   headerTitle: {
-    fontSize: FontSize.xl,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#fff',
+    color: BRAND.text,
+    letterSpacing: -0.3,
   },
-  headerSub: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 1,
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  headerNotifBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1e1e1e',
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerNotifIcon: {
-    fontSize: 18,
+  headerIconText: {
+    fontSize: 20,
   },
-  // Tabs
+  notifBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: BRAND.orange,
+    zIndex: 1,
+  },
+  headerAddBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: BRAND.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAddIcon: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '300',
+    lineHeight: 28,
+    marginTop: -2,
+  },
+
+  // ── Stories ─────────────────────────────────────────────────────────────
+  storiesContainer: {
+    backgroundColor: BRAND.card,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.border,
+  },
+  storiesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    gap: 6,
+  },
+  storiesHeaderIcon: {
+    fontSize: 14,
+  },
+  storiesHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: BRAND.textMuted,
+    letterSpacing: 1,
+  },
+  storiesList: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  storyItem: {
+    alignItems: 'center',
+    gap: 4,
+    marginHorizontal: 4,
+  },
+  storyAvatarWrap: {
+    position: 'relative',
+  },
+  storyRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    padding: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyRingActive: {
+    borderWidth: 2.5,
+    borderColor: BRAND.green,
+  },
+  storyRingInactive: {
+    borderWidth: 2,
+    borderColor: BRAND.border,
+  },
+  storyAvatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: BRAND.card,
+  },
+  storyAvatarText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  storyTick: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: BRAND.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: BRAND.card,
+  },
+  storyTickIcon: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '900',
+  },
+  storyStreak: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: BRAND.orange,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  storyStreakText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  storyName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: BRAND.text,
+    maxWidth: 68,
+    textAlign: 'center',
+  },
+
+  // ── Tab Bar ──────────────────────────────────────────────────────────────
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    gap: 8,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: BRAND.card,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: BorderRadius.lg,
+    paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-  },
-  activeTab: {
-    backgroundColor: '#6366f1',
+    position: 'relative',
   },
   tabText: {
-    fontSize: FontSize.sm,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#888',
+    color: BRAND.textSub,
   },
   activeTabText: {
+    color: BRAND.green,
+    fontWeight: '700',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '15%',
+    right: '15%',
+    height: 2.5,
+    backgroundColor: BRAND.green,
+    borderRadius: 2,
+  },
+
+  // ── Upload banner ────────────────────────────────────────────────────────
+  uploadBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: BRAND.green,
+  },
+  uploadBannerText: {
     color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
-  // Skeleton
-  skeletonWrap: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
+
+  // ── Skeleton ─────────────────────────────────────────────────────────────
   skeletonCircle: {
     borderRadius: 22,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#E5E7EB',
   },
   skeletonRect: {
     borderRadius: 8,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#E5E7EB',
   },
-  // List
+
+  // ── List ─────────────────────────────────────────────────────────────────
   listContent: {
-    padding: Spacing.md,
     paddingBottom: 100,
   },
-  // Card
+
+  // ── Card ─────────────────────────────────────────────────────────────────
   card: {
-    backgroundColor: '#151515',
-    borderRadius: 20,
-    marginBottom: Spacing.md,
+    backgroundColor: BRAND.card,
+    marginHorizontal: 0,
+    marginBottom: 8,
+    borderRadius: 0,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1e1e1e',
+    borderTopWidth: 0.5,
+    borderTopColor: BRAND.border,
+    borderBottomWidth: 0.5,
+    borderBottomColor: BRAND.border,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
   avatarContainer: {
     width: 44,
@@ -1069,584 +1357,534 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: FontSize.lg,
+    fontSize: 18,
     fontWeight: '800',
     color: '#fff',
   },
   username: {
-    fontSize: FontSize.sm,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#e0e0e0',
+    color: BRAND.text,
   },
-  timeAgo: {
-    fontSize: 11,
-    color: '#666',
+  usernameHandle: {
+    fontSize: 12,
+    color: BRAND.textSub,
     marginTop: 1,
   },
+  moreBtn: {
+    padding: 4,
+  },
   moreIcon: {
-    fontSize: FontSize.lg,
-    color: '#666',
+    fontSize: 16,
+    color: BRAND.textMuted,
     fontWeight: '900',
     letterSpacing: 1,
   },
-  // Menu dropdown
+
+  // ── Menu dropdown ─────────────────────────────────────────────────────────
   menuDropdown: {
-    backgroundColor: '#1e1e1e',
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
+    backgroundColor: '#F9FAFB',
+    marginHorizontal: 16,
+    marginBottom: 8,
     borderRadius: 12,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: BRAND.border,
   },
   menuItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomWidth: 0.5,
+    borderBottomColor: BRAND.border,
   },
   menuItemText: {
-    color: '#ccc',
-    fontSize: FontSize.sm,
+    color: BRAND.textSub,
+    fontSize: 14,
     fontWeight: '600',
   },
   menuItemTextDanger: {
     color: '#ef4444',
-    fontSize: FontSize.sm,
+    fontSize: 14,
     fontWeight: '600',
   },
-  // Post content
-  postText: {
-    fontSize: FontSize.base,
-    color: '#e0e0e0',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.sm,
-    lineHeight: 22,
+
+  // ── Image & Macro Pills ───────────────────────────────────────────────────
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: SW * 0.72,
   },
   postImage: {
     width: '100%',
-    height: SW * 0.6,
-    backgroundColor: '#111',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
   },
-  // Meal info
-  mealInfoRow: {
-    flexDirection: 'row',
+  imageAvatarOverlay: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+  },
+  imageAvatarSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
-  mealBadge: {
-    backgroundColor: 'rgba(34,197,94,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.3)',
+  imageAvatarSmallText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#fff',
   },
-  mealBadgeText: {
-    fontSize: FontSize.xs,
+  macroPillsOverlay: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  macroPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  macroPillText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#22c55e',
   },
-  calorieBadge: {
-    backgroundColor: 'rgba(249,115,22,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(249,115,22,0.3)',
+
+  // ── Caption ───────────────────────────────────────────────────────────────
+  captionContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
-  calorieText: {
-    fontSize: FontSize.xs,
+  captionText: {
+    fontSize: 14,
+    color: BRAND.text,
+    lineHeight: 20,
+  },
+  captionUsername: {
     fontWeight: '700',
-    color: '#f97316',
+    color: BRAND.text,
   },
-  // Actions
+
+  // ── Actions ───────────────────────────────────────────────────────────────
   actions: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    paddingBottom: 6,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 20,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
   actionIcon: {
     fontSize: 22,
   },
-  // Liked by
-  likedByRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  likedByIcon: {
-    fontSize: 12,
-  },
-  likedByText: {
-    fontSize: 12,
-    color: '#ccc',
+  actionCount: {
+    fontSize: 14,
     fontWeight: '600',
-    flex: 1,
+    color: BRAND.textSub,
   },
-  // Comments count
-  commentsCountRow: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.sm,
-  },
-  commentsCountText: {
+  timeAgoText: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     fontSize: 12,
-    color: '#888',
-    fontWeight: '600',
+    color: BRAND.textMuted,
   },
-  // Comments
+
+  // ── Comment Section ───────────────────────────────────────────────────────
   commentSection: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: '#1e1e1e',
-    marginTop: 4,
+    borderTopWidth: 0.5,
+    borderTopColor: BRAND.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
   },
   commentItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    marginBottom: 8,
   },
   commentUser: {
-    fontSize: FontSize.xs,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#e0e0e0',
-    marginBottom: 2,
+    color: BRAND.text,
   },
   commentContent: {
-    fontSize: FontSize.xs,
-    color: '#bbb',
-    lineHeight: 18,
+    fontSize: 13,
+    color: BRAND.textSub,
+    marginTop: 2,
   },
   commentTime: {
-    fontSize: 10,
-    color: '#555',
+    fontSize: 11,
+    color: BRAND.textMuted,
     marginTop: 2,
   },
   noComments: {
-    fontSize: FontSize.xs,
-    color: '#666',
+    fontSize: 13,
+    color: BRAND.textMuted,
     textAlign: 'center',
-    paddingVertical: Spacing.md,
+    paddingVertical: 8,
   },
   commentInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: Spacing.sm,
+    marginTop: 4,
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: FontSize.sm,
-    color: '#e0e0e0',
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: BRAND.border,
+    fontSize: 13,
+    color: BRAND.text,
   },
   sendBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
+    borderRadius: 19,
+    backgroundColor: BRAND.green,
   },
   sendBtnText: {
     color: '#fff',
-    fontSize: FontSize.xs,
     fontWeight: '700',
+    fontSize: 13,
   },
-  // Empty state
+
+  // ── Empty State ───────────────────────────────────────────────────────────
   emptyState: {
     alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
-    paddingHorizontal: Spacing.xl,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
   },
   emptyIcon: {
-    fontSize: 64,
-    marginBottom: Spacing.md,
+    fontSize: 48,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: FontSize.xl,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#e0e0e0',
+    color: BRAND.text,
+    marginBottom: 8,
   },
   emptyDesc: {
-    fontSize: FontSize.sm,
-    color: '#888',
-    marginTop: 6,
+    fontSize: 14,
+    color: BRAND.textSub,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+    marginBottom: 20,
   },
   emptyCreateBtn: {
-    marginTop: Spacing.xl,
-    backgroundColor: '#6366f1',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: BorderRadius.lg,
+    borderRadius: 24,
+    backgroundColor: BRAND.green,
   },
   emptyCreateText: {
     color: '#fff',
-    fontSize: FontSize.base,
     fontWeight: '700',
+    fontSize: 15,
   },
-  // FAB
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    ...Shadows.lg,
-    zIndex: 50,
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabIcon: {
-    fontSize: 24,
-  },
-  // Modal
+
+  // ── Create Post Modal ─────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalContent: {
-    backgroundColor: '#151515',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
-    maxHeight: '92%',
+    backgroundColor: BRAND.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '90%',
   },
   modalHandle: {
     width: 40,
     height: 4,
+    backgroundColor: BRAND.border,
     borderRadius: 2,
-    backgroundColor: '#333',
     alignSelf: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
   },
   modalTitle: {
-    fontSize: FontSize.xl,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#e0e0e0',
-    textAlign: 'center',
+    color: BRAND.text,
+    marginBottom: 4,
   },
   modalSubtitle: {
-    fontSize: FontSize.sm,
-    color: '#888',
-    textAlign: 'center',
-    marginTop: 2,
-    marginBottom: Spacing.lg,
+    fontSize: 14,
+    color: BRAND.textSub,
+    marginBottom: 20,
   },
-  // Post type
   postTypeRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
   },
   postTypeBtn: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
     paddingVertical: 10,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: BRAND.border,
+    gap: 4,
   },
   postTypeBtnActive: {
-    backgroundColor: 'rgba(99,102,241,0.15)',
-    borderColor: '#6366f1',
+    backgroundColor: BRAND.greenLight,
+    borderColor: BRAND.green,
   },
   postTypeIcon: {
-    fontSize: 16,
+    fontSize: 20,
   },
   postTypeLabel: {
-    fontSize: FontSize.sm,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#888',
+    color: BRAND.textSub,
   },
   postTypeLabelActive: {
-    color: '#6366f1',
+    color: BRAND.greenDark,
   },
-  // Image picker
+  inputGroup: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: BRAND.textSub,
+    marginBottom: 6,
+  },
+  textInput: {
+    borderWidth: 1.5,
+    borderColor: BRAND.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: BRAND.text,
+    backgroundColor: '#FAFAFA',
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
   imagePickerBtn: {
-    borderRadius: BorderRadius.xl,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: Spacing.md,
-    borderWidth: 2,
-    borderColor: '#2a2a2a',
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: BRAND.border,
     borderStyle: 'dashed',
   },
   imagePickerPlaceholder: {
     height: 120,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#F9FAFB',
+    gap: 8,
   },
   imagePickerIcon: {
-    fontSize: 36,
-    marginBottom: 6,
+    fontSize: 32,
   },
   imagePickerText: {
-    fontSize: FontSize.sm,
-    color: '#666',
+    fontSize: 14,
+    color: BRAND.textSub,
     fontWeight: '600',
   },
   pickedImage: {
     width: '100%',
-    height: 180,
+    height: 200,
   },
   addPhotoBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: '#1a1a1a',
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    paddingVertical: 10,
+    marginBottom: 14,
+    alignItems: 'center',
   },
   addPhotoBtnText: {
-    color: '#888',
-    fontSize: FontSize.sm,
+    fontSize: 14,
+    color: BRAND.green,
     fontWeight: '600',
   },
-  // Input
-  inputGroup: {
-    marginBottom: Spacing.md,
-  },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#888',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  textInput: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: FontSize.base,
-    color: '#e0e0e0',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-  },
-  // Modal actions
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: Spacing.md,
+    gap: 10,
+    marginTop: 4,
   },
   modalCancelBtn: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderRadius: 14,
     alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: BRAND.border,
   },
   modalCancelText: {
-    color: '#888',
-    fontWeight: '600',
-    fontSize: FontSize.base,
+    fontSize: 15,
+    fontWeight: '700',
+    color: BRAND.textSub,
   },
   modalSubmitBtn: {
     flex: 2,
     paddingVertical: 14,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: '#6366f1',
+    borderRadius: 14,
     alignItems: 'center',
+    backgroundColor: BRAND.green,
   },
   modalSubmitText: {
+    fontSize: 15,
+    fontWeight: '800',
     color: '#fff',
-    fontWeight: '700',
-    fontSize: FontSize.base,
   },
-  // Upload progress banner
-  uploadBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6366f1',
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    gap: 8,
-  },
-  uploadBannerText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
-  // Profile Modal
+
+  // ── User Profile Modal ────────────────────────────────────────────────────
   profileModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   profileModalContent: {
-    backgroundColor: '#151515',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
+    backgroundColor: BRAND.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
     maxHeight: '85%',
   },
   profileHeader: {
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    paddingVertical: 20,
+    gap: 12,
   },
   profileAvatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
   },
   profileAvatarText: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 34,
+    fontWeight: '900',
     color: '#fff',
   },
   profileName: {
-    fontSize: FontSize.xl,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#e0e0e0',
+    color: BRAND.text,
   },
   profileStatsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#F9FAFB',
     borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    marginBottom: Spacing.lg,
-    gap: 0,
+    padding: 16,
+    marginBottom: 16,
   },
   profileStatItem: {
     flex: 1,
     alignItems: 'center',
+    gap: 4,
   },
   profileStatNum: {
-    fontSize: FontSize.xl,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#e0e0e0',
+    color: BRAND.text,
   },
   profileStatLabel: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: '600',
-    marginTop: 2,
+    fontSize: 12,
+    color: BRAND.textSub,
+    fontWeight: '500',
   },
   profileStatDivider: {
     width: 1,
-    height: 30,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: BRAND.border,
+    marginVertical: 4,
   },
   followBtn: {
     paddingVertical: 12,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: '#6366f1',
+    borderRadius: 14,
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    backgroundColor: BRAND.green,
+    marginBottom: 16,
   },
   followBtnActive: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#6366f1',
+    backgroundColor: BRAND.greenLight,
+    borderWidth: 1.5,
+    borderColor: BRAND.green,
   },
   followBtnText: {
-    color: '#fff',
+    fontSize: 15,
     fontWeight: '700',
-    fontSize: FontSize.base,
+    color: '#fff',
   },
   followBtnTextActive: {
-    color: '#6366f1',
+    color: BRAND.greenDark,
   },
   profilePostsSection: {
-    marginTop: Spacing.sm,
+    gap: 12,
   },
   profilePostsTitle: {
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    color: '#e0e0e0',
-    marginBottom: Spacing.md,
+    fontSize: 16,
+    fontWeight: '800',
+    color: BRAND.text,
   },
   profilePostCard: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: BRAND.border,
   },
   profilePostImage: {
     width: '100%',
-    height: 150,
+    height: 180,
   },
   profilePostDesc: {
-    fontSize: FontSize.sm,
-    color: '#ccc',
+    fontSize: 13,
+    color: BRAND.textSub,
     padding: 12,
     lineHeight: 20,
   },
   profilePostMeal: {
-    fontSize: FontSize.xs,
-    color: '#22c55e',
+    fontSize: 13,
+    fontWeight: '700',
+    color: BRAND.green,
     paddingHorizontal: 12,
     paddingBottom: 8,
-    fontWeight: '600',
   },
   profilePostTime: {
-    fontSize: 10,
-    color: '#555',
+    fontSize: 11,
+    color: BRAND.textMuted,
     paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   profileNotFound: {
-    color: '#888',
+    fontSize: 16,
+    color: BRAND.textSub,
     textAlign: 'center',
-    padding: 40,
-    fontSize: FontSize.base,
+    paddingVertical: 40,
   },
   profileCloseBtn: {
     paddingVertical: 14,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderRadius: 14,
     alignItems: 'center',
-    marginTop: Spacing.md,
+    backgroundColor: '#F3F4F6',
+    marginTop: 12,
   },
   profileCloseBtnText: {
-    color: '#888',
-    fontWeight: '600',
-    fontSize: FontSize.base,
+    fontSize: 15,
+    fontWeight: '700',
+    color: BRAND.textSub,
   },
 });

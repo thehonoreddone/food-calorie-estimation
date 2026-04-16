@@ -4,7 +4,9 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { OnboardingLayout } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
-import { Colors, FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+
+const NEON_GREEN = '#2DD4A0';
 
 export default function DietCheckScreen() {
   const { updateProfile } = useUser();
@@ -14,8 +16,6 @@ export default function DietCheckScreen() {
     if (!hasRestrictions) {
       updateProfile({ dietPreferences: ['standard'] });
     }
-    // If yes, we could navigate to a detailed diet selection screen,
-    // but for simplicity we continue to health screen
     router.push('/onboarding/health');
   };
 
@@ -24,26 +24,27 @@ export default function DietCheckScreen() {
       stepKey="diet-check"
       title="Yiyecek kısıtlamalarınız veya alerjileriniz var mı?"
       illustration={
-        <View style={styles.illustrationRow}>
-          <Text style={styles.illustrationEmoji}>🥦</Text>
-          <Text style={styles.illustrationEmoji}>🥖</Text>
+        <View style={styles.iconBox}>
+          <Text style={styles.iconEmoji}>🥦</Text>
         </View>
       }
     >
       <View style={styles.buttonRow}>
         <TouchableOpacity
           onPress={() => handleAnswer(true)}
-          activeOpacity={0.7}
+          activeOpacity={0.75}
           style={styles.answerCard}
         >
+          <Text style={styles.answerIcon}>✅</Text>
           <Text style={styles.answerText}>Evet</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => handleAnswer(false)}
-          activeOpacity={0.7}
+          activeOpacity={0.75}
           style={styles.answerCard}
         >
+          <Text style={styles.answerIcon}>❌</Text>
           <Text style={styles.answerText}>Hayır</Text>
         </TouchableOpacity>
       </View>
@@ -52,13 +53,15 @@ export default function DietCheckScreen() {
 }
 
 const styles = StyleSheet.create({
-  illustrationRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  iconBox: {
+    width: 76, height: 76, borderRadius: 20,
+    backgroundColor: 'rgba(45,212,160,0.13)',
+    borderWidth: 1, borderColor: 'rgba(45,212,160,0.28)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: NEON_GREEN, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
-  illustrationEmoji: {
-    fontSize: 72,
-  },
+  iconEmoji: { fontSize: 38 },
   buttonRow: {
     flexDirection: 'row',
     gap: Spacing.lg,
@@ -66,14 +69,18 @@ const styles = StyleSheet.create({
   },
   answerCard: {
     flex: 1,
-    backgroundColor: '#EDF2F7',
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.xl,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: BorderRadius.xl,
+    paddingVertical: Spacing['2xl'],
     alignItems: 'center',
+    gap: Spacing.sm,
   },
+  answerIcon: { fontSize: 32 },
   answerText: {
     fontSize: FontSize.lg,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
   },
 });

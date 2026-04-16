@@ -83,10 +83,12 @@ export default function SignupScreen() {
   );
 }
 
+const NEON_GREEN = '#2DD4A0';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#080E0C',
   },
   content: {
     flex: 1,
@@ -111,13 +113,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize['3xl'],
     fontWeight: '800',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
     textAlign: 'center',
     lineHeight: 40,
   },
   subtitle: {
     fontSize: FontSize.base,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.50)',
     textAlign: 'center',
     marginTop: Spacing.md,
     lineHeight: 24,
@@ -137,36 +139,36 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   emailButton: {
-    backgroundColor: Colors.primary[500],
+    backgroundColor: NEON_GREEN,
   },
   loginButton: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: Colors.neutral[300],
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   emailIcon: {
     fontSize: 18,
   },
   socialButtonText: {
     fontSize: FontSize.base,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#030E08',
   },
   socialButtonTextDark: {
     fontSize: FontSize.base,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.55)',
   },
   termsText: {
     fontSize: FontSize.xs,
-    color: Colors.text.light,
+    color: 'rgba(255,255,255,0.30)',
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing['3xl'],
   },
   termsLink: {
-    color: Colors.primary[600],
+    color: NEON_GREEN,
     textDecorationLine: 'underline',
   },
 });

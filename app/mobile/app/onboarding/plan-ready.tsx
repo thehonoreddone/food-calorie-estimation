@@ -212,6 +212,8 @@ export default function PlanReadyScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* BG orbs */}
+      <View style={styles.orbLarge} />
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.backCircle}>
@@ -329,10 +331,18 @@ export default function PlanReadyScreen() {
   );
 }
 
+const NEON_GREEN = '#2DD4A0';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#080E0C',
+    overflow: 'hidden',
+  },
+  orbLarge: {
+    position: 'absolute', top: -70, left: -70,
+    width: 220, height: 220, borderRadius: 110,
+    backgroundColor: 'rgba(45,212,160,0.28)', opacity: 0.9,
   },
   header: {
     flexDirection: 'row',
@@ -342,29 +352,21 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   backCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.neutral[100],
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
   },
   backArrow: {
-    fontSize: 22,
-    color: Colors.text.primary,
-    marginTop: -2,
+    fontSize: 20, color: '#F0FDF4', marginTop: -2,
   },
   progressWrapper: { flex: 1 },
   progressTrack: {
-    height: 4,
-    backgroundColor: Colors.neutral[200],
-    borderRadius: 2,
-    overflow: 'hidden',
+    height: 4, backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 2, overflow: 'hidden',
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: Colors.text.primary,
-    borderRadius: 2,
+    height: '100%', backgroundColor: NEON_GREEN, borderRadius: 2,
   },
   scrollContent: {
     paddingBottom: Spacing['3xl'],
@@ -375,128 +377,83 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl,
   },
   congratsText: {
-    fontSize: FontSize['3xl'],
-    fontWeight: '800',
-    color: Colors.text.primary,
+    fontSize: FontSize['3xl'], fontWeight: '800', color: '#F0FDF4',
   },
   planReadyText: {
-    fontSize: FontSize['2xl'],
-    fontWeight: '800',
-    color: Colors.text.primary,
+    fontSize: FontSize['2xl'], fontWeight: '800', color: NEON_GREEN,
     marginTop: Spacing.xs,
   },
   maintainLabel: {
-    fontSize: FontSize.base,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-    marginTop: Spacing.xl,
+    fontSize: FontSize.base, fontWeight: '600',
+    color: 'rgba(255,255,255,0.50)', marginTop: Spacing.xl,
   },
   weightBadge: {
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: 'rgba(45,212,160,0.12)',
+    borderWidth: 1, borderColor: 'rgba(45,212,160,0.30)',
     borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md,
     marginTop: Spacing.sm,
   },
   weightText: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-    color: Colors.text.primary,
+    fontSize: FontSize.lg, fontWeight: '700', color: NEON_GREEN,
   },
   recommendSection: {
-    paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.xl, marginTop: Spacing.lg,
   },
   recommendTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text.primary,
+    fontSize: FontSize.xl, fontWeight: '700', color: '#F0FDF4',
   },
   recommendSubtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xl,
+    fontSize: FontSize.sm, color: 'rgba(255,255,255,0.45)',
+    marginTop: Spacing.xs, marginBottom: Spacing.xl,
   },
   cardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
+    flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md,
   },
   macroCard: {
     width: CARD_WIDTH,
-    backgroundColor: Colors.surface,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    ...Shadows.md,
+    padding: Spacing.lg, alignItems: 'center',
   },
   macroCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginBottom: Spacing.md,
-    gap: Spacing.xs,
+    flexDirection: 'row', alignItems: 'center',
+    alignSelf: 'flex-start', marginBottom: Spacing.md, gap: Spacing.xs,
   },
-  macroIcon: {
-    fontSize: 18,
-  },
+  macroIcon: { fontSize: 18 },
   macroLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.text.primary,
+    fontSize: FontSize.sm, fontWeight: '600', color: 'rgba(255,255,255,0.70)',
   },
   macroValue: {
-    fontSize: FontSize.xl,
-    fontWeight: '800',
-    color: Colors.text.primary,
+    fontSize: FontSize.xl, fontWeight: '800', color: '#F0FDF4',
   },
   editIcon: {
-    position: 'absolute',
-    bottom: Spacing.md,
-    right: Spacing.md,
+    position: 'absolute', bottom: Spacing.md, right: Spacing.md,
   },
-  editIconText: {
-    fontSize: 14,
-    opacity: 0.5,
-  },
+  editIconText: { fontSize: 14, opacity: 0.4 },
   healthCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    marginTop: Spacing.md,
-    ...Shadows.sm,
+    padding: Spacing.xl, marginTop: Spacing.md,
   },
   healthRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md,
   },
-  healthIcon: {
-    fontSize: 22,
-    marginRight: Spacing.md,
-  },
+  healthIcon: { fontSize: 22, marginRight: Spacing.md },
   healthLabel: {
-    flex: 1,
-    fontSize: FontSize.base,
-    fontWeight: '600',
-    color: Colors.text.primary,
+    flex: 1, fontSize: FontSize.base, fontWeight: '600', color: '#F0FDF4',
   },
   healthValue: {
-    fontSize: FontSize.lg,
-    fontWeight: '800',
-    color: Colors.text.primary,
+    fontSize: FontSize.lg, fontWeight: '800', color: NEON_GREEN,
   },
   healthBarTrack: {
-    height: 8,
-    backgroundColor: Colors.neutral[100],
-    borderRadius: 4,
-    overflow: 'hidden',
+    height: 8, backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 4, overflow: 'hidden',
   },
   healthBarFill: {
-    height: '100%',
-    backgroundColor: Colors.primary[500],
-    borderRadius: 4,
+    height: '100%', backgroundColor: NEON_GREEN, borderRadius: 4,
   },
   footer: {
     paddingHorizontal: Spacing.xl,

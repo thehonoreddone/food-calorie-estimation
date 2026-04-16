@@ -6,21 +6,25 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Slider from '@react-native-community/slider';
-import { OnboardingLayout, PrimaryButton } from '@/components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+import { OnboardingLayout } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+
+const NEON_GREEN = '#2DD4A0';
 
 const paceLabels = ['Yavaş\nama emin', 'Yarı yolda', 'Mümkün olan\nen kısa sürede'];
-const paceIcons = ['🐢', '🚴', '🚀'];
+const paceIcons  = ['🐢', '🚴', '🚀'];
 
 export default function TargetWeightScreen() {
   const { profile, updateProfile } = useUser();
   const [targetWeightText, setTargetWeightText] = useState('');
-  const [pace, setPace] = useState(1); // 0=slow, 1=medium, 2=fast
+  const [pace, setPace] = useState(1);
 
   const targetWeight = parseInt(targetWeightText, 10);
   const isValid = targetWeight >= 30 && targetWeight <= 300;
@@ -35,58 +39,57 @@ export default function TargetWeightScreen() {
   const handleContinue = () => {
     if (isValid) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      updateProfile({ dailyCalorieTarget: undefined }); // will be calculated
+      updateProfile({ dailyCalorieTarget: undefined });
       router.push('/onboarding/motivation');
     }
   };
 
   return (
-    <OnboardingLayout stepKey="target-weight" title={goalTitle}>
+    <OnboardingLayout
+      stepKey="target-weight"
+      title={goalTitle}
+      illustration={
+        <View style={styles.iconBox}>
+          <Text style={styles.iconEmoji}>🎯</Text>
+        </View>
+      }
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
-        {/* Target Weight Input */}
+        {/* Target Weight */}
         <View style={styles.section}>
           <Text style={styles.label}>İdeal kilonuz nedir?</Text>
-          <View style={[styles.inputContainer, Shadows.sm]}>
+          <View style={styles.inputCard}>
             <TextInput
               style={styles.input}
               value={targetWeightText}
-              onChangeText={(text) =>
-                setTargetWeightText(text.replace(/[^0-9]/g, ''))
-              }
+              onChangeText={(text) => setTargetWeightText(text.replace(/[^0-9]/g, ''))}
               keyboardType="number-pad"
               placeholder="70"
-              placeholderTextColor={Colors.text.light}
+              placeholderTextColor="rgba(255,255,255,0.20)"
               maxLength={3}
             />
-            <Text style={styles.unit}>kg</Text>
+            <View style={styles.unitBadge}>
+              <Text style={styles.unitText}>kg</Text>
+            </View>
           </View>
           {isValid && (
             <View style={styles.validRow}>
-              <Text style={styles.validIcon}>✓</Text>
+              <View style={styles.validDot} />
               <Text style={styles.validText}>Harika!</Text>
             </View>
           )}
         </View>
 
-        {/* Pace Slider */}
+        {/* Pace */}
         <View style={styles.paceSection}>
-          <Text style={styles.label}>
-            Hedefinize hangi hızda ulaşmak istiyorsunuz?
-          </Text>
+          <Text style={styles.label}>Hedefinize hangi hızda ulaşmak istiyorsunuz?</Text>
 
-          {/* Icons row */}
           <View style={styles.iconsRow}>
             {paceIcons.map((icon, idx) => (
-              <Text
-                key={idx}
-                style={[
-                  styles.paceIcon,
-                  pace === idx && styles.paceIconActive,
-                ]}
-              >
+              <Text key={idx} style={[styles.paceIcon, pace === idx && styles.paceIconActive]}>
                 {icon}
               </Text>
             ))}
@@ -102,21 +105,14 @@ export default function TargetWeightScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setPace(Math.round(val));
             }}
-            minimumTrackTintColor={Colors.accent.orange}
-            maximumTrackTintColor={Colors.neutral[200]}
-            thumbTintColor={Colors.accent.orange}
+            minimumTrackTintColor={NEON_GREEN}
+            maximumTrackTintColor="rgba(255,255,255,0.15)"
+            thumbTintColor={NEON_GREEN}
           />
 
-          {/* Labels row */}
           <View style={styles.labelsRow}>
             {paceLabels.map((label, idx) => (
-              <Text
-                key={idx}
-                style={[
-                  styles.paceLabel,
-                  pace === idx && styles.paceLabelActive,
-                ]}
-              >
+              <Text key={idx} style={[styles.paceLabel, pace === idx && styles.paceLabelActive]}>
                 {label}
               </Text>
             ))}
@@ -125,109 +121,102 @@ export default function TargetWeightScreen() {
 
         <View style={styles.spacer} />
 
-        {/* Continue */}
-        <View style={styles.footer}>
-          <PrimaryButton
-            title="Sonraki"
-            onPress={handleContinue}
-            disabled={!isValid}
-          />
-        </View>
+        <TouchableOpacity
+          onPress={handleContinue}
+          disabled={!isValid}
+          activeOpacity={0.85}
+          style={styles.btnWrap}
+        >
+          <LinearGradient
+            colors={isValid ? ['#4ade80', '#2DD4A0'] : ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.04)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.btn}
+          >
+            <Text style={[styles.btnText, !isValid && styles.btnTextDisabled]}>Sonraki →</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     </OnboardingLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
+  flex: { flex: 1 },
+  iconBox: {
+    width: 76, height: 76, borderRadius: 20,
+    backgroundColor: 'rgba(45,212,160,0.13)',
+    borderWidth: 1, borderColor: 'rgba(45,212,160,0.28)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: NEON_GREEN, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
-  section: {
-    marginTop: Spacing.lg,
-  },
+  iconEmoji: { fontSize: 38 },
+  section: { marginTop: Spacing.lg },
   label: {
     fontSize: FontSize.xl,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
     marginBottom: Spacing.md,
     lineHeight: 28,
   },
-  inputContainer: {
-    backgroundColor: '#FFF8F0',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
+  inputCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BorderRadius.xl,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   input: {
     flex: 1,
-    fontSize: FontSize['2xl'],
+    fontSize: FontSize['3xl'],
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
   },
-  unit: {
-    fontSize: FontSize.lg,
-    color: Colors.text.secondary,
-    fontWeight: '500',
+  unitBadge: {
+    backgroundColor: 'rgba(45,212,160,0.15)',
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
-  validRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.sm,
-    justifyContent: 'center',
-  },
-  validIcon: {
-    color: Colors.success,
+  unitText: {
     fontSize: FontSize.base,
     fontWeight: '700',
-    marginRight: Spacing.xs,
+    color: NEON_GREEN,
   },
-  validText: {
-    color: Colors.success,
-    fontSize: FontSize.sm,
-    fontWeight: '600',
+  validRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: Spacing.sm, gap: Spacing.xs, paddingLeft: Spacing.sm,
   },
-  paceSection: {
-    marginTop: Spacing['3xl'],
-  },
+  validDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: NEON_GREEN },
+  validText: { color: NEON_GREEN, fontSize: FontSize.sm, fontWeight: '600' },
+  paceSection: { marginTop: Spacing['3xl'] },
   iconsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.xs,
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, marginBottom: Spacing.xs,
   },
-  paceIcon: {
-    fontSize: 28,
-    opacity: 0.4,
-  },
-  paceIconActive: {
-    opacity: 1,
-    fontSize: 32,
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-  },
-  labelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  paceIcon: { fontSize: 28, opacity: 0.35 },
+  paceIconActive: { opacity: 1, fontSize: 32 },
+  slider: { width: '100%', height: 40 },
+  labelsRow: { flexDirection: 'row', justifyContent: 'space-between' },
   paceLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.text.light,
-    textAlign: 'center',
-    maxWidth: 80,
-    lineHeight: 16,
+    fontSize: FontSize.xs, color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center', maxWidth: 80, lineHeight: 16,
   },
-  paceLabelActive: {
-    color: Colors.accent.orange,
-    fontWeight: '700',
+  paceLabelActive: { color: NEON_GREEN, fontWeight: '700' },
+  spacer: { flex: 1 },
+  btnWrap: {
+    marginBottom: Spacing['3xl'],
+    borderRadius: BorderRadius['3xl'],
+    overflow: 'hidden',
   },
-  spacer: {
-    flex: 1,
+  btn: {
+    paddingVertical: Spacing.xl, alignItems: 'center',
+    borderRadius: BorderRadius['3xl'],
   },
-  footer: {
-    paddingBottom: Spacing['3xl'],
-  },
+  btnText: { fontSize: FontSize.lg, fontWeight: '800', color: '#030E08' },
+  btnTextDisabled: { color: 'rgba(255,255,255,0.30)' },
 });

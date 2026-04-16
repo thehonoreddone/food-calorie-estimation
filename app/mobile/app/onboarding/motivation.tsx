@@ -1,96 +1,63 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
-import { PrimaryButton } from '@/components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useUser } from '@/contexts/UserContext';
-import { Colors, FontSize, Spacing } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 80;
+const CHART_WIDTH  = SCREEN_WIDTH - 80;
 const CHART_HEIGHT = 180;
 
-function ProgressBar({ progress }: { progress: number }) {
-  return (
-    <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-    </View>
-  );
-}
+const BG_DARK    = '#080E0C';
+const NEON_GREEN = '#2DD4A0';
+const ORB_GREEN  = 'rgba(45, 212, 160, 0.28)';
+const ORB_PINK   = 'rgba(236, 72, 153, 0.18)';
 
 function WeightChart({ goal }: { goal: string }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, []);
 
-  // Chart points for line
   const isGain = goal === 'gain';
   const points = isGain
-    ? [
-        { x: 20, y: 140 },
-        { x: CHART_WIDTH * 0.25, y: 120 },
-        { x: CHART_WIDTH * 0.5, y: 80 },
-        { x: CHART_WIDTH - 20, y: 30 },
-      ]
-    : [
-        { x: 20, y: 30 },
-        { x: CHART_WIDTH * 0.25, y: 50 },
-        { x: CHART_WIDTH * 0.5, y: 80 },
-        { x: CHART_WIDTH - 20, y: 140 },
-      ];
+    ? [{ x: 20, y: 140 }, { x: CHART_WIDTH * 0.25, y: 120 }, { x: CHART_WIDTH * 0.5, y: 80 }, { x: CHART_WIDTH - 20, y: 30 }]
+    : [{ x: 20, y: 30 }, { x: CHART_WIDTH * 0.25, y: 50 }, { x: CHART_WIDTH * 0.5, y: 80 }, { x: CHART_WIDTH - 20, y: 140 }];
 
-  // Build smooth curve
   const linePath = points.reduce((path, point, i) => {
     if (i === 0) return `M ${point.x} ${point.y}`;
     const prev = points[i - 1];
-    const cpX = (prev.x + point.x) / 2;
+    const cpX  = (prev.x + point.x) / 2;
     return `${path} C ${cpX} ${prev.y}, ${cpX} ${point.y}, ${point.x} ${point.y}`;
   }, '');
 
-  // Fill area under the curve
   const fillPath = `${linePath} L ${CHART_WIDTH - 20} ${CHART_HEIGHT} L 20 ${CHART_HEIGHT} Z`;
 
   return (
-    <Animated.View
-      style={[
-        styles.chartContainer,
-        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-      ]}
-    >
+    <Animated.View style={[styles.chartContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <Text style={styles.chartTitle}>Kilo geçişiniz</Text>
       <Svg width={CHART_WIDTH} height={CHART_HEIGHT + 40} viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT + 40}`}>
         <Defs>
           <SvgGradient id="fillGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={Colors.accent.orange} stopOpacity="0.3" />
-            <Stop offset="100%" stopColor={Colors.accent.orange} stopOpacity="0.02" />
+            <Stop offset="0%" stopColor={NEON_GREEN} stopOpacity="0.3" />
+            <Stop offset="100%" stopColor={NEON_GREEN} stopOpacity="0.02" />
           </SvgGradient>
         </Defs>
         <Path d={fillPath} fill="url(#fillGrad)" />
-        <Path d={linePath} stroke={Colors.accent.orange} strokeWidth={2.5} fill="none" />
+        <Path d={linePath} stroke={NEON_GREEN} strokeWidth={2.5} fill="none" />
         {points.map((p, i) => (
-          <Circle key={i} cx={p.x} cy={p.y} r={5} fill="#fff" stroke={Colors.text.primary} strokeWidth={2} />
+          <Circle key={i} cx={p.x} cy={p.y} r={5} fill="rgba(255,255,255,0.15)" stroke={NEON_GREEN} strokeWidth={2} />
         ))}
-        {/* Last point highlighted */}
-        <Circle cx={points[3].x} cy={points[3].y} r={6} fill={Colors.accent.orange} stroke="#fff" strokeWidth={2} />
+        <Circle cx={points[3].x} cy={points[3].y} r={6} fill={NEON_GREEN} stroke="#fff" strokeWidth={2} />
       </Svg>
-
-      {/* Labels */}
       <View style={styles.chartLabels}>
         <Text style={styles.chartLabel}>3 Gün</Text>
         <Text style={styles.chartLabel}>7 Gün</Text>
@@ -103,14 +70,19 @@ function WeightChart({ goal }: { goal: string }) {
 export default function MotivationScreen() {
   const { profile } = useUser();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const orbAnim  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(orbAnim, { toValue: 1, duration: 8000, useNativeDriver: true }),
+        Animated.timing(orbAnim, { toValue: 0, duration: 8000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const orbY = orbAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -18] });
 
   const goalText =
     profile.goal === 'lose'
@@ -120,130 +92,109 @@ export default function MotivationScreen() {
       : 'Sağlıklı yaşam potansiyeliniz çok yüksek';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.backCircle}>
-          <Text style={styles.backArrow} onPress={() => router.back()}>←</Text>
+    <View style={styles.root}>
+      <Animated.View style={[styles.orbLarge, { backgroundColor: ORB_GREEN, transform: [{ translateY: orbY }] }]} />
+      <View style={[styles.orbMed, { backgroundColor: ORB_PINK }]} />
+
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backCircle} activeOpacity={0.7}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.progressWrapper}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: '55%' }]} />
+            </View>
+          </View>
         </View>
-        <View style={styles.progressWrapper}>
-          <ProgressBar progress={0.55} />
+
+        {/* Title */}
+        <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
+          <Text style={styles.title}>{goalText}</Text>
+        </Animated.View>
+
+        {/* Chart */}
+        <View style={styles.chartArea}>
+          <WeightChart goal={profile.goal ?? 'maintain'} />
         </View>
-      </View>
 
-      {/* Title */}
-      <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
-        <Text style={styles.title}>{goalText}</Text>
-      </Animated.View>
+        <View style={styles.spacer} />
 
-      {/* Chart */}
-      <View style={styles.chartArea}>
-        <WeightChart goal={profile.goal ?? 'maintain'} />
-      </View>
-
-      <View style={styles.spacer} />
-
-      {/* Continue */}
-      <View style={styles.footer}>
-        <PrimaryButton
-          title="Devam Et"
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push('/onboarding/activity');
-          }}
-          style={styles.continueBtn}
-        />
-      </View>
-    </SafeAreaView>
+        {/* Continue */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/onboarding/activity');
+            }}
+            activeOpacity={0.85}
+            style={styles.btnWrap}
+          >
+            <LinearGradient
+              colors={['#4ade80', '#2DD4A0']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.btn}
+            >
+              <Text style={styles.btnText}>Devam Et →</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  root: { flex: 1, backgroundColor: BG_DARK, overflow: 'hidden' },
+  safe: { flex: 1 },
+  orbLarge: {
+    position: 'absolute', top: -70, left: -70,
+    width: 220, height: 220, borderRadius: 110, opacity: 0.9,
+  },
+  orbMed: {
+    position: 'absolute', top: '30%', left: -50,
+    width: 150, height: 150, borderRadius: 75, opacity: 0.8,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    gap: Spacing.md,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 12, gap: 12,
   },
   backCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.neutral[100],
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  backArrow: {
-    fontSize: 22,
-    color: Colors.text.primary,
-    marginTop: -2,
-  },
+  backArrow: { fontSize: 20, color: '#F0FDF4', marginTop: -2 },
   progressWrapper: { flex: 1 },
   progressTrack: {
-    height: 4,
-    backgroundColor: Colors.neutral[200],
-    borderRadius: 2,
-    overflow: 'hidden',
+    height: 4, backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 2, overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.text.primary,
-    borderRadius: 2,
-  },
-  titleSection: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing['3xl'],
-    paddingBottom: Spacing.xl,
-  },
+  progressFill: { height: '100%', backgroundColor: NEON_GREEN, borderRadius: 2 },
+  titleSection: { paddingHorizontal: 20, paddingTop: 32, paddingBottom: 20 },
   title: {
-    fontSize: FontSize['3xl'],
-    fontWeight: '800',
-    color: Colors.text.primary,
-    lineHeight: 40,
+    fontSize: 28, fontWeight: '800', color: '#F0FDF4', lineHeight: 38,
   },
-  chartArea: {
-    paddingHorizontal: Spacing.xl,
-    flex: 1,
-    justifyContent: 'center',
-  },
+  chartArea: { paddingHorizontal: 20, flex: 1, justifyContent: 'center' },
   chartContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: Spacing.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 20, padding: 20,
   },
   chartTitle: {
-    fontSize: FontSize.base,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: Spacing.lg,
+    fontSize: 15, fontWeight: '600', color: '#F0FDF4', marginBottom: 12,
   },
   chartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    marginTop: Spacing.sm,
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: 12, marginTop: 8,
   },
-  chartLabel: {
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    fontWeight: '500',
-  },
+  chartLabel: { fontSize: 11, color: 'rgba(255,255,255,0.40)', fontWeight: '500' },
   spacer: { flex: 0.3 },
-  footer: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing['3xl'],
-  },
-  continueBtn: {
-    borderRadius: 28,
-  },
+  footer: { paddingHorizontal: 20, paddingBottom: 32 },
+  btnWrap: { borderRadius: 32, overflow: 'hidden' },
+  btn: { paddingVertical: 20, alignItems: 'center', borderRadius: 32 },
+  btnText: { fontSize: 17, fontWeight: '800', color: '#030E08' },
 });

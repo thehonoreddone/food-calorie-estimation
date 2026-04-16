@@ -7,12 +7,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { OnboardingLayout, PrimaryButton } from '@/components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+import { OnboardingLayout } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+
+const NEON_GREEN = '#2DD4A0';
 
 export default function BodyInfoScreen() {
   const { profile, updateProfile } = useUser();
@@ -41,6 +45,11 @@ export default function BodyInfoScreen() {
       stepKey="body-info"
       title="Fiziksel bilgileriniz"
       subtitle="Günlük kalori ihtiyacınızı hesaplamak için"
+      illustration={
+        <View style={styles.iconBox}>
+          <Text style={styles.iconEmoji}>📏</Text>
+        </View>
+      }
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -53,22 +62,24 @@ export default function BodyInfoScreen() {
         >
           {/* Height */}
           <View style={styles.section}>
-            <Text style={styles.label}>Boyunuz (cm)</Text>
-            <View style={[styles.inputContainer, Shadows.sm]}>
+            <Text style={styles.label}>Boyunuz</Text>
+            <View style={styles.inputCard}>
               <TextInput
                 style={styles.input}
                 value={heightText}
                 onChangeText={(text) => setHeightText(text.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
                 placeholder="170"
-                placeholderTextColor={Colors.text.light}
+                placeholderTextColor="rgba(255,255,255,0.20)"
                 maxLength={3}
               />
-              <Text style={styles.unit}>cm</Text>
+              <View style={styles.unitBadge}>
+                <Text style={styles.unitText}>cm</Text>
+              </View>
             </View>
             {heightText.length > 0 && height >= 100 && height <= 250 && (
               <View style={styles.validRow}>
-                <Text style={styles.validIcon}>✓</Text>
+                <View style={styles.validDot} />
                 <Text style={styles.validText}>Harika!</Text>
               </View>
             )}
@@ -76,94 +87,133 @@ export default function BodyInfoScreen() {
 
           {/* Weight */}
           <View style={styles.section}>
-            <Text style={styles.label}>Kilonuz (kg)</Text>
-            <View style={[styles.inputContainer, Shadows.sm]}>
+            <Text style={styles.label}>Kilonuz</Text>
+            <View style={styles.inputCard}>
               <TextInput
                 style={styles.input}
                 value={weightText}
                 onChangeText={(text) => setWeightText(text.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
                 placeholder="70"
-                placeholderTextColor={Colors.text.light}
+                placeholderTextColor="rgba(255,255,255,0.20)"
                 maxLength={3}
               />
-              <Text style={styles.unit}>kg</Text>
+              <View style={styles.unitBadge}>
+                <Text style={styles.unitText}>kg</Text>
+              </View>
             </View>
             {weightText.length > 0 && weight >= 30 && weight <= 300 && (
               <View style={styles.validRow}>
-                <Text style={styles.validIcon}>✓</Text>
+                <View style={styles.validDot} />
                 <Text style={styles.validText}>Harika!</Text>
               </View>
             )}
           </View>
         </ScrollView>
 
-        {/* Continue */}
-        <View style={styles.footer}>
-          <PrimaryButton
-            title="Sonraki"
-            onPress={handleContinue}
-            disabled={!isValid}
-          />
-        </View>
+        <TouchableOpacity
+          onPress={handleContinue}
+          disabled={!isValid}
+          activeOpacity={0.85}
+          style={styles.btnWrap}
+        >
+          <LinearGradient
+            colors={isValid ? ['#4ade80', '#2DD4A0'] : ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.04)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.btn}
+          >
+            <Text style={[styles.btnText, !isValid && styles.btnTextDisabled]}>Sonraki →</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     </OnboardingLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
+  flex: { flex: 1 },
+  iconBox: {
+    width: 76, height: 76, borderRadius: 20,
+    backgroundColor: 'rgba(45,212,160,0.13)',
+    borderWidth: 1, borderColor: 'rgba(45,212,160,0.28)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: NEON_GREEN, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
+  iconEmoji: { fontSize: 36 },
   scrollContent: {
     paddingTop: Spacing.lg,
     gap: Spacing['2xl'],
+    paddingBottom: Spacing.lg,
   },
   section: {},
   label: {
     fontSize: FontSize.xl,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
     marginBottom: Spacing.md,
   },
-  inputContainer: {
-    backgroundColor: '#FFF8F0',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
+  inputCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BorderRadius.xl,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   input: {
     flex: 1,
-    fontSize: FontSize['2xl'],
+    fontSize: FontSize['3xl'],
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
   },
-  unit: {
-    fontSize: FontSize.lg,
-    color: Colors.text.secondary,
-    fontWeight: '500',
+  unitBadge: {
+    backgroundColor: 'rgba(45,212,160,0.15)',
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  unitText: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: NEON_GREEN,
   },
   validRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: Spacing.sm,
-    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingLeft: Spacing.sm,
   },
-  validIcon: {
-    color: Colors.success,
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    marginRight: Spacing.xs,
+  validDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: NEON_GREEN,
   },
   validText: {
-    color: Colors.success,
+    color: NEON_GREEN,
     fontSize: FontSize.sm,
     fontWeight: '600',
   },
-  footer: {
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing['3xl'],
+  btnWrap: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing['3xl'],
+    borderRadius: BorderRadius['3xl'],
+    overflow: 'hidden',
+  },
+  btn: {
+    paddingVertical: Spacing.xl,
+    alignItems: 'center',
+    borderRadius: BorderRadius['3xl'],
+  },
+  btnText: {
+    fontSize: FontSize.lg,
+    fontWeight: '800',
+    color: '#030E08',
+  },
+  btnTextDisabled: {
+    color: 'rgba(255,255,255,0.30)',
   },
 });

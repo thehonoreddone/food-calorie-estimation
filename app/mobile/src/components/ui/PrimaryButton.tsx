@@ -128,7 +128,7 @@ export function PrimaryButton({
       style={[disabled && styles.disabled, style]}
     >
       <LinearGradient
-        colors={disabled ? ['#a3a3a3', '#737373'] : [Colors.primary[500], Colors.primary[600]]}
+        colors={disabled ? ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.04)'] : ['#4ade80', '#2DD4A0']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[
@@ -142,12 +142,12 @@ export function PrimaryButton({
         ]}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color="#030E08" />
         ) : (
           <Text
             style={[
               styles.text,
-              { fontSize: currentSize.fontSize, color: Colors.text.inverse },
+              { fontSize: currentSize.fontSize, color: disabled ? 'rgba(255,255,255,0.30)' : '#030E08' },
               textStyle,
             ]}
           >
@@ -161,13 +161,13 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius['3xl'],
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
   },
   gradient: {
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius['3xl'],
   },
   text: {
     fontWeight: '700',

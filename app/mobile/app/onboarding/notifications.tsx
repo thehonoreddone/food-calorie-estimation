@@ -87,8 +87,8 @@ export default function OnboardingNotificationsScreen() {
           <Switch
             value={enabled}
             onValueChange={handleToggle}
-            trackColor={{ false: Colors.neutral[200], true: Colors.primary[300] }}
-            thumbColor={enabled ? Colors.primary[600] : Colors.neutral[400]}
+            trackColor={{ false: 'rgba(255,255,255,0.10)', true: 'rgba(45,212,160,0.40)' }}
+            thumbColor={enabled ? '#2DD4A0' : 'rgba(255,255,255,0.40)'}
           />
         </View>
 
@@ -165,10 +165,14 @@ function TimeOption({ icon, label, value, presets, onSelect }: TimeOptionProps) 
   );
 }
 
+const NEON_GREEN = '#2DD4A0';
+
 const styles = StyleSheet.create({
   card: {
     marginTop: Spacing.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: BorderRadius.xl,
     padding: Spacing.xl,
   },
@@ -179,23 +183,25 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FontSize.base,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
   },
   desc: {
     fontSize: FontSize.xs,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.45)',
     marginTop: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: 'rgba(255,255,255,0.08)',
     marginVertical: Spacing.lg,
   },
   subTitle: {
     fontSize: FontSize.sm,
     fontWeight: '600',
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.45)',
     marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   timesRow: {
     flexDirection: 'row',
@@ -203,7 +209,9 @@ const styles = StyleSheet.create({
   },
   timeItem: {
     flex: 1,
-    backgroundColor: Colors.primary[50],
+    backgroundColor: 'rgba(45,212,160,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,160,0.20)',
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
   },
@@ -213,7 +221,7 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: FontSize.xs,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.50)',
     marginBottom: 4,
   },
   pillRow: {
@@ -224,18 +232,21 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   pillSelected: {
-    backgroundColor: Colors.primary[500],
+    backgroundColor: 'rgba(45,212,160,0.25)',
+    borderColor: NEON_GREEN,
   },
   pillText: {
     fontSize: FontSize.xs,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.50)',
     textAlign: 'center',
   },
   pillTextSelected: {
-    color: '#fff',
+    color: NEON_GREEN,
     fontWeight: '700',
   },
   footer: {
@@ -246,23 +257,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
   },
   skipText: {
     fontSize: FontSize.sm,
-    color: Colors.text.secondary,
+    color: 'rgba(255,255,255,0.45)',
   },
   continueBtn: {
-    paddingVertical: 14,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.primary[600],
+    paddingVertical: 16,
+    borderRadius: 32,
+    backgroundColor: NEON_GREEN,
     alignItems: 'center',
   },
   continueText: {
     fontSize: FontSize.base,
-    fontWeight: '700',
-    color: '#fff',
+    fontWeight: '800',
+    color: '#030E08',
   },
 });
 

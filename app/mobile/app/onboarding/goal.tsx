@@ -4,13 +4,15 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { OnboardingLayout } from '@/components/ui';
 import { useUser, Goal } from '@/contexts/UserContext';
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, FontSize, Spacing, BorderRadius } from '@/constants/theme';
 
-const goalOptions: { value: Goal; label: string }[] = [
-  { value: 'lose', label: 'Kilo vermek' },
-  { value: 'gain', label: 'Kas kazanmak ve yağ kaybetmek' },
-  { value: 'maintain', label: 'Kilomu korumak' },
-  { value: 'lose', label: 'Kilo vermeden daha sağlıklı beslenmek' },
+const NEON_GREEN = '#2DD4A0';
+
+const goalOptions: { value: Goal; label: string; icon: string }[] = [
+  { value: 'lose',     label: 'Kilo vermek',                        icon: '🔥' },
+  { value: 'gain',     label: 'Kas kazanmak ve yağ kaybetmek',      icon: '💪' },
+  { value: 'maintain', label: 'Kilomu korumak',                     icon: '⚖️' },
+  { value: 'lose',     label: 'Kilo vermeden daha sağlıklı beslenmek', icon: '🥗' },
 ];
 
 export default function GoalScreen() {
@@ -21,7 +23,6 @@ export default function GoalScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelected(value);
     updateProfile({ goal: goalValue });
-    // Auto-advance after short delay
     setTimeout(() => {
       router.push('/onboarding/discovery');
     }, 300);
@@ -33,7 +34,9 @@ export default function GoalScreen() {
       title="Burada ne yapıyorsunuz?"
       showBack={false}
       illustration={
-        <Text style={{ fontSize: 64 }}>🌻</Text>
+        <View style={styles.iconBox}>
+          <Text style={styles.iconEmoji}>🌻</Text>
+        </View>
       }
     >
       <View style={styles.greeting}>
@@ -50,20 +53,14 @@ export default function GoalScreen() {
             <TouchableOpacity
               key={key}
               onPress={() => handleSelect(key, option.value)}
-              activeOpacity={0.7}
-              style={[
-                styles.optionCard,
-                isSelected && styles.optionSelected,
-              ]}
+              activeOpacity={0.75}
+              style={[styles.optionCard, isSelected && styles.optionSelected]}
             >
-              <Text
-                style={[
-                  styles.optionText,
-                  isSelected && styles.optionTextSelected,
-                ]}
-              >
+              <Text style={styles.optionIcon}>{option.icon}</Text>
+              <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
                 {option.label}
               </Text>
+              {isSelected && <View style={styles.checkDot}><Text style={styles.checkMark}>✓</Text></View>}
             </TouchableOpacity>
           );
         })}
@@ -74,34 +71,75 @@ export default function GoalScreen() {
 
 const styles = StyleSheet.create({
   greeting: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
+    marginTop: Spacing.xs,
   },
   greetingTitle: {
-    fontSize: FontSize['3xl'],
+    fontSize: FontSize['2xl'],
     fontWeight: '800',
-    color: Colors.text.primary,
+    color: '#F0FDF4',
     textAlign: 'center',
   },
+  iconBox: {
+    width: 76,
+    height: 76,
+    borderRadius: 20,
+    backgroundColor: 'rgba(45,212,160,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,160,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: NEON_GREEN,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  iconEmoji: {
+    fontSize: 38,
+  },
   options: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   optionCard: {
-    backgroundColor: '#EDF2F7',
-    borderRadius: BorderRadius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: BorderRadius.xl,
     paddingVertical: Spacing.xl,
     paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
   },
   optionSelected: {
-    backgroundColor: Colors.primary[50],
-    borderWidth: 2,
-    borderColor: Colors.primary[400],
+    backgroundColor: 'rgba(45,212,160,0.12)',
+    borderColor: 'rgba(45,212,160,0.45)',
+  },
+  optionIcon: {
+    fontSize: 22,
   },
   optionText: {
+    flex: 1,
     fontSize: FontSize.base,
     fontWeight: '600',
-    color: Colors.text.primary,
+    color: 'rgba(255,255,255,0.80)',
   },
   optionTextSelected: {
-    color: Colors.primary[700],
+    color: NEON_GREEN,
+    fontWeight: '700',
+  },
+  checkDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: NEON_GREEN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#030E08',
   },
 });
