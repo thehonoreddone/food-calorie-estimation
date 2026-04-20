@@ -1,6 +1,6 @@
 """Pydantic models for API requests and responses"""
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -21,6 +21,10 @@ class PredictionResponse(BaseModel):
     calories_max: Optional[float] = Field(None, ge=0, description="Max estimated calories")
     mask_base64: Optional[str] = Field(None, description="Base64-encoded segmentation mask")
     source: Optional[str] = Field(None, description="Prediction source: model, gemini, hybrid")
+    macros: Optional[Dict[str, float]] = Field(None, description="Macronutrients: protein_g, carbs_g, fat_g, fiber_g")
+    food_name_tr: Optional[str] = Field(None, description="Turkish food name")
+    food_name_local: Optional[str] = Field(None, description="Food name in the user's requested language")
+    description: Optional[str] = Field(None, description="Brief food description in the user's language")
     
     class Config:
         json_schema_extra = {

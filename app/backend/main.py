@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from loguru import logger
 import sys
+import io
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -22,6 +23,10 @@ from app.services.model_service import model_service
 from app.services.calorie_service import calorie_service
 from app.services.prediction_service import prediction_service
 
+
+# Force UTF-8 output on Windows (prevents UnicodeEncodeError for emojis in loguru)
+if sys.stdout and hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # Configure loguru
 logger.remove()

@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
-import { useTheme, getColors, ThemeMode, AppLanguage, AppRegion } from '@/contexts/ThemeContext';
+import { useTheme, getColors, ThemeMode, AppLanguage, AppRegion, UnitSystem } from '@/contexts/ThemeContext';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from '@/i18n';
@@ -58,6 +58,11 @@ export default function SettingsScreen() {
     { value: 'TR', label: 'Türkiye', flag: '🇹🇷' },
     { value: 'US', label: 'Amerika', flag: '🇺🇸' },
     { value: 'EU', label: 'Avrupa', flag: '🇪🇺' },
+  ];
+
+  const UNIT_OPTIONS: { value: UnitSystem; label: string; icon: string }[] = [
+    { value: 'metric',   label: t('settings.metric'),   icon: '⚖️' },
+    { value: 'imperial', label: t('settings.imperial'), icon: '🇺🇸' },
   ];
 
   // Delete account modal state
@@ -283,6 +288,31 @@ export default function SettingsScreen() {
                   styles.optionChipLabel,
                   { color: C.textSecondary },
                   settings.region === opt.value && { color: '#fff', fontWeight: '700' },
+                ]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.cardDivider, { backgroundColor: C.surfaceBorder }]} />
+
+          {/* Unit System */}
+          <Text style={[styles.cardInnerTitle, { color: C.text }]}>{t('settings.unitSystem')}</Text>
+          <View style={styles.optionChips}>
+            {UNIT_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.optionChip,
+                  { backgroundColor: C.surfaceElevated, borderColor: C.surfaceBorder },
+                  settings.unitSystem === opt.value && { backgroundColor: C.accent, borderColor: C.accent },
+                ]}
+                onPress={() => updateSettings({ unitSystem: opt.value })}
+              >
+                <Text style={styles.optionChipIcon}>{opt.icon}</Text>
+                <Text style={[
+                  styles.optionChipLabel,
+                  { color: C.textSecondary },
+                  settings.unitSystem === opt.value && { color: '#fff', fontWeight: '700' },
                 ]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}

@@ -14,32 +14,80 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { OnboardingLayout } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import {
+  kgToLbs, lbsToKg, cmToFtIn, ftInToCm,
+  type UnitSystem,
+} from '@/utils/unitConversion';
 
 const NEON_GREEN = '#2DD4A0';
 
 export default function BodyInfoScreen() {
   const { profile, updateProfile } = useUser();
-  const [heightText, setHeightText] = useState(
-    profile.height ? String(profile.height) : ''
-  );
-  const [weightText, setWeightText] = useState(
-    profile.weight ? String(profile.weight) : ''
-  );
+  const { settings, updateSettings } = useTheme();
+  const unitSystem: UnitSystem = settings.unitSystem ?? 'metric';
 
-  const height = parseInt(heightText, 10);
-  const weight = parseInt(weightText, 10);
-  const isValid =
-    height >= 100 && height <= 250 && weight >= 30 && weight <= 300;
+  // ─── Internal state (always stored in metric) ───────────────────────────────
+  // Height fields
+  const initCm = profile.height ?? 170;
+  const initFtIn = cmToFtIn(initCm);
 
+  const [heightCmText, setHeightCmText] = useState(String(initCm));
+  const [heightFtText,  setHeightFtText]  = useState(String(initFtIn.ft));
+  const [heightInText,  setHeightInText]  = useState(String(initFtIn.inches));
+
+  // Weight fields
+  const initKg = profile.weight ?? 70;
+  const [weightKgText,  setWeightKgText]  = useState(String(initKg));
+  const [weightLbsText, setWeightLbsText] = useState(String(kgToLbs(initKg)));
+
+  // ─── Derived metric values ───────────────────────────────────────────────────
+  const heightCm: number =
+    unitSystem === 'imperial'
+      ? ftInToCm(parseInt(heightFtText, 10) || 0, parseInt(heightInText, 10) || 0)
+      : parseInt(heightCmText, 10) || 0;
+
+  const weightKg: number =
+    unitSystem === 'imperial'
+      ? lbsToKg(parseFloat(weightLbsText.replace(',', '.')) || 0)
+      : parseInt(weightKgText, 10) || 0;
+
+  const isHeightValid = heightCm >= 100 && heightCm <= 250;
+  const isWeightValid = weightKg >= 30 && weightKg <= 300;
+  const isValid = isHeightValid && isWeightValid;
+
+  // ─── Unit toggle ─────────────────────────────────────────────────────────────
+  const toggleUnit = () => {
+    const next: UnitSystem = unitSystem === 'metric' ? 'imperial' : 'metric';
+    updateSettings({ unitSystem: next });
+
+    if (next === 'imperial') {
+      // Convert current metric values → imperial display
+      const ftIn = cmToFtIn(parseInt(heightCmText, 10) || 170);
+      setHeightFtText(String(ftIn.ft));
+      setHeightInText(String(ftIn.inches));
+      const lbs = kgToLbs(parseInt(weightKgText, 10) || 70);
+      setWeightLbsText(String(lbs));
+    } else {
+      // Convert current imperial inputs → metric display
+      const cm = ftInToCm(parseInt(heightFtText, 10) || 5, parseInt(heightInText, 10) || 7);
+      setHeightCmText(String(cm));
+      const kg = lbsToKg(parseFloat(weightLbsText) || 154);
+      setWeightKgText(String(kg));
+    }
+  };
+
+  // ─── Continue ────────────────────────────────────────────────────────────────
   const handleContinue = () => {
     if (isValid) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      updateProfile({ height, weight });
+      updateProfile({ height: heightCm, weight: weightKg });
       router.push('/onboarding/target-weight');
     }
   };
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <OnboardingLayout
       stepKey="body-info"
@@ -60,52 +108,131 @@ export default function BodyInfoScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Height */}
+          {/* ── Unit toggle ── */}
+          <View style={styles.unitToggleRow}>
+            <TouchableOpacity
+              onPress={toggleUnit}
+              style={[
+                styles.unitToggle,
+                unitSystem === 'metric' && styles.unitToggleActive,
+              ]}
+            >
+              <Text style={[styles.unitToggleText, unitSystem === 'metric' && styles.unitToggleTextActive]}>
+                kg / cm
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={toggleUnit}
+              style={[
+                styles.unitToggle,
+                unitSystem === 'imperial' && styles.unitToggleActive,
+              ]}
+            >
+              <Text style={[styles.unitToggleText, unitSystem === 'imperial' && styles.unitToggleTextActive]}>
+                lbs / ft
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Height ── */}
           <View style={styles.section}>
             <Text style={styles.label}>Boyunuz</Text>
-            <View style={styles.inputCard}>
-              <TextInput
-                style={styles.input}
-                value={heightText}
-                onChangeText={(text) => setHeightText(text.replace(/[^0-9]/g, ''))}
-                keyboardType="number-pad"
-                placeholder="170"
-                placeholderTextColor="rgba(255,255,255,0.20)"
-                maxLength={3}
-              />
-              <View style={styles.unitBadge}>
-                <Text style={styles.unitText}>cm</Text>
+
+            {unitSystem === 'metric' ? (
+              <View style={styles.inputCard}>
+                <TextInput
+                  style={styles.input}
+                  value={heightCmText}
+                  onChangeText={t => setHeightCmText(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="170"
+                  placeholderTextColor="rgba(255,255,255,0.20)"
+                  maxLength={3}
+                />
+                <View style={styles.unitBadge}>
+                  <Text style={styles.unitText}>cm</Text>
+                </View>
               </View>
-            </View>
-            {heightText.length > 0 && height >= 100 && height <= 250 && (
+            ) : (
+              <View style={styles.imperialRow}>
+                <View style={[styles.inputCard, { flex: 1 }]}>
+                  <TextInput
+                    style={styles.input}
+                    value={heightFtText}
+                    onChangeText={t => setHeightFtText(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    placeholder="5"
+                    placeholderTextColor="rgba(255,255,255,0.20)"
+                    maxLength={1}
+                  />
+                  <View style={styles.unitBadge}>
+                    <Text style={styles.unitText}>ft</Text>
+                  </View>
+                </View>
+                <View style={[styles.inputCard, { flex: 1 }]}>
+                  <TextInput
+                    style={styles.input}
+                    value={heightInText}
+                    onChangeText={t => setHeightInText(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    placeholder="7"
+                    placeholderTextColor="rgba(255,255,255,0.20)"
+                    maxLength={2}
+                  />
+                  <View style={styles.unitBadge}>
+                    <Text style={styles.unitText}>in</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {isHeightValid && (
               <View style={styles.validRow}>
                 <View style={styles.validDot} />
-                <Text style={styles.validText}>Harika!</Text>
+                <Text style={styles.validText}>
+                  {unitSystem === 'imperial' ? `${heightCm} cm` : 'Harika!'}
+                </Text>
               </View>
             )}
           </View>
 
-          {/* Weight */}
+          {/* ── Weight ── */}
           <View style={styles.section}>
             <Text style={styles.label}>Kilonuz</Text>
             <View style={styles.inputCard}>
-              <TextInput
-                style={styles.input}
-                value={weightText}
-                onChangeText={(text) => setWeightText(text.replace(/[^0-9]/g, ''))}
-                keyboardType="number-pad"
-                placeholder="70"
-                placeholderTextColor="rgba(255,255,255,0.20)"
-                maxLength={3}
-              />
+              {unitSystem === 'metric' ? (
+                <TextInput
+                  style={styles.input}
+                  value={weightKgText}
+                  onChangeText={t => setWeightKgText(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="70"
+                  placeholderTextColor="rgba(255,255,255,0.20)"
+                  maxLength={3}
+                />
+              ) : (
+                <TextInput
+                  style={styles.input}
+                  value={weightLbsText}
+                  onChangeText={t => setWeightLbsText(t.replace(/[^0-9.]/g, ''))}
+                  keyboardType="decimal-pad"
+                  placeholder="154"
+                  placeholderTextColor="rgba(255,255,255,0.20)"
+                  maxLength={6}
+                />
+              )}
               <View style={styles.unitBadge}>
-                <Text style={styles.unitText}>kg</Text>
+                <Text style={styles.unitText}>
+                  {unitSystem === 'imperial' ? 'lbs' : 'kg'}
+                </Text>
               </View>
             </View>
-            {weightText.length > 0 && weight >= 30 && weight <= 300 && (
+            {isWeightValid && (
               <View style={styles.validRow}>
                 <View style={styles.validDot} />
-                <Text style={styles.validText}>Harika!</Text>
+                <Text style={styles.validText}>
+                  {unitSystem === 'imperial' ? `${weightKg} kg` : 'Harika!'}
+                </Text>
               </View>
             )}
           </View>
@@ -143,16 +270,47 @@ const styles = StyleSheet.create({
   },
   iconEmoji: { fontSize: 36 },
   scrollContent: {
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.sm,
     gap: Spacing['2xl'],
     paddingBottom: Spacing.lg,
   },
   section: {},
+
+  // Unit toggle
+  unitToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: BorderRadius.xl,
+    padding: 4,
+    gap: 4,
+  },
+  unitToggle: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+  },
+  unitToggleActive: {
+    backgroundColor: NEON_GREEN,
+  },
+  unitToggleText: {
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+  },
+  unitToggleTextActive: {
+    color: '#030E08',
+  },
+
   label: {
     fontSize: FontSize.xl,
     fontWeight: '700',
     color: '#F0FDF4',
     marginBottom: Spacing.md,
+  },
+  imperialRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
   },
   inputCard: {
     flexDirection: 'row',

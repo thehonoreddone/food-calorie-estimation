@@ -31,7 +31,7 @@ export const predictionService = {
    * Images are compressed before upload to reduce bandwidth.
    * 120s timeout for ML inference on mobile networks.
    */
-  async predict(image: ImagePickerResult): Promise<PredictionResponse> {
+  async predict(image: ImagePickerResult, language: string = 'tr'): Promise<PredictionResponse> {
     const formData = new FormData();
     const imageUri = await compressImage(image.uri);
 
@@ -47,6 +47,9 @@ export const predictionService = {
       };
       formData.append("file", filePayload as unknown as Blob);
     }
+
+    // Append language so Gemini returns food names in the user's language
+    formData.append('language', language);
 
     const apiResponse = await apiClient.post<PredictionResponse>(
       "/api/v1/predict/",

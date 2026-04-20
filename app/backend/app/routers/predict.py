@@ -2,10 +2,12 @@
 from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from PIL import Image
 from loguru import logger
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.models.schemas import PredictionResponse, PredictionRequest
 from app.services.prediction_service import prediction_service
@@ -25,6 +27,7 @@ from urllib.parse import urlparse
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
+limiter = Limiter(key_func=get_remote_address)
 
 
 def validate_file(file: UploadFile) -> None:
@@ -65,8 +68,11 @@ async def load_image(file: UploadFile) -> Image.Image:
 
 
 @router.post("/predict/", response_model=PredictionResponse)
+@limiter.limit(settings.RATE_LIMIT_PREDICT)
 async def predict_food(
+    request: Request,
     file: UploadFile = File(..., description="Food image to analyze"),
+    language: Optional[str] = Form(default="tr", description="ISO language code for localized food name (e.g. 'en', 'tr', 'de')"),
     user_id: Optional[str] = Depends(get_current_user),
 ):
     """
@@ -111,11 +117,14 @@ async def predict_food(
         logger.error(f"Failed to load image: {e}")
         raise ImageProcessingException(str(e))
     
-    logger.info(f"Processing image: {file.filename} ({image.size[0]}x{image.size[1]})")
+    # Sanitize language input
+    safe_language = (language or "tr").lower().strip()[:5]
+    
+    logger.info(f"Processing image: {file.filename} ({image.size[0]}x{image.size[1]}) [lang={safe_language}]")
     
     # Run prediction
     try:
-        result = await prediction_service.predict(image, include_mask=True)
+        result = await prediction_service.predict(image, include_mask=True, language=safe_language)
         
         # Save to history if user is authenticated
         if user_id:

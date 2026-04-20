@@ -172,6 +172,34 @@ export async function deleteMeal(mealId: string): Promise<void> {
 }
 
 /**
+ * Get the most recent N meals for a user (across all dates)
+ * Used by History screen. Client-side sorted, no composite index needed.
+ */
+export async function getRecentMeals(
+  uid: string,
+  maxResults: number = 60
+): Promise<MealEntry[]> {
+  const q = query(
+    collection(db, MEALS_COLLECTION),
+    where('uid', '==', uid),
+    limit(maxResults * 2), // over-fetch, then sort & slice
+  );
+  const snapshot = await getDocs(q);
+  const meals = snapshot.docs.map(docSnap => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  })) as MealEntry[];
+  // Sort newest first by date then by createdAt
+  meals.sort((a, b) => {
+    if (b.date !== a.date) return b.date > a.date ? 1 : -1;
+    const ta = a.createdAt?.toMillis?.() ?? 0;
+    const tb = b.createdAt?.toMillis?.() ?? 0;
+    return tb - ta;
+  });
+  return meals.slice(0, maxResults);
+}
+
+/**
  * Update a meal entry (for quantity adjustments, etc.)
  */
 export async function updateMeal(

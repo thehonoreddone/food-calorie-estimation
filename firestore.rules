@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isAuth();
+      allow write: if isOwner(uid);
+    }
+
+    // ── Predictions ────────────────────────────────────────────────────────
+    match /predictions/{docId} {
+      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+    }
+
+    // ── Daily Meals ────────────────────────────────────────────────────────
+    match /daily_meals/{docId} {
+      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+    }
+
+    // ── Daily Exercises ────────────────────────────────────────────────────
+    match /daily_exercises/{docId} {
+      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+    }
+
+    // ── Weight Entries ─────────────────────────────────────────────────────
+    match /weight_entries/{docId} {
+      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+    }
+
+    // ── Daily Health (steps, sleep, water) ────────────────────────────────
+    // Document ID format: {uid}_{date}
+    match /daily_health/{docId} {
+      allow read, write: if isAuth() && (
+        resource == null || isOwner(resource.data.uid)
+      );
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+    }
+
+    // ── User Achievements ──────────────────────────────────────────────────
+    match /user_achievements/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ── Community Posts ────────────────────────────────────────────────────
+    match /community_posts/{postId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update: if isAuth() && (
+        isOwner(resource.data.uid) ||
+        // Allow updating only likesCount / commentsCount for any auth user
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likesCount', 'commentsCount'])
+      );
+      allow delete: if isAuth() && isOwner(resource.data.uid);
+    }
+
+    // ── Community Likes ────────────────────────────────────────────────────
+    match /community_likes/{likeId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isOwner(request.resource.data.uid);
+      allow delete: if isAuth() && isOwner(resource.data.uid);
+    }
+
+    // ── Community Comments ─────────────────────────────────────────────────
+    match /community_comments/{commentId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow delete: if isAuth() && isOwner(resource.data.uid);
+    }
+
+    // ── User Follows ───────────────────────────────────────────────────────
+    match /user_follows/{followId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isOwner(request.resource.data.followerId);
+      allow delete: if isAuth() && isOwner(resource.data.followerId);
+    }
+  }
+}

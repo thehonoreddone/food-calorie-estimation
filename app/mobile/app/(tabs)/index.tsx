@@ -26,9 +26,8 @@ import Animated, {
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
 import { useUser } from '@/contexts/UserContext';
 import { useTranslation } from '@/i18n';
-import { hapticSelection, hapticLight, hapticMedium } from '../../src/utils/haptics';
+import { hapticSelection, hapticLight } from '../../src/utils/haptics';
 import { SkeletonCalorieRing, SkeletonCard, Skeleton } from '../../src/components/ui/SkeletonLoader';
-import { Mascot } from '../../src/components/mascot';
 import {
   getMealsForDate,
   getExercisesForDate,
@@ -285,9 +284,16 @@ export default function HomeTab() {
       let ml: MealEntry[] = [];
       let ex: ExerciseEntry[] = [];
       let dh: DailyHealthData | null = null;
-      try { ml = await getMealsForDate(profile.uid, dk); } catch (e) { console.warn('[Home] meals:', e); }
-      try { ex = await getExercisesForDate(profile.uid, dk); } catch (e) { console.warn('[Home] exercises:', e); }
-      try { dh = await getDailyHealth(profile.uid, dk); } catch (e) { console.warn('[Home] health:', e); }
+      try { ml = await getMealsForDate(profile.uid, dk); } catch (e: any) {
+        if (e?.code !== 'permission-denied') console.warn('[Home] meals:', e);
+      }
+      try { ex = await getExercisesForDate(profile.uid, dk); } catch (e: any) {
+        if (e?.code !== 'permission-denied') console.warn('[Home] exercises:', e);
+      }
+      try { dh = await getDailyHealth(profile.uid, dk); } catch (e: any) {
+        // Firestore rules may not include daily_health collection yet — silent fail
+        if (e?.code !== 'permission-denied') console.warn('[Home] health:', e);
+      }
       setMeals(ml); setExercises(ex); setHealth(dh ?? {}); setWater(dh?.waterMl ?? 0);
 
       try {
@@ -399,7 +405,16 @@ export default function HomeTab() {
   };
 
   const greetingHour = new Date().getHours();
-  const greeting = greetingHour < 12 ? 'Günaydın' : greetingHour < 18 ? 'İyi öğleden sonralar' : 'İyi akşamlar';
+  const greeting =
+    greetingHour < 12
+      ? '☀️ Günaydın,'
+      : greetingHour < 13
+      ? '🌤️ İyi öğleler,'
+      : greetingHour < 18
+      ? '🌅 İyi öğleden sonralar,'
+      : greetingHour < 22
+      ? '🌆 İyi akşamlar,'
+      : '🌙 İyi geceler,';
 
   // ─── Render ────────────────────────────────────────────────────────
   return (
@@ -493,16 +508,6 @@ export default function HomeTab() {
             </View>
           </View>
         </Animated.View>
-
-        {/* ── Mascot (Centered) ────────────────── */}
-        <Mascot
-          caloriesEaten={eaten}
-          calorieGoal={tgt}
-          streak={loginStreak}
-          waterMl={water}
-          waterGoal={wGoal}
-          mealCount={meals.length}
-        />
 
         {/* ── Loading Skeleton ─────────────────── */}
         {loading && !loaded ? (

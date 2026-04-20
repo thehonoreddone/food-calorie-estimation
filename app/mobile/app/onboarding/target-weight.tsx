@@ -14,7 +14,9 @@ import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { OnboardingLayout } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import { kgToLbs, lbsToKg, type UnitSystem } from '@/utils/unitConversion';
 
 const NEON_GREEN = '#2DD4A0';
 
@@ -23,11 +25,18 @@ const paceIcons  = ['🐢', '🚴', '🚀'];
 
 export default function TargetWeightScreen() {
   const { profile, updateProfile } = useUser();
+  const { settings } = useTheme();
+  const unitSystem: UnitSystem = settings.unitSystem ?? 'metric';
+
+  // Input state in user's display unit
   const [targetWeightText, setTargetWeightText] = useState('');
   const [pace, setPace] = useState(1);
 
-  const targetWeight = parseInt(targetWeightText, 10);
-  const isValid = targetWeight >= 30 && targetWeight <= 300;
+  // Parse target weight → always kg for storage
+  const rawNum = parseFloat(targetWeightText.replace(',', '.')) || 0;
+  const targetWeightKg = unitSystem === 'imperial' ? lbsToKg(rawNum) : rawNum;
+
+  const isValid = targetWeightKg >= 30 && targetWeightKg <= 300;
 
   const goalTitle =
     profile.goal === 'lose'
@@ -39,10 +48,13 @@ export default function TargetWeightScreen() {
   const handleContinue = () => {
     if (isValid) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      updateProfile({ dailyCalorieTarget: undefined });
+      updateProfile({ targetWeight: targetWeightKg, dailyCalorieTarget: undefined });
       router.push('/onboarding/motivation');
     }
   };
+
+  const weightLabel = unitSystem === 'imperial' ? 'lbs' : 'kg';
+  const placeholder  = unitSystem === 'imperial' ? '154' : '70';
 
   return (
     <OnboardingLayout
@@ -65,20 +77,24 @@ export default function TargetWeightScreen() {
             <TextInput
               style={styles.input}
               value={targetWeightText}
-              onChangeText={(text) => setTargetWeightText(text.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              placeholder="70"
+              onChangeText={t => setTargetWeightText(t.replace(/[^0-9.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder={placeholder}
               placeholderTextColor="rgba(255,255,255,0.20)"
-              maxLength={3}
+              maxLength={6}
             />
             <View style={styles.unitBadge}>
-              <Text style={styles.unitText}>kg</Text>
+              <Text style={styles.unitText}>{weightLabel}</Text>
             </View>
           </View>
           {isValid && (
             <View style={styles.validRow}>
               <View style={styles.validDot} />
-              <Text style={styles.validText}>Harika!</Text>
+              <Text style={styles.validText}>
+                {unitSystem === 'imperial'
+                  ? `≈ ${targetWeightKg} kg`
+                  : 'Harika!'}
+              </Text>
             </View>
           )}
         </View>

@@ -109,6 +109,9 @@ const tr = {
   'settings.permissionRequired': 'İzin Gerekli',
   'settings.permissionDesc': 'Bildirimleri açmak için lütfen uygulama ayarlarından bildirim iznini verin.',
   'settings.deleteAccountTitle': '⚠️ Hesabı Sil',
+  'settings.unitSystem': '⚖️ Birim Sistemi',
+  'settings.metric': 'Metrik (kg/cm)',
+  'settings.imperial': 'İmperyal (lbs/ft)',
 
   // ── Profile ─────────────────────────────────────────────────────
   'profile.settings': 'Ayarlar',
@@ -298,6 +301,9 @@ const en: Record<keyof typeof tr, string> = {
   'settings.permissionRequired': 'Permission Required',
   'settings.permissionDesc': 'Please enable notification permissions in your device settings.',
   'settings.deleteAccountTitle': '⚠️ Delete Account',
+  'settings.unitSystem': '⚖️ Unit System',
+  'settings.metric': 'Metric (kg/cm)',
+  'settings.imperial': 'Imperial (lbs/ft)',
 
   // Profile
   'profile.settings': 'Settings',

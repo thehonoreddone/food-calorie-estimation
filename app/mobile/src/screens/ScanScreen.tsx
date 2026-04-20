@@ -20,7 +20,6 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import Animated, {
   FadeIn,
-  FadeInDown,
   FadeInUp,
   ZoomIn,
   useSharedValue,
@@ -29,24 +28,25 @@ import Animated, {
   withTiming,
   withSequence,
   Easing,
-  interpolate,
 } from "react-native-reanimated";
 import { predictionService } from "../services";
 import { logMeal, MealType, createCommunityPost, recordMealLog } from "../services/firestoreService";
 import { uploadCommunityImage } from "../services/storageService";
 import { PredictionResponse, ImagePickerResult } from "../types";
 import { useUser } from "../contexts/UserContext";
+import { useTheme } from "../contexts/ThemeContext";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors, FontSize, Spacing, BorderRadius, Shadows } from "../constants/theme";
+import { Colors, FontSize, Spacing, BorderRadius } from "../constants/theme";
+import { formatFoodWeight, gramsToOz, type UnitSystem } from "../utils/unitConversion";
+import Slider from "@react-native-community/slider";
+import { barcodeService, BarcodeResult } from "../services/barcodeService";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-type ScanMode = "camera" | "result" | "loading" | "saved";
+type ScanMode = "camera" | "barcode" | "result" | "loading" | "saved";
 
 // ─── Neon scan color ────────────────────────────────────────────────────────
 const SCAN_COLOR = "#A3E635";      // neon lime
-const SCAN_GLOW  = "rgba(163,230,53,0.4)";
-const SCAN_DIM   = "rgba(163,230,53,0.15)";
 const SCAN_CYAN  = "#22D3EE";
 
 // ─── Meal type selector data ─────────────────────────────────────────────────
@@ -200,8 +200,6 @@ const HudOverlay: React.FC<{ active: boolean; detecting: boolean }> = ({ active,
 
   const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }));
 
-  const bars = [85, 92, 78, 95];
-
   return (
     <>
       {/* Top HUD status bar */}
@@ -214,42 +212,12 @@ const HudOverlay: React.FC<{ active: boolean; detecting: boolean }> = ({ active,
         </View>
         <Animated.View style={blinkStyle}>
           <Text style={[styles.hudMono, { color: active ? SCAN_COLOR : "#666" }]}>
-            {detecting ? "ANALIZ EDİLİYOR..." : active ? "TARAMA DEVAM EDİYOR..." : "KAMERA HAZIR"}
+            {detecting ? "ANALİZ EDİLİYOR..." : active ? "TARAMA DEVAM EDİYOR..." : "KAMERA HAZIR"}
           </Text>
         </Animated.View>
         <View style={styles.hudRight}>
           <Text style={[styles.hudMono, { color: "#666" }]}>NUTRİNO</Text>
         </View>
-      </Animated.View>
-
-      {/* Left side telemetry bars */}
-      <Animated.View entering={FadeIn.duration(600).delay(600)} style={styles.hudSideBars}>
-        {bars.map((val, i) => (
-          <View key={i} style={styles.hudBarRow}>
-            <View style={styles.hudBarTrack}>
-              <Animated.View
-                style={[styles.hudBarFill, { width: `${val}%`, backgroundColor: SCAN_COLOR }]}
-                entering={FadeInUp.duration(500).delay(800 + i * 100)}
-              />
-            </View>
-            <Text style={[styles.hudMono, { color: "#555", fontSize: 9 }]}>{val}%</Text>
-          </View>
-        ))}
-      </Animated.View>
-
-      {/* Right side data readout */}
-      <Animated.View entering={FadeIn.duration(600).delay(700)} style={styles.hudSideData}>
-        {[
-          { label: "RES", value: "4K" },
-          { label: "FPS", value: "60" },
-          { label: "LAT", value: "12ms" },
-          { label: "ACC", value: "97.3%" },
-        ].map((item) => (
-          <View key={item.label} style={styles.hudDataRow}>
-            <Text style={[styles.hudMono, { color: SCAN_COLOR, fontSize: 9 }]}>{item.label}:</Text>
-            <Text style={[styles.hudMono, { color: "#666", fontSize: 9 }]}> {item.value}</Text>
-          </View>
-        ))}
       </Animated.View>
 
       {/* Grid overlay */}
@@ -284,6 +252,9 @@ export const ScanScreen: React.FC = () => {
   const [isAnalyzing,  setIsAnalyzing]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
 
+  // Portion size adjustment
+  const [portionGrams, setPortionGrams] = useState<number | null>(null);  // null = use AI value
+
   // Meal modal
   const [showMealModal,    setShowMealModal]    = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>("lunch");
@@ -297,6 +268,14 @@ export const ScanScreen: React.FC = () => {
   const [shareFoodName,    setShareFoodName]    = useState("");
 
   const { profile } = useUser();
+  const { settings } = useTheme();
+  const language = settings.language ?? 'tr';
+  const unitSystem: UnitSystem = settings.unitSystem ?? 'metric';
+
+  // Barcode scanning state
+  const [barcodeResult,  setBarcodeResult]  = useState<BarcodeResult | null>(null);
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
+  const barcodeScannedRef = useRef(false); // prevent duplicate scans
 
   // Auto-select meal type by time
   useEffect(() => {
@@ -337,7 +316,7 @@ export const ScanScreen: React.FC = () => {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.4, skipProcessing: false });
       if (!photo) { detectingRef.current = false; setIsDetecting(false); return; }
       const image: ImagePickerResult = { uri: photo.uri, type: "image/jpeg", name: `frame_${Date.now()}.jpg` };
-      const result = await predictionService.predict(image);
+      const result = await predictionService.predict(image, language);
       setLiveResult(result);
       setCapturedImageUri(photo.uri);
     } catch (err) {
@@ -365,8 +344,9 @@ export const ScanScreen: React.FC = () => {
       }
       if (!photo) { setMode("camera"); setIsAnalyzing(false); return; }
       const image: ImagePickerResult = { uri: photo.uri, type: "image/jpeg", name: `capture_${Date.now()}.jpg` };
-      const result = await predictionService.predict(image);
+      const result = await predictionService.predict(image, language);
       setFullResult(result);
+      setPortionGrams(null); // reset portion to AI value on new scan
       setFullImageUri(photo.uri);
       setMode("result");
     } catch (err: unknown) {
@@ -402,8 +382,9 @@ export const ScanScreen: React.FC = () => {
         setIsAnalyzing(true);
         setError(null);
         const image: ImagePickerResult = { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: asset.fileName || `gallery_${Date.now()}.jpg` };
-        const prediction = await predictionService.predict(image);
+        const prediction = await predictionService.predict(image, language);
         setFullResult(prediction);
+        setPortionGrams(null); // reset portion to AI value
         setFullImageUri(asset.uri);
         setMode("result");
         setIsAnalyzing(false);
@@ -435,15 +416,30 @@ export const ScanScreen: React.FC = () => {
     const imageToUse = fullImageUri || capturedImageUri;
     if (!predToUse || !profile.uid) { Alert.alert("Hata", "Giriş yapmadan öğün eklenemez."); return; }
     try {
-      const protein   = Math.round(predToUse.estimated_calories * 0.25 / 4);
-      const carbs     = Math.round(predToUse.estimated_calories * 0.45 / 4);
-      const fat       = Math.round(predToUse.estimated_calories * 0.30 / 9);
-      const foodName  = predToUse.class_name.replace(/_/g, " ").replace(/-/g, " ");
+      // Use real macros from Gemini if available, else estimate — scaled by portion
+      const aiGramsForLog = predToUse.estimated_weight_grams;
+      const effectiveGramsForLog = portionGrams ?? aiGramsForLog;
+      const ratioForLog = aiGramsForLog > 0 ? effectiveGramsForLog / aiGramsForLog : 1;
+      const adjustedCalForLog = Math.round(predToUse.estimated_calories * ratioForLog);
+
+      const protein = Math.round((predToUse.macros
+        ? predToUse.macros.protein
+        : predToUse.estimated_calories * 0.25 / 4) * ratioForLog);
+      const carbs = Math.round((predToUse.macros
+        ? predToUse.macros.carbs
+        : predToUse.estimated_calories * 0.45 / 4) * ratioForLog);
+      const fat = Math.round((predToUse.macros
+        ? predToUse.macros.fat
+        : predToUse.estimated_calories * 0.30 / 9) * ratioForLog);
+      // Display localised name: prefer food_name_local (user's lang), fallback to food_name_tr
+      const foodName = predToUse.food_name_local
+        || predToUse.food_name_tr
+        || predToUse.class_name.replace(/_/g, " ").replace(/-/g, " ");
       await logMeal(profile.uid, {
         date: selectedDate, mealType: selectedMealType,
-        foodName, calories: Math.round(predToUse.estimated_calories),
+        foodName, calories: adjustedCalForLog,
         protein, carbs, fat,
-        weight: Math.round(predToUse.estimated_weight_grams),
+        weight: Math.round(effectiveGramsForLog),
         confidence: predToUse.confidence,
         imageUri: imageToUse || undefined,
       });
@@ -465,10 +461,43 @@ export const ScanScreen: React.FC = () => {
   const getMealLabel = (mt: MealType) => MEAL_TYPES.find((m) => m.key === mt)?.label || mt;
   const shiftDate = (days: number) => { const d = new Date(selectedDate); d.setDate(d.getDate() + days); setSelectedDate(fmtDate(d)); };
 
+  // ─── Barcode Handler ─────────────────────────────────────────────────────
+  const handleBarcodeScanned = useCallback(async ({ data }: { data: string }) => {
+    if (barcodeScannedRef.current || isBarcodeLoading) return;
+    barcodeScannedRef.current = true;
+    setIsBarcodeLoading(true);
+
+    try {
+      const result = await barcodeService.lookup(data);
+      if (!result) {
+        Alert.alert(
+          '🔍 Ürün Bulunamadı',
+          `"${data}" barkoduna ait ürün veritabanında yok. Fotoğrafla tarayabilirsiniz.`,
+          [{ text: 'Tamam', onPress: () => { barcodeScannedRef.current = false; } }]
+        );
+        setIsBarcodeLoading(false);
+        return;
+      }
+      setBarcodeResult(result);
+      const prediction = barcodeService.toPrediction(result);
+      setFullResult(prediction);
+      setPortionGrams(null);
+      setFullImageUri(result.imageFront ?? '');
+      setMode('result');
+    } catch (err) {
+      Alert.alert('Hata', 'Barkod okunamadı. Tekrar deneyin.');
+      barcodeScannedRef.current = false;
+    } finally {
+      setIsBarcodeLoading(false);
+    }
+  }, [isBarcodeLoading]);
+
   const handleReset = () => {
-    setMode("camera"); setFullResult(null); setFullImageUri(null);
+    setMode('camera'); setFullResult(null); setFullImageUri(null);
     setLiveResult(null); setCapturedImageUri(null); setError(null);
     setSelectedDate(fmtDate(new Date()));
+    setBarcodeResult(null);
+    barcodeScannedRef.current = false;
   };
 
   // ─── Permission ─────────────────────────────────────────────────────────
@@ -490,6 +519,71 @@ export const ScanScreen: React.FC = () => {
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── Barcode Scanner Screen ───────────────────────────────────────────────
+  if (mode === 'barcode') {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }} edges={['top']}>
+        {/* Camera with barcode scanning */}
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr', 'code128', 'code39'] }}
+          onBarcodeScanned={isBarcodeLoading ? undefined : handleBarcodeScanned}
+        />
+
+        {/* Dark vignette */}
+        <View style={styles.barcodeVignette} pointerEvents="none" />
+
+        {/* Top bar */}
+        <View style={styles.barcodeTopBar}>
+          <TouchableOpacity onPress={handleReset} style={styles.barcodeBackBtn}>
+            <Text style={styles.barcodeBackIcon}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.barcodeTitle}>🔍 Barkod Tara</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        {/* Scan frame */}
+        <Animated.View entering={FadeIn.duration(600)} style={styles.barcodeScanFrame}>
+          {/* Corner brackets */}
+          <View style={[styles.barcodeCorner, { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 }]} />
+          <View style={[styles.barcodeCorner, { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 }]} />
+          <View style={[styles.barcodeCorner, { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 }]} />
+          <View style={[styles.barcodeCorner, { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 }]} />
+
+          {isBarcodeLoading ? (
+            <View style={styles.barcodeLoadingOverlay}>
+              <ActivityIndicator size="large" color="#2DD4A0" />
+              <Text style={styles.barcodeLoadingText}>Ürün aranıyor...</Text>
+            </View>
+          ) : (
+            <View style={styles.barcodeScanLine} />
+          )}
+        </Animated.View>
+
+        {/* Instruction */}
+        <Animated.View entering={FadeInUp.delay(300).duration(500)} style={styles.barcodeInstruction}>
+          <Text style={styles.barcodeInstructionText}>
+            📦 Ürün barkodunu çerçeveye hizalayın
+          </Text>
+          <Text style={styles.barcodeInstructionSub}>
+            EAN-13 · EAN-8 · UPC · QR desteklenir
+          </Text>
+        </Animated.View>
+
+        {/* Or AI scan button */}
+        <View style={styles.barcodeBottomBar}>
+          <TouchableOpacity
+            onPress={() => { barcodeScannedRef.current = false; setMode('camera'); }}
+            style={styles.barcodeSwitchBtn}
+          >
+            <Text style={styles.barcodeSwitchText}>📷 Fotoğrafla Tara</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -554,13 +648,35 @@ export const ScanScreen: React.FC = () => {
 
   // ─── Result Screen (Premium v0 Design) ───────────────────────────────────────
   if (mode === "result" && fullResult && fullImageUri) {
-    const displayName  = fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ");
-    const estProtein   = Math.round(fullResult.estimated_calories * 0.25 / 4);
-    const estCarbs     = Math.round(fullResult.estimated_calories * 0.45 / 4);
-    const estFat       = Math.round(fullResult.estimated_calories * 0.30 / 9);
-    const estFiber     = Math.round(fullResult.estimated_weight_grams * 0.02);
+    // Portion-adjusted values: user can override AI estimate
+    const aiGrams = fullResult.estimated_weight_grams;
+    const effectiveGrams = portionGrams ?? aiGrams;
+    const portionRatio   = aiGrams > 0 ? effectiveGrams / aiGrams : 1;
+
+    const adjustedCalories = Math.round(fullResult.estimated_calories * portionRatio);
+    const adjustedCalMin   = fullResult.calories_min  != null ? Math.round(fullResult.calories_min  * portionRatio) : null;
+    const adjustedCalMax   = fullResult.calories_max  != null ? Math.round(fullResult.calories_max  * portionRatio) : null;
+
+    // Use real macros from Gemini if available, else estimate — then scale
+    const hasMacros = !!fullResult.macros;
+    const estProtein = Math.round((hasMacros ? fullResult.macros!.protein : fullResult.estimated_calories * 0.25 / 4) * portionRatio);
+    const estCarbs   = Math.round((hasMacros ? fullResult.macros!.carbs   : fullResult.estimated_calories * 0.45 / 4) * portionRatio);
+    const estFat     = Math.round((hasMacros ? fullResult.macros!.fat     : fullResult.estimated_calories * 0.30 / 9) * portionRatio);
+    const estFiber   = Math.round((hasMacros ? fullResult.macros!.fiber   : aiGrams * 0.02) * portionRatio);
+
+    // Show localised name (user's language) > Turkish name > English class name
+    const displayName = fullResult.food_name_local
+      || fullResult.food_name_tr
+      || fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ");
+    // Keep English slug for community share
+    const displayNameEn = fullResult.class_name.replace(/_/g, " ").replace(/-/g, " ");
+
+    // Format food weight in user's unit system
+    const foodWeightDisplay = formatFoodWeight(effectiveGrams, unitSystem);
+
+    const isGeminiSource = fullResult.source === "gemini";
     const dailyCalGoal = 2000;
-    const calPercent   = Math.round(Math.min((fullResult.estimated_calories / dailyCalGoal) * 100, 100));
+    const calPercent   = Math.round(Math.min((adjustedCalories / dailyCalGoal) * 100, 100));
     const confidencePct = Math.round((fullResult.confidence || 0.9) * 100);
 
     // Macro max for bar widths
@@ -570,6 +686,11 @@ export const ScanScreen: React.FC = () => {
       { label: "Karb",    value: estCarbs,   unit: "g", color: "#f59e0b", barPct: (estCarbs * 4)   / macroMax },
       { label: "Yağ",     value: estFat,     unit: "g", color: "#3b82f6", barPct: (estFat * 9)     / macroMax },
     ];
+
+    // Slider display range depends on unit system
+    const sliderMin = 10;
+    const sliderMax = 800;
+    const sliderStep = 5;
 
     return (
       <SafeAreaView style={styles.premiumResultContainer} edges={["top"]}>
@@ -616,11 +737,24 @@ export const ScanScreen: React.FC = () => {
               </View>
             </SafeAreaView>
 
-            {/* AI Analysis Complete badge */}
+            {/* AI Analysis Complete badge + Source badge */}
             <Animated.View entering={FadeIn.delay(200).duration(400)} style={styles.premiumAiBadgeWrap}>
               <View style={styles.premiumAiBadge}>
                 <View style={styles.premiumAiDot} />
-                <Text style={styles.premiumAiBadgeText}>AI Analiz Tamamlandı</Text>
+                <Text style={styles.premiumAiBadgeText}>
+                  {fullResult.source === 'barcode' ? 'Barkod Veritabanı' : 'AI Analiz Tamamlandı'}
+                </Text>
+              </View>
+              {/* Source badge */}
+              <View style={[
+                styles.sourceBadge,
+                fullResult.source === 'barcode'  ? styles.sourceBadgeBarcode :
+                isGeminiSource                   ? styles.sourceBadgeGemini  :
+                                                   styles.sourceBadgeModel,
+              ]}>
+                <Text style={styles.sourceBadgeText}>
+                  {fullResult.source === 'barcode' ? '📦 Barkod' : isGeminiSource ? '✨ Gemini' : '🤖 Model'}
+                </Text>
               </View>
             </Animated.View>
           </View>
@@ -634,7 +768,14 @@ export const ScanScreen: React.FC = () => {
             <View style={styles.premiumFoodRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.premiumFoodName}>{displayName}</Text>
-                <Text style={styles.premiumFoodSub}>AI Tarafından Tespit Edildi</Text>
+                {fullResult.food_name_tr && displayNameEn !== displayName && (
+                  <Text style={styles.premiumFoodSlug}>{displayNameEn}</Text>
+                )}
+                {fullResult.description ? (
+                  <Text style={styles.premiumFoodSub} numberOfLines={2}>{fullResult.description}</Text>
+                ) : (
+                  <Text style={styles.premiumFoodSub}>AI Tarafından Tespit Edildi</Text>
+                )}
               </View>
               <View style={styles.premiumConfidenceBadge}>
                 <Text style={styles.premiumConfidenceIcon}>✦</Text>
@@ -676,10 +817,53 @@ export const ScanScreen: React.FC = () => {
                   <Text style={{ fontSize: 18 }}>⚖️</Text>
                 </View>
                 <Text style={styles.premiumPillLabel}>Ağırlık</Text>
-                <Text style={styles.premiumPillValue}>{fullResult.estimated_weight_grams.toFixed(0)}</Text>
-                <Text style={styles.premiumPillUnit}>g</Text>
+                <Text style={styles.premiumPillValue}>{foodWeightDisplay.replace(/[^0-9.]/g, '')}</Text>
+                <Text style={styles.premiumPillUnit}>{unitSystem === 'imperial' ? 'oz' : 'g'}</Text>
               </View>
             </View>
+
+            {/* ── Calorie range adjusted ───────────────────── */}
+            {adjustedCalMin != null && adjustedCalMax != null && (
+              <Animated.View entering={FadeInUp.delay(200).duration(400)} style={styles.calorieRangeRow}>
+                <Text style={styles.calorieRangeLabel}>Aralık:</Text>
+                <Text style={styles.calorieRangeValue}>
+                  {adjustedCalMin} – {adjustedCalMax} kcal
+                </Text>
+                {hasMacros && (
+                  <View style={styles.realMacroBadge}>
+                    <Text style={styles.realMacroBadgeText}>✓ Gerçek Makrolar</Text>
+                  </View>
+                )}
+              </Animated.View>
+            )}
+
+            {/* ── Portion Slider ───────────────────────────── */}
+            <Animated.View entering={FadeInUp.delay(250).duration(400)} style={styles.portionCard}>
+              <View style={styles.portionHeader}>
+                <Text style={styles.portionTitle}>⚖️ Porsiyon Ayarla</Text>
+                <View style={styles.portionBadge}>
+                  <Text style={styles.portionBadgeText}>{foodWeightDisplay}</Text>
+                </View>
+              </View>
+              <Slider
+                style={{ width: "100%", height: 36, marginVertical: 4 }}
+                minimumValue={sliderMin}
+                maximumValue={sliderMax}
+                step={sliderStep}
+                value={portionGrams ?? aiGrams}
+                onValueChange={(v) => setPortionGrams(Math.round(v / sliderStep) * sliderStep)}
+                minimumTrackTintColor="#2DD4A0"
+                maximumTrackTintColor="rgba(0,0,0,0.15)"
+                thumbTintColor="#2DD4A0"
+              />
+              <View style={styles.portionRangeRow}>
+                <Text style={styles.portionRangeText}>{sliderMin}g</Text>
+                <TouchableOpacity onPress={() => setPortionGrams(null)} style={styles.portionResetBtn}>
+                  <Text style={styles.portionResetText}>AI Tahminine Dön</Text>
+                </TouchableOpacity>
+                <Text style={styles.portionRangeText}>{sliderMax}g</Text>
+              </View>
+            </Animated.View>
 
             {/* ── Macronutrients ──────────────────────────── */}
             <View style={styles.premiumMacroSection}>
@@ -990,15 +1174,24 @@ export const ScanScreen: React.FC = () => {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Flip */}
+          {/* Barcode scanner shortcut */}
           <TouchableOpacity
-            style={styles.bottomSideBtn}
-            onPress={() => setFacing((f) => (f === "back" ? "front" : "back"))}
+            style={[styles.bottomSideBtn, { borderColor: '#2DD4A0', borderWidth: 1 }]}
+            onPress={() => { barcodeScannedRef.current = false; setMode('barcode'); }}
             activeOpacity={0.7}
           >
-            <Text style={styles.bottomSideBtnText}>🔄</Text>
+            <Text style={styles.bottomSideBtnText}>📦</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Barcode hint row */}
+        <TouchableOpacity
+          onPress={() => { barcodeScannedRef.current = false; setMode('barcode'); }}
+          activeOpacity={0.7}
+          style={styles.barcodeHintRow}
+        >
+          <Text style={styles.barcodeHintText}>📦 Barkod ile tara</Text>
+        </TouchableOpacity>
       </View>
 
       {renderMealModal()}
@@ -1557,7 +1750,10 @@ const styles = StyleSheet.create({
   premiumTopBtnIcon: { fontSize: 16, color: "#fff", fontWeight: "700" },
 
   // AI badge
-  premiumAiBadgeWrap: { position: "absolute", bottom: 14, left: 16 },
+  premiumAiBadgeWrap: {
+    position: "absolute", bottom: 14, left: 16,
+    flexDirection: "row", alignItems: "center", gap: 6,
+  },
   premiumAiBadge: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -1814,6 +2010,231 @@ const styles = StyleSheet.create({
   modalConfirmBtn: { flex: 1, borderRadius: 14, overflow: "hidden" },
   modalConfirmGrad: { paddingVertical: 14, borderRadius: 14, alignItems: "center" },
   modalConfirmText: { color: "#000", fontWeight: "800", fontSize: FontSize.base },
+
+  // ── Source badge (Gemini / Model) ──────────────────────────────────────
+  sourceBadge: {
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, marginLeft: 8,
+    borderWidth: 1,
+  },
+  sourceBadgeGemini: {
+    backgroundColor: "rgba(139,92,246,0.12)",
+    borderColor: "rgba(139,92,246,0.4)",
+  },
+  sourceBadgeModel: {
+    backgroundColor: "rgba(34,211,238,0.1)",
+    borderColor: "rgba(34,211,238,0.35)",
+  },
+  sourceBadgeText: { fontSize: 11, fontWeight: "700", color: "#6d28d9" },
+
+  // ── Calorie range row ─────────────────────────────────────────────────
+  calorieRangeRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: "#f0fdf4",
+    borderRadius: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: "#bbf7d0", gap: 8,
+  },
+  calorieRangeLabel: { fontSize: 12, color: "#555", fontWeight: "600" },
+  calorieRangeValue: { fontSize: 12, color: "#16a34a", fontWeight: "700", flex: 1 },
+
+  // ── Real macros badge ─────────────────────────────────────────────────
+  realMacroBadge: {
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 10, borderWidth: 1, borderColor: "#86efac",
+  },
+  realMacroBadgeText: { fontSize: 10, color: "#15803d", fontWeight: "700" },
+
+  // ── Food name slug (English) ──────────────────────────────────────────
+  premiumFoodSlug: {
+    fontSize: FontSize.xs,
+    color: "#999",
+    fontWeight: "500",
+    marginBottom: 2,
+    textTransform: "capitalize",
+  },
+
+  // ── Portion Slider Card ───────────────────────────────────────────────
+  portionCard: {
+    backgroundColor: "#f0fdf4",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    padding: 16,
+    marginBottom: 12,
+  },
+  portionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  portionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#15803d",
+  },
+  portionBadge: {
+    backgroundColor: "#16a34a",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  portionBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  portionRangeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  portionRangeText: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  portionResetBtn: {
+    backgroundColor: "rgba(22,163,74,0.12)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  portionResetText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#16a34a",
+  },
+
+  // ── Source badge — Barcode ─────────────────────────────────────────────
+  sourceBadgeBarcode: {
+    backgroundColor: "rgba(45,212,160,0.12)",
+    borderColor: "rgba(45,212,160,0.4)",
+  },
+
+  // ── Barcode Scanner Screen ─────────────────────────────────────────────
+  barcodeVignette: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "transparent",
+    // Dark outer ring — clip the center, simulate with shadow
+    shadowColor: "#000",
+    shadowOpacity: 0.9,
+    shadowRadius: 80,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  barcodeTopBar: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 56 : 36,
+    left: 0, right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    zIndex: 20,
+  },
+  barcodeBackBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  barcodeBackIcon: { color: "#fff", fontSize: 28, lineHeight: 32, marginTop: -2 },
+  barcodeTitle: {
+    color: "#fff", fontSize: FontSize.base, fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.8)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  barcodeScanFrame: {
+    position: "absolute",
+    top: "28%",
+    alignSelf: "center",
+    width: SCREEN_WIDTH * 0.78,
+    height: 160,
+    zIndex: 15,
+  },
+  barcodeCorner: {
+    position: "absolute",
+    width: 28, height: 28,
+    borderColor: "#2DD4A0",
+    borderRadius: 2,
+  },
+  barcodeScanLine: {
+    position: "absolute",
+    top: "50%",
+    left: 10, right: 10,
+    height: 2,
+    backgroundColor: "#2DD4A0",
+    opacity: 0.85,
+    borderRadius: 2,
+    shadowColor: "#2DD4A0",
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  barcodeLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 8,
+    gap: 12,
+  },
+  barcodeLoadingText: {
+    color: "#2DD4A0", fontSize: FontSize.sm, fontWeight: "700",
+  },
+  barcodeInstruction: {
+    position: "absolute",
+    top: "57%",
+    alignSelf: "center",
+    alignItems: "center",
+    gap: 4,
+    zIndex: 15,
+  },
+  barcodeInstructionText: {
+    color: "#fff", fontSize: FontSize.base, fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.8)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  barcodeInstructionSub: {
+    color: "rgba(255,255,255,0.55)", fontSize: FontSize.xs, fontWeight: "600",
+  },
+  barcodeBottomBar: {
+    position: "absolute",
+    bottom: 0, left: 0, right: 0,
+    alignItems: "center",
+    paddingBottom: Platform.OS === "ios" ? 44 : 28,
+    paddingTop: 16,
+    zIndex: 20,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  barcodeSwitchBtn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.full,
+  },
+  barcodeSwitchText: {
+    color: "#fff", fontSize: FontSize.base, fontWeight: "700",
+  },
+
+  // ── Barcode hint row (in camera bottom bar) ────────────────────────────
+  barcodeHintRow: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.full,
+    backgroundColor: "rgba(45,212,160,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(45,212,160,0.25)",
+  },
+  barcodeHintText: {
+    color: "#2DD4A0",
+    fontSize: FontSize.xs,
+    fontWeight: "700",
+  },
 });
 
 export default ScanScreen;

@@ -16,15 +16,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import Slider from '@react-native-community/slider';
 import { useUser, Goal, ActivityLevel } from '@/contexts/UserContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { PrimaryButton } from '@/components/ui';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
+import { formatWeight, formatHeight, kgToLbs, lbsToKg, type UnitSystem } from '@/utils/unitConversion';
 
 export default function EditProfileScreen() {
   const { profile, updateProfile, calculateDailyCalories } = useUser();
+  const { settings } = useTheme();
+  const unitSystem: UnitSystem = settings.unitSystem ?? 'metric';
 
   const [name, setName] = useState(profile.name ?? '');
   const [avatarUri, setAvatarUri] = useState(profile.avatarUri ?? '');
-  const [weight, setWeight] = useState(profile.weight ?? 70);
+  const [weight, setWeight] = useState(profile.weight ?? 70); // always kg internally
   const [goal, setGoal] = useState<Goal>(profile.goal ?? 'maintain');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel ?? 'moderate');
   const [dailyCalorieTarget, setDailyCalorieTarget] = useState<string>(
@@ -32,6 +36,15 @@ export default function EditProfileScreen() {
   );
   const [useCustomCalorie, setUseCustomCalorie] = useState(!!profile.dailyCalorieTarget);
   const autoCalories = calculateDailyCalories();
+
+  // Slider range and display value depends on unit system
+  const sliderKgMin = 30;
+  const sliderKgMax = 200;
+  const sliderMin = unitSystem === 'imperial' ? Math.round(kgToLbs(sliderKgMin)) : sliderKgMin;
+  const sliderMax = unitSystem === 'imperial' ? Math.round(kgToLbs(sliderKgMax)) : sliderKgMax;
+  // In imperial mode, slider shows lbs but we convert back to kg on change
+  const sliderValue = unitSystem === 'imperial' ? kgToLbs(weight) : weight;
+  const sliderLabel = unitSystem === 'imperial' ? `${kgToLbs(weight)} lbs` : `${weight} kg`;
 
   // Derive display info from profile
   const displayHeight = profile.height ?? 170;
@@ -152,7 +165,7 @@ export default function EditProfileScreen() {
           <View style={styles.readOnlyRow}>
             <View style={styles.readOnlyItem}>
               <Text style={styles.readOnlyIcon}>📏</Text>
-              <Text style={styles.readOnlyValue}>{displayHeight} cm</Text>
+              <Text style={styles.readOnlyValue}>{formatHeight(displayHeight, unitSystem)}</Text>
               <Text style={styles.readOnlyLabel}>Boy</Text>
             </View>
             {displayAge !== null && (
@@ -164,7 +177,7 @@ export default function EditProfileScreen() {
             )}
             <View style={styles.readOnlyItem}>
               <Text style={styles.readOnlyIcon}>⚖️</Text>
-              <Text style={styles.readOnlyValue}>{weight} kg</Text>
+              <Text style={styles.readOnlyValue}>{formatWeight(weight, unitSystem)}</Text>
               <Text style={styles.readOnlyLabel}>Kilo</Text>
             </View>
           </View>
@@ -174,14 +187,20 @@ export default function EditProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sliderHeader}>
             <Text style={styles.label}>⚖️ Kilo</Text>
-            <Text style={styles.sliderValue}>{weight} kg</Text>
+            <Text style={styles.sliderValue}>{sliderLabel}</Text>
           </View>
           <Slider
-            minimumValue={30}
-            maximumValue={200}
+            minimumValue={sliderMin}
+            maximumValue={sliderMax}
             step={1}
-            value={weight}
-            onValueChange={setWeight}
+            value={sliderValue}
+            onValueChange={val => {
+              if (unitSystem === 'imperial') {
+                setWeight(lbsToKg(val));
+              } else {
+                setWeight(val);
+              }
+            }}
             minimumTrackTintColor={Colors.primary[500]}
             maximumTrackTintColor={Colors.neutral[200]}
             thumbTintColor={Colors.primary[600]}

@@ -115,6 +115,7 @@ class PredictionService:
         self,
         image: Image.Image,
         include_mask: bool = True,
+        language: str = "tr",
     ) -> PredictionResponse:
         """
         Run complete prediction pipeline on an image
@@ -122,6 +123,7 @@ class PredictionService:
         Args:
             image: PIL Image to analyze
             include_mask: Whether to include base64 mask in response
+            language: ISO language code for localized food name (default: "tr")
             
         Returns:
             PredictionResponse with class, calories, weight, etc.
@@ -131,7 +133,7 @@ class PredictionService:
         # Try legacy pipeline first for better accuracy
         if self.use_legacy and legacy_pipeline is not None and legacy_pipeline.is_loaded:
             try:
-                return await self._predict_legacy(image, include_mask, start_time)
+                return await self._predict_legacy(image, include_mask, start_time, language=language)
             except Exception as e:
                 logger.warning(f"Legacy pipeline failed, falling back to YOLO: {e}")
         
@@ -181,6 +183,7 @@ class PredictionService:
         image: Image.Image,
         include_mask: bool,
         start_time: float,
+        language: str = "tr",
     ) -> PredictionResponse:
         """
         3-tier confidence caching with Gemini fallback:
@@ -218,7 +221,7 @@ class PredictionService:
             # Fire-and-forget background Gemini call
             if self.gemini_enabled and gemini_service is not None:
                 asyncio.create_task(
-                    self._background_gemini(image, result.predicted_class, confidence, img_hash)
+                    self._background_gemini(image, result.predicted_class, confidence, img_hash, language=language)
                 )
             return self._build_legacy_response(result, include_mask, start_time, source="model")
 
@@ -233,6 +236,7 @@ class PredictionService:
                     image,
                     hint_class=result.predicted_class,
                     hint_confidence=confidence,
+                    language=language,
                 )
                 if gemini_result and gemini_result.is_food and gemini_result.confidence > confidence:
                     logger.info(
@@ -250,6 +254,10 @@ class PredictionService:
                         calories_max=round(gemini_result.calories_max, 1),
                         mask_base64=mask_b64,
                         source="gemini",
+                        macros=gemini_result.macros if gemini_result.macros else None,
+                        food_name_tr=gemini_result.food_class_tr if gemini_result.food_class_tr else None,
+                        food_name_local=gemini_result.food_class_local if gemini_result.food_class_local else None,
+                        description=gemini_result.description if gemini_result.description else None,
                     )
                     self._cache_set(img_hash, resp)
                     return resp
@@ -260,7 +268,7 @@ class PredictionService:
         return self._build_legacy_response(result, include_mask, start_time, source="model")
 
     async def _background_gemini(
-        self, image: Image.Image, hint_class: str, hint_conf: float, img_hash: str
+        self, image: Image.Image, hint_class: str, hint_conf: float, img_hash: str, language: str = "tr"
     ) -> None:
         """Background task: call Gemini and cache the result for future requests"""
         try:
@@ -268,6 +276,7 @@ class PredictionService:
                 image,
                 hint_class=hint_class,
                 hint_confidence=hint_conf,
+                language=language,
             )
             if gemini_result and gemini_result.is_food:
                 resp = PredictionResponse(
@@ -279,11 +288,15 @@ class PredictionService:
                     calories_max=round(gemini_result.calories_max, 1),
                     mask_base64=None,
                     source="gemini",
+                    macros=gemini_result.macros if gemini_result.macros else None,
+                    food_name_tr=gemini_result.food_class_tr if gemini_result.food_class_tr else None,
+                    food_name_local=gemini_result.food_class_local if gemini_result.food_class_local else None,
+                    description=gemini_result.description if gemini_result.description else None,
                 )
                 self._cache_set(img_hash, resp)
                 logger.info(
                     f"[Background Gemini] Cached result for {img_hash[:8]}: "
-                    f"{gemini_result.food_class} ({gemini_result.confidence:.2f})"
+                    f"{gemini_result.food_class} ({gemini_result.confidence:.2f}) [lang={language}]"
                 )
         except Exception as e:
             logger.warning(f"[Background Gemini] Failed: {e}")

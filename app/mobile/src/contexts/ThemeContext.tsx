@@ -7,11 +7,13 @@ import { useColorScheme } from 'react-native';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type AppLanguage = 'tr' | 'en';
 export type AppRegion = 'TR' | 'US' | 'EU';
+export type UnitSystem = 'metric' | 'imperial';
 
 export interface AppSettings {
   themeMode: ThemeMode;
   language: AppLanguage;
   region: AppRegion;
+  unitSystem: UnitSystem;
 }
 
 interface ThemeContextType {
@@ -28,6 +30,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'dark',
   language: 'tr',
   region: 'TR',
+  unitSystem: 'metric',
 };
 
 // ─── Dark / Light Color Tokens ──────────────────────────────────────────────
