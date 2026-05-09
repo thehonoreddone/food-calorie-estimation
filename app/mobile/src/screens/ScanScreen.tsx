@@ -27,6 +27,7 @@ import Animated, {
   withRepeat,
   withTiming,
   withSequence,
+  interpolate,
   Easing,
 } from "react-native-reanimated";
 import { predictionService } from "../services";
@@ -431,6 +432,7 @@ export const ScanScreen: React.FC = () => {
       const fat = Math.round((predToUse.macros
         ? predToUse.macros.fat
         : predToUse.estimated_calories * 0.30 / 9) * ratioForLog);
+      const fiber = Math.round((predToUse.macros?.fiber ?? 0) * ratioForLog);
       // Display localised name: prefer food_name_local (user's lang), fallback to food_name_tr
       const foodName = predToUse.food_name_local
         || predToUse.food_name_tr
@@ -439,6 +441,7 @@ export const ScanScreen: React.FC = () => {
         date: selectedDate, mealType: selectedMealType,
         foodName, calories: adjustedCalForLog,
         protein, carbs, fat,
+        fiber: fiber > 0 ? fiber : undefined,
         weight: Math.round(effectiveGramsForLog),
         confidence: predToUse.confidence,
         imageUri: imageToUse || undefined,
@@ -719,9 +722,6 @@ export const ScanScreen: React.FC = () => {
                   <Text style={styles.premiumTopBtnIcon}>←</Text>
                 </TouchableOpacity>
                 <View style={styles.premiumTopRight}>
-                  <TouchableOpacity style={styles.premiumTopBtn} activeOpacity={0.7}>
-                    <Text style={styles.premiumTopBtnIcon}>🔖</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.premiumTopBtn}
                     activeOpacity={0.7}
@@ -2238,3 +2238,4 @@ const styles = StyleSheet.create({
 });
 
 export default ScanScreen;
+export { ScanScreen };

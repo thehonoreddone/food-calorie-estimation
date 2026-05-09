@@ -42,6 +42,7 @@ import {
   followUser,
   unfollowUser,
   isFollowingUser,
+  getFollowing,
   CommunityPost,
   CommunityComment,
   PostType,
@@ -150,29 +151,39 @@ interface StoriesRowProps {
   onUserPress: (uid: string) => void;
 }
 
-// Static story placeholders (in real app, fetch from the following feed)
-const STORY_PLACEHOLDERS: StoryUser[] = [
-  { id: 's1', name: 'Sarah', uid: 'placeholder1', streak: 12, goalCompleted: true, hasNewStory: true },
-  { id: 's2', name: 'Mike', uid: 'placeholder2', streak: 7, goalCompleted: true, hasNewStory: true },
-  { id: 's3', name: 'Emma', uid: 'placeholder3', streak: 21, goalCompleted: true, hasNewStory: true },
-  { id: 's4', name: 'James', uid: 'placeholder4', streak: 5, goalCompleted: true, hasNewStory: false },
-  { id: 's5', name: 'Lily', uid: 'placeholder5', streak: 14, goalCompleted: true, hasNewStory: true },
-  { id: 's6', name: 'Alex', uid: 'placeholder6', streak: 3, goalCompleted: true, hasNewStory: false },
-];
-
 function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
+  const [followingUsers, setFollowingUsers] = React.useState<StoryUser[]>([]);
+
+  React.useEffect(() => {
+    if (!currentUserId) return;
+    getFollowing(currentUserId, 20)
+      .then(relations => {
+        const users: StoryUser[] = relations.map(r => ({
+          id: r.id,
+          name: r.followingName || 'Kullanıcı',
+          uid: r.followingId,
+          hasNewStory: true,
+          goalCompleted: false,
+        }));
+        setFollowingUsers(users);
+      })
+      .catch(() => {});
+  }, [currentUserId]);
+
+  if (followingUsers.length === 0) return null;
+
   return (
     <View style={styles.storiesContainer}>
       <View style={styles.storiesHeader}>
-        <Text style={styles.storiesHeaderIcon}>🔥</Text>
-        <Text style={styles.storiesHeaderText}>DAILY GOALS HIT</Text>
+        <Text style={styles.storiesHeaderIcon}>👥</Text>
+        <Text style={styles.storiesHeaderText}>TAKİP ETTİKLERİN</Text>
       </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.storiesList}
       >
-        {STORY_PLACEHOLDERS.map(user => {
+        {followingUsers.map(user => {
           const avatarColors = getAvatarColors(user.name);
           return (
             <TouchableOpacity
@@ -182,11 +193,7 @@ function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
               activeOpacity={0.7}
             >
               <View style={styles.storyAvatarWrap}>
-                {/* Ring */}
-                <View style={[
-                  styles.storyRing,
-                  user.hasNewStory ? styles.storyRingActive : styles.storyRingInactive
-                ]}>
+                <View style={[styles.storyRing, styles.storyRingActive]}>
                   <LinearGradient
                     colors={avatarColors}
                     start={{ x: 0, y: 0 }}
@@ -198,22 +205,8 @@ function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
                     </Text>
                   </LinearGradient>
                 </View>
-
-                {/* Goal completed tick */}
-                {user.goalCompleted && (
-                  <View style={styles.storyTick}>
-                    <Text style={styles.storyTickIcon}>✓</Text>
-                  </View>
-                )}
-
-                {/* Streak badge (>=7) */}
-                {user.streak && user.streak >= 7 && (
-                  <View style={styles.storyStreak}>
-                    <Text style={styles.storyStreakText}>🔥{user.streak}</Text>
-                  </View>
-                )}
               </View>
-              <Text style={styles.storyName} numberOfLines={1}>{user.name}</Text>
+              <Text style={styles.storyName} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
             </TouchableOpacity>
           );
         })}
@@ -221,6 +214,7 @@ function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
     </View>
   );
 }
+
 
 // ─── Skeleton Post ───────────────────────────────────────────────────────────
 
@@ -857,20 +851,39 @@ export function CommunityScreen() {
   const { profile } = useUser();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followingUids, setFollowingUids] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
 
+  // Load following UIDs once
+  useEffect(() => {
+    if (!profile.uid) return;
+    getFollowing(profile.uid, 50)
+      .then(relations => setFollowingUids(relations.map(r => r.followingId)))
+      .catch(() => {});
+  }, [profile.uid]);
+
   useEffect(() => {
     fetchPosts();
-  }, [activeTab]);
+  }, [activeTab, followingUids]);
 
   const fetchPosts = async () => {
     try {
       const sortBy = activeTab === 'trending' ? 'popular' : 'recent';
-      const data = await getCommunityPosts(sortBy, 20, profile.uid);
+      let data = await getCommunityPosts(sortBy, 30, profile.uid);
+
+      // 'Following' tab: show only posts from followed users
+      if (activeTab === 'following') {
+        if (followingUids.length === 0) {
+          data = [];
+        } else {
+          data = data.filter(p => followingUids.includes(p.uid));
+        }
+      }
+
       setPosts(data);
     } catch (err) {
       console.warn('Failed to load posts:', err);

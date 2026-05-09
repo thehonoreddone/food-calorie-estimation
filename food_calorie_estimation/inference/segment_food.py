@@ -2,9 +2,14 @@
 Segmentation interface module.
 Provides a unified interface for food segmentation.
 
-Primary: FoodSeg103 model (103 food classes, trained specifically for food segmentation)
-Fallback 1: YOLOv8-seg (COCO pretrained)
-Fallback 2: GrabCut + Depth Thresholding
+Primary:    Custom YOLOv8m-seg (149 Turkish+international food classes, fine-tuned)
+Fallback 1: FoodSeg103 model (103 food classes)
+Fallback 2: YOLOv8-seg (COCO pretrained, generic)
+Fallback 3: GrabCut + Depth Thresholding
+
+Custom model auto-detected from:
+  - app/backend/models/food_seg_best.pt   (backend deploy)
+  - food_calorie_estimation/seg_dataset/food_seg_best.pt (local)
 """
 
 import logging
@@ -192,14 +197,34 @@ def combine_masks(mask1: np.ndarray, mask2: np.ndarray,
         return mask1
 
 
+# Yeni özel modelin aranacağı yollar (öncelik sırasıyla)
+_CUSTOM_MODEL_SEARCH_PATHS = [
+    # Backend deploy konumu (birincil)
+    Path(__file__).parent.parent.parent / "app" / "backend" / "models" / "food_seg_best.pt",
+    # Local seg_dataset konumu
+    Path(__file__).parent.parent / "seg_dataset" / "food_seg_best.pt",
+    # food201 adıyla kayıtlı eski versiyon
+    Path(__file__).parent.parent.parent / "app" / "backend" / "models" / "food201_seg_best.pt",
+]
+
+
+def _find_custom_model() -> Optional[str]:
+    """Özel eğitilmiş YOLOv8-seg modelini otomatik bul."""
+    for p in _CUSTOM_MODEL_SEARCH_PATHS:
+        if p.exists():
+            return str(p)
+    return None
+
+
 class FoodSegmentor:
     """
     High-level food segmentation interface.
     
     Priority order:
-    1. FoodSeg103 (103 food classes, best for food-specific segmentation)
-    2. YOLOv8-seg (COCO pretrained, general objects)
-    3. GrabCut + Depth (fallback when models fail)
+    1. Custom YOLOv8m-seg (149 food classes, fine-tuned on Turkish+international food)
+    2. FoodSeg103 (103 food classes, generic food segmentation)
+    3. YOLOv8-seg (COCO pretrained, general objects)
+    4. GrabCut + Depth (fallback when all models fail)
     """
     
     def __init__(self,
@@ -239,9 +264,26 @@ class FoodSegmentor:
             self._init_segmentors()
     
     def _init_segmentors(self):
-        """Initialize available segmentors."""
-        # Try FoodSeg103 first (preferred for food)
-        if self.prefer_foodseg103 and FOODSEG103_AVAILABLE:
+        """Initialize available segmentors (priority: custom > foodseg103 > yolov8 > grabcut)."""
+        
+        # ── PRIORITY 1: Custom fine-tuned YOLOv8-seg (149 food classes) ──────
+        custom_path = self.yolov8_path or _find_custom_model()
+        if custom_path and Path(custom_path).exists():
+            try:
+                self._yolo_segmentor = YOLOv8Segmentor(
+                    model_path=custom_path,
+                    device=self.device,
+                    conf_threshold=self.conf_threshold
+                )
+                self._yolo_available = True
+                logger.info(f"✅ Custom food seg model loaded (primary): {custom_path}")
+            except Exception as e:
+                logger.warning(f"Custom model load failed: {e}")
+                self._yolo_segmentor = None
+                self._yolo_available = False
+        
+        # ── PRIORITY 2: FoodSeg103 (103 classes fallback) ────────────────────
+        if not self._yolo_available and self.prefer_foodseg103 and FOODSEG103_AVAILABLE:
             try:
                 self._foodseg103_segmentor = FoodSeg103Segmentor(
                     model_path=self.foodseg103_path,
@@ -249,31 +291,28 @@ class FoodSegmentor:
                     conf_threshold=self.conf_threshold
                 )
                 self._foodseg103_available = True
-                logger.info("✅ FoodSeg103 segmentor initialized (primary)")
+                logger.info("✅ FoodSeg103 segmentor initialized (secondary)")
             except FileNotFoundError as e:
                 logger.info(f"FoodSeg103 model not found: {e}")
-                logger.info("FoodSeg103 will be available after training")
             except Exception as e:
                 logger.warning(f"Failed to initialize FoodSeg103: {e}")
         
-        # Try YOLOv8 as fallback
-        try:
-            self._yolo_segmentor = YOLOv8Segmentor(
-                model_path=self.yolov8_path,
-                device=self.device,
-                conf_threshold=self.conf_threshold
-            )
-            self._yolo_available = True
-            if not self._foodseg103_available:
-                logger.info("✅ YOLOv8 segmentor initialized (primary)")
-            else:
-                logger.info("✅ YOLOv8 segmentor initialized (fallback)")
-        except Exception as e:
-            logger.warning(f"Failed to initialize YOLOv8 segmentor: {e}")
-            self._yolo_segmentor = None
-            self._yolo_available = False
+        # ── PRIORITY 3: Generic YOLOv8-seg (COCO, last resort model) ─────────
+        if not self._yolo_available and not self._foodseg103_available:
+            try:
+                self._yolo_segmentor = YOLOv8Segmentor(
+                    model_path=None,  # COCO pretrained
+                    device=self.device,
+                    conf_threshold=self.conf_threshold
+                )
+                self._yolo_available = True
+                logger.info("✅ Generic YOLOv8-seg (COCO) initialized (tertiary)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize generic YOLOv8: {e}")
+                self._yolo_segmentor = None
+                self._yolo_available = False
         
-        # Check if any segmentor is available
+        # ── Son durum kontrolü ────────────────────────────────────────────────
         if not self._foodseg103_available and not self._yolo_available:
             if self.use_fallback:
                 logger.info("No model-based segmentor available, will use GrabCut fallback")
@@ -488,10 +527,14 @@ class FoodSegmentor:
     @property
     def primary_segmentor(self) -> str:
         """Aktif birincil segmentor."""
-        if self._foodseg103_available:
-            return 'foodseg103'
-        elif self._yolo_available:
+        if self._yolo_available and self._yolo_segmentor is not None:
+            # Özel model mi COCO modeli mi?
+            mp = getattr(self._yolo_segmentor, 'model_path', None)
+            if mp and 'food_seg' in str(mp):
+                return 'custom_food_seg'
             return 'yolov8'
+        elif self._foodseg103_available:
+            return 'foodseg103'
         elif self.use_fallback:
             return 'grabcut'
         return 'none'

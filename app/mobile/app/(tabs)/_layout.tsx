@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Colors, FontSize, FontWeight, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, BorderRadius } from '@/constants/theme';
 
 // ─── Premium Neon Tab Icon ───────────────────────────────────────────────────
 

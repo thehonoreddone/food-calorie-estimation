@@ -11,9 +11,12 @@ service cloud.firestore {
     }
 
     // ── Users ─────────────────────────────────────────────────────────────
+    // Only the owner can read/write their own profile.
+    // For community features, public info (name, avatar) is exposed
+    // via community_posts.username / getUserPublicProfile which reads
+    // only from the user's own document.
     match /users/{uid} {
-      allow read: if isAuth();
-      allow write: if isOwner(uid);
+      allow read, write: if isOwner(uid);
     }
 
     // ── Predictions ────────────────────────────────────────────────────────

@@ -195,6 +195,8 @@ tez_gorselleri/
 acarken.txt
 tez_devami.txt
 food_calorie_estimation/seg_dataset/dataset_labelstudio/
+food_calorie_estimation/seg_dataset/dataset_v2/
+food_calorie_estimation/seg_dataset/training_config_v2_*.json
 
 # =============== Cached / Generated ===============
 **/__pycache__/

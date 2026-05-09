@@ -16,6 +16,7 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  increment,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -112,6 +113,7 @@ export interface MealEntry {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number;        // lif (fiber) — barcode taramalarından gelir
   weight: number;
   quantity?: number;   // porsiyon miktarı (adet, kase, vb.)
   unit?: string;       // 'gram' | 'adet' | 'ml' | 'kase'
@@ -614,31 +616,48 @@ export interface FollowRelation {
 }
 
 /**
- * Get a user's public profile
+ * Get a user's public profile.
+ * NOTE: Firestore rules restrict /users/{uid} to owner-only reads.
+ * For other users we return a minimal profile with follow counts only.
+ * The caller's own profile works normally because auth.uid == uid.
  */
 export async function getUserPublicProfile(uid: string): Promise<UserPublicProfile | null> {
   try {
-    const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      // Get follow counts
-      const counts = await getFollowCounts(uid);
-      return {
-        uid,
-        name: data.name || data.displayName || 'Kullanıcı',
-        email: data.email,
-        avatarUri: data.avatarUri,
-        followersCount: counts.followers,
-        followingCount: counts.following,
-      };
+    // Get follow counts first (these collections are readable by any auth user)
+    const counts = await getFollowCounts(uid);
+
+    // Attempt to read the user document (will succeed only for the caller's own uid)
+    try {
+      const docRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          uid,
+          name: data.name || data.displayName || 'Kullanıcı',
+          email: data.email,
+          avatarUri: data.avatarUri,
+          followersCount: counts.followers,
+          followingCount: counts.following,
+        };
+      }
+    } catch {
+      // Permission denied for non-owner reads — expected after rule tightening
     }
-    return null;
+
+    // Fallback: return minimal profile (e.g. for viewing another user's profile)
+    return {
+      uid,
+      name: 'Kullanıcı',
+      followersCount: counts.followers,
+      followingCount: counts.following,
+    };
   } catch (err) {
     console.warn('getUserPublicProfile error:', err);
     return null;
   }
 }
+
 
 /**
  * Create a community post (supports text, photo, and meal posts)
@@ -704,9 +723,10 @@ export async function getCommunityPosts(
 
   posts = posts.slice(0, maxResults);
 
-  // Check if current user liked each post + get liked-by usernames
+  // Check if current user liked each post + get liked-by usernames (PARALLEL)
   if (currentUid) {
-    for (const post of posts) {
+    await Promise.all(posts.map(async (post) => {
+      // Check if current user liked this post
       try {
         const likeDocId = `${post.id}_${currentUid}`;
         const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
@@ -730,7 +750,7 @@ export async function getCommunityPosts(
       } catch {
         post.likedByUsers = [];
       }
-    }
+    }));
   }
 
   return posts;
@@ -763,9 +783,9 @@ export async function getUserPosts(
     return dateB > da ? 1 : dateB < da ? -1 : 0;
   });
 
-  // Check likes for current user
+  // Check likes for current user (PARALLEL)
   if (currentUid) {
-    for (const post of posts) {
+    await Promise.all(posts.map(async (post) => {
       try {
         const likeDocId = `${post.id}_${currentUid}`;
         const likeRef = doc(db, COMMUNITY_LIKES, likeDocId);
@@ -774,7 +794,7 @@ export async function getUserPosts(
       } catch {
         post.likedByMe = false;
       }
-    }
+    }));
   }
 
   return posts;
@@ -794,24 +814,18 @@ export async function togglePostLike(
   const postRef = doc(db, COMMUNITY_POSTS, postId);
 
   if (isCurrentlyLiked) {
+    // Unlike: delete like doc and atomically decrement count
     await deleteDoc(likeRef);
-    const postSnap = await getDoc(postRef);
-    if (postSnap.exists()) {
-      const currentLikes = (postSnap.data() as CommunityPost).likesCount ?? 0;
-      await updateDoc(postRef, { likesCount: Math.max(0, currentLikes - 1) });
-    }
+    await updateDoc(postRef, { likesCount: increment(-1) });
   } else {
+    // Like: create like doc and atomically increment count
     await setDoc(likeRef, { 
       postId, 
       uid, 
       username: username || 'Kullanıcı',
       createdAt: new Date().toISOString() 
     });
-    const postSnap = await getDoc(postRef);
-    if (postSnap.exists()) {
-      const currentLikes = (postSnap.data() as CommunityPost).likesCount ?? 0;
-      await updateDoc(postRef, { likesCount: currentLikes + 1 });
-    }
+    await updateDoc(postRef, { likesCount: increment(1) });
   }
 }
 

@@ -4,12 +4,15 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --clear",
+    "wifi": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=10.183.158.17 expo start --lan --clear",
+    "usb": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --localhost --clear",
     "tunnel": "expo start --tunnel --clear",
     "lan": "expo start --lan --clear",
     "local": "expo start --localhost --clear",
     "dev": "expo start --android --clear",
     "android": "set \"JAVA_HOME=C:\\Program Files\\Android\\Android Studio\\jbr\" & npx expo run:android",
     "adb-setup": "powershell -Command \"adb reverse --remove-all; adb reverse tcp:8081 tcp:8081; adb reverse tcp:8000 tcp:8000; adb reverse --list\"",
+    "adb-usb": "adb reverse --remove-all && adb reverse tcp:8081 tcp:8081 && adb reverse tcp:8000 tcp:8000 && cross-env REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --localhost --clear",
     "adb-setup:check": "adb devices -l",
     "adb-setup:revoke": "adb kill-server; adb start-server",
     "android:dev": "set \"JAVA_HOME=C:\\Program Files\\Android\\Android Studio\\jbr\" & adb reverse --remove-all & adb reverse tcp:8081 tcp:8081 & adb reverse tcp:8000 tcp:8000 & npx expo run:android",
@@ -31,6 +34,7 @@
     "expo-constants": "~18.0.13",
     "expo-file-system": "~19.0.21",
     "expo-haptics": "~15.0.8",
+    "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "^17.0.10",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.11",
@@ -56,6 +60,7 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "babel-preset-expo": "^54.0.9",
+    "cross-env": "^10.1.0",
     "typescript": "~5.9.2"
   },
   "private": true

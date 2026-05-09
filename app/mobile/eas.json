@@ -9,7 +9,7 @@
       "distribution": "internal",
       "env": {
         "APP_ENV": "development",
-        "EXPO_PUBLIC_API_URL": "http://10.183.158.17:8000",
+        "EXPO_PUBLIC_API_URL": "http://localhost:8000",
         "EXPO_PUBLIC_APP_ENV": "development"
       }
     },

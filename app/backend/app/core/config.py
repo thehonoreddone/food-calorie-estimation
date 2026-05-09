@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     YOLO_FALLBACK_MODEL: str = "models/food201_seg_best.pt"
     CONFIDENCE_THRESHOLD: float = 0.25
     IOU_THRESHOLD: float = 0.45
+    MODEL_DOWNLOAD_URL: str = ""  # Set via env: MODEL_DOWNLOAD_URL=https://drive.google.com/...
+    MODEL_FALLBACK_DOWNLOAD_URL: str = ""  # Optional: download URL for fallback model
     
     # Gemini Vision API (fallback classifier)
     GEMINI_API_KEY: str = ""  # Set via env: GEMINI_API_KEY=your_key

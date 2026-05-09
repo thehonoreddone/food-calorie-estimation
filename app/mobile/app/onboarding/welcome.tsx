@@ -138,7 +138,6 @@ export default function WelcomeScreen() {
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* ── Logo pill ── */}
         <View style={styles.logoPill}>
-          <Text style={styles.logoEmoji}>✦</Text>
           <Text style={styles.logoText}>nutrino</Text>
         </View>
 

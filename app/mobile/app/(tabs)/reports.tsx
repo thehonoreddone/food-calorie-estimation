@@ -95,7 +95,7 @@ export default function ReportsTab() {
             protein: meals.reduce((s, m) => s + (m.protein ?? 0), 0),
             carbs: meals.reduce((s, m) => s + (m.carbs ?? 0), 0),
             fat: meals.reduce((s, m) => s + (m.fat ?? 0), 0),
-            fiber: 0,
+            fiber: meals.reduce((s, m) => s + (m.fiber ?? 0), 0),
             sugar: 0,
             meals,
           });
@@ -120,6 +120,7 @@ export default function ReportsTab() {
       t.protein += d.protein;
       t.carbs += d.carbs;
       t.fat += d.fat;
+      t.fiber += d.fiber;
     });
     return t;
   }, [weekData]);
@@ -157,11 +158,13 @@ export default function ReportsTab() {
     const protTarget = Math.round(dailyTarget * 0.25 / 4) * 7; // 25% from protein
     const carbTarget = Math.round(dailyTarget * 0.50 / 4) * 7; // 50% from carbs
     const fatTarget = Math.round(dailyTarget * 0.25 / 9) * 7;  // 25% from fat
+    const fiberTarget = 25 * 7; // WHO recommends ~25g/day
     return {
       calories: { total: totals.calories, target: weeklyTarget },
       protein: { total: totals.protein, target: protTarget },
       carbs: { total: totals.carbs, target: carbTarget },
       fat: { total: totals.fat, target: fatTarget },
+      fiber: { total: totals.fiber, target: fiberTarget },
     };
   }, [totals, dailyTarget, weeklyTarget]);
 
@@ -433,10 +436,10 @@ function NutrientsReport({
     { key: 'protein', label: 'Protein (g)', color: '#ef4444' },
     { key: 'carbs', label: 'Karbonhidrat (g)', color: '#3b82f6' },
     { key: 'fat', label: 'Yağ (g)', color: '#f59e0b' },
+    { key: 'fiber', label: 'Lif (g)', color: '#a855f7' },
   ];
 
   const extraNutrients = [
-    { label: 'Fiber (g)', total: '-', target: '-' },
     { label: 'Şeker (g)', total: '-', target: '-' },
     { label: 'Doymuş Yağ (g)', total: '-', target: '-' },
     { label: 'Çoklu Doymamış Yağ (g)', total: '-', target: '-' },

@@ -54,6 +54,13 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Food Calorie Estimation API...")
     logger.info(f"   Environment: {settings.APP_ENV}")
     
+    # Auto-download models if not present and URLs are configured
+    try:
+        from app.core.model_downloader import ensure_models
+        await ensure_models()
+    except Exception as e:
+        logger.warning(f"⚠️ Model download check failed: {e}")
+    
     # Preload ML models
     try:
         await model_service.load_models()

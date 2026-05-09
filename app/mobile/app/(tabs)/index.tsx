@@ -54,7 +54,6 @@ import {
   FontWeight,
   Spacing,
   BorderRadius,
-  Shadows,
   Glass,
   GradientPresets,
 } from '@/constants/theme';
@@ -349,8 +348,8 @@ export default function HomeTab() {
   const mN = monthLabels(lang);
   const monthGrid = getMonthGrid(viewYear, viewMonth);
 
-  // Average calories (simple: eaten today as proxy)
-  const avgCal = eaten > 0 ? eaten : tgt;
+  // Today's eaten calories for the stat card
+  const todayCal = eaten;
 
   const calExpandAnim = useAnimatedStyle(() => ({
     maxHeight: withTiming(calExpanded ? 350 : 0, { duration: 300, easing: Easing.inOut(Easing.ease) }),
@@ -631,8 +630,8 @@ export default function HomeTab() {
                 <Text style={S.statLabel}>Streak</Text>
               </View>
               <View style={S.statCard}>
-                <Text style={S.statValue}>{avgCal >= 1000 ? `${(avgCal / 1000).toFixed(1)}k` : avgCal}<Text style={S.statUnit}> /day</Text></Text>
-                <Text style={S.statLabel}>Avg Cal</Text>
+                <Text style={S.statValue}>{todayCal >= 1000 ? `${(todayCal / 1000).toFixed(1)}k` : todayCal}<Text style={S.statUnit}> kcal</Text></Text>
+                <Text style={S.statLabel}>Bugün</Text>
               </View>
               <View style={S.statCard}>
                 <Text style={S.statValue}>{profile.weight ?? '—'}<Text style={S.statUnit}> kg</Text></Text>
