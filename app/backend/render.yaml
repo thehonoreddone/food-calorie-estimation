@@ -15,5 +15,9 @@ services:
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
-      - key: MODEL_PATH
-        value: models/foodseg103_seg.pt
+      - key: YOLO_MODEL_PATH
+        value: models/food_seg_best.pt
+      - key: MODEL_DOWNLOAD_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

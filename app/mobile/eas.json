@@ -17,7 +17,7 @@
       "distribution": "internal",
       "env": {
         "APP_ENV": "preview",
-        "EXPO_PUBLIC_API_URL": "https://nutrino-backend.onrender.com",
+        "EXPO_PUBLIC_API_URL": "https://food-calorie-estimation.onrender.com",
         "EXPO_PUBLIC_APP_ENV": "preview"
       }
     },
@@ -25,7 +25,7 @@
       "autoIncrement": true,
       "env": {
         "APP_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://nutrino-backend.onrender.com",
+        "EXPO_PUBLIC_API_URL": "https://food-calorie-estimation.onrender.com",
         "EXPO_PUBLIC_APP_ENV": "production"
       }
     }

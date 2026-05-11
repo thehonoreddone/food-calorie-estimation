@@ -44,9 +44,17 @@ function initializeFirebase(): void {
   if (Platform.OS === 'web') {
     auth = getAuth(app);
   } else {
-    auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
+    try {
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    } catch (error: any) {
+      if (error.code === 'auth/already-initialized') {
+        auth = getAuth(app);
+      } else {
+        throw error;
+      }
+    }
   }
 
   db = getFirestore(app);

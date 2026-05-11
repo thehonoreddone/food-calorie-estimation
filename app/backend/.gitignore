@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Firebase credentials (NEVER commit these)
+config/firebase_service_account.json
+firebase-credentials.json
+*.json
+!pyproject.toml
+
+# Model files (large binary files - use Google Drive/S3)
+models/*.pt
+models/*.onnx
+models/*.pth
+*.pt
+*.onnx
+*.pth
+
+# Logs
+logs/
+*.log
+
+# Uploads
+uploads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -4,6 +4,9 @@
     "slug": "nutrino",
     "scheme": "nutrino",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "description": "AI-powered food calorie estimation. Snap a photo, get instant calorie and nutrition analysis.",
     "primaryColor": "#16a34a",
     "orientation": "portrait",
