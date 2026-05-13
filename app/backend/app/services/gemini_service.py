@@ -220,37 +220,54 @@ class GeminiService:
             if image.mode != "RGB":
                 image = image.convert("RGB")
             
-            # Call Gemini (async via threadpool)
+            # Call Gemini with retry for rate limits (429)
             import asyncio
             loop = asyncio.get_event_loop()
             
             use_new_sdk = getattr(self, '_use_new_sdk', False)
             
-            if use_new_sdk and hasattr(self, '_client'):
-                # New google.genai SDK
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self._client.models.generate_content(
-                        model=self.model,
-                        contents=[prompt, image],
-                        config=genai_types.GenerateContentConfig(
-                            temperature=0.1,
-                            max_output_tokens=600,
+            max_retries = 3
+            response = None
+            for attempt in range(max_retries):
+                try:
+                    if use_new_sdk and hasattr(self, '_client'):
+                        # New google.genai SDK
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: self._client.models.generate_content(
+                                model=self.model,
+                                contents=[prompt, image],
+                                config=genai_types.GenerateContentConfig(
+                                    temperature=0.1,
+                                    max_output_tokens=600,
+                                )
+                            )
                         )
-                    )
-                )
-            else:
-                # Legacy google.generativeai SDK
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.model.generate_content(
-                        [prompt, image],
-                        generation_config={
-                            "temperature": 0.1,
-                            "max_output_tokens": 600,
-                        }
-                    )
-                )
+                    else:
+                        # Legacy google.generativeai SDK
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: self.model.generate_content(
+                                [prompt, image],
+                                generation_config={
+                                    "temperature": 0.1,
+                                    "max_output_tokens": 600,
+                                }
+                            )
+                        )
+                    break  # Success, exit retry loop
+                except Exception as retry_err:
+                    err_str = str(retry_err).lower()
+                    is_rate_limit = "429" in err_str or "resource_exhausted" in err_str or "rate" in err_str
+                    if is_rate_limit and attempt < max_retries - 1:
+                        wait_time = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                        logger.warning(
+                            f"[Gemini] Rate limited (attempt {attempt + 1}/{max_retries}), "
+                            f"retrying in {wait_time}s..."
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise  # Not a rate limit error or final attempt, re-raise
             
             # Extract text from response (handle different SDK response formats)
             result_text = None

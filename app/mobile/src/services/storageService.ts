@@ -4,17 +4,41 @@
 
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
+import * as ImageManipulator from 'expo-image-manipulator';
+
+/**
+ * Compress an image before uploading to Firebase Storage.
+ * Max width: 800px, JPEG quality: 70%.
+ * This reduces a typical 3-5MB phone photo to ~100-300KB.
+ */
+async function compressForUpload(uri: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 800 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return result.uri;
+  } catch (e) {
+    console.warn('[storageService] Compression failed, using original:', e);
+    return uri;
+  }
+}
 
 /**
  * Upload an image to Firebase Storage and return its public download URL.
- * Images are stored under `community_images/{uid}/{timestamp}_{random}.jpg`
+ * Images are compressed before upload to save storage and bandwidth.
+ * Images are stored under `community/{uid}/{timestamp}_{random}.jpg`
  */
 export async function uploadCommunityImage(
   uid: string,
   localUri: string,
 ): Promise<string> {
+  // Compress before uploading
+  const compressedUri = await compressForUpload(localUri);
+
   // Fetch the image as a blob
-  const response = await fetch(localUri);
+  const response = await fetch(compressedUri);
   const blob = await response.blob();
 
   // Create a unique filename
@@ -51,13 +75,15 @@ export async function uploadCommunityImage(
 }
 
 /**
- * Upload a generic image (e.g. profile photo) and return its download URL
+ * Upload a generic image (e.g. profile photo) and return its download URL.
+ * Images are compressed before upload to save storage and bandwidth.
  */
 export async function uploadImage(
   path: string,
   localUri: string,
 ): Promise<string> {
-  const response = await fetch(localUri);
+  const compressedUri = await compressForUpload(localUri);
+  const response = await fetch(compressedUri);
   const blob = await response.blob();
 
   const storageRef = ref(storage, path);
