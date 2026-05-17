@@ -31,7 +31,7 @@ export default function GoalScreen() {
   return (
     <OnboardingLayout
       stepKey="goal"
-      title="Burada ne yapıyorsunuz?"
+      title="Neyi hedefliyorsunuz?"
       showBack={false}
       illustration={
         <View style={styles.iconBox}>
@@ -39,11 +39,7 @@ export default function GoalScreen() {
         </View>
       }
     >
-      <View style={styles.greeting}>
-        <Text style={styles.greetingTitle}>
-          Merhaba{profile.name ? ` ${profile.name}` : ''}!
-        </Text>
-      </View>
+
 
       <View style={styles.options}>
         {goalOptions.map((option, index) => {
@@ -70,16 +66,7 @@ export default function GoalScreen() {
 }
 
 const styles = StyleSheet.create({
-  greeting: {
-    marginBottom: Spacing.lg,
-    marginTop: Spacing.xs,
-  },
-  greetingTitle: {
-    fontSize: FontSize['2xl'],
-    fontWeight: '800',
-    color: '#F0FDF4',
-    textAlign: 'center',
-  },
+
   iconBox: {
     width: 76,
     height: 76,

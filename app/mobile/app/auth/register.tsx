@@ -46,11 +46,11 @@ export default function RegisterScreen() {
       if (result.success) {
         Alert.alert(
           'Kayıt Başarılı! 🎉',
-          'Hesabınız oluşturuldu. E-posta adresinize bir doğrulama bağlantısı gönderdik. Lütfen e-postanızı kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın.',
+          'Hesabınız oluşturuldu. E-posta adresinize bir doğrulama bağlantısı gönderdik.\n\nLütfen e-postanızı kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın. Doğrulama sonrası giriş yapabilirsiniz.',
           [
             {
-              text: 'Tamam',
-              onPress: () => router.replace('/(tabs)'),
+              text: 'Giriş Sayfasına Git',
+              onPress: () => router.replace('/auth/login'),
             },
           ],
         );

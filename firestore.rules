@@ -12,44 +12,47 @@ service cloud.firestore {
 
     // ── Users ─────────────────────────────────────────────────────────────
     // Only the owner can read/write their own profile.
-    // For community features, public info (name, avatar) is exposed
-    // via community_posts.username / getUserPublicProfile which reads
-    // only from the user's own document.
     match /users/{uid} {
       allow read, write: if isOwner(uid);
     }
 
     // ── Predictions ────────────────────────────────────────────────────────
+    // FIX: Separated create vs update/delete to avoid resource==null crash on new docs
     match /predictions/{docId} {
-      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow read:   if isAuth() && isOwner(resource.data.uid);
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update, delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── Daily Meals ────────────────────────────────────────────────────────
+    // FIX: Same separation — create uses request.resource, update/delete use resource
     match /daily_meals/{docId} {
-      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow read:   if isAuth() && isOwner(resource.data.uid);
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update, delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── Daily Exercises ────────────────────────────────────────────────────
     match /daily_exercises/{docId} {
-      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow read:   if isAuth() && isOwner(resource.data.uid);
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update, delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── Weight Entries ─────────────────────────────────────────────────────
     match /weight_entries/{docId} {
-      allow read, write: if isAuth() && isOwner(resource.data.uid);
+      allow read:   if isAuth() && isOwner(resource.data.uid);
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update, delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── Daily Health (steps, sleep, water) ────────────────────────────────
     // Document ID format: {uid}_{date}
+    // FIX: resource==null check only needed on read (when doc might not exist), not create
     match /daily_health/{docId} {
-      allow read, write: if isAuth() && (
-        resource == null || isOwner(resource.data.uid)
-      );
+      allow read:   if isAuth() && (resource == null || isOwner(resource.data.uid));
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update, delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── User Achievements ──────────────────────────────────────────────────
@@ -63,7 +66,7 @@ service cloud.firestore {
       allow create: if isAuth() && isOwner(request.resource.data.uid);
       allow update: if isAuth() && (
         isOwner(resource.data.uid) ||
-        // Allow updating only likesCount / commentsCount for any auth user
+        // Allow updating only likesCount / commentsCount for any auth user (like/comment actions)
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['likesCount', 'commentsCount'])
       );
@@ -73,7 +76,8 @@ service cloud.firestore {
     // ── Community Likes ────────────────────────────────────────────────────
     match /community_likes/{likeId} {
       allow read: if isAuth();
-      allow write: if isAuth() && isOwner(request.resource.data.uid);
+      allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update: if isAuth() && isOwner(resource.data.uid);
       allow delete: if isAuth() && isOwner(resource.data.uid);
     }
 
@@ -81,13 +85,15 @@ service cloud.firestore {
     match /community_comments/{commentId} {
       allow read: if isAuth();
       allow create: if isAuth() && isOwner(request.resource.data.uid);
+      allow update: if isAuth() && isOwner(resource.data.uid);
       allow delete: if isAuth() && isOwner(resource.data.uid);
     }
 
     // ── User Follows ───────────────────────────────────────────────────────
     match /user_follows/{followId} {
       allow read: if isAuth();
-      allow write: if isAuth() && isOwner(request.resource.data.followerId);
+      allow create: if isAuth() && isOwner(request.resource.data.followerId);
+      allow update: if isAuth() && isOwner(resource.data.followerId);
       allow delete: if isAuth() && isOwner(resource.data.followerId);
     }
   }

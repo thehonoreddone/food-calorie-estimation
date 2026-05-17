@@ -104,7 +104,7 @@ export default function ProfileTab() {
               <Text style={styles.quickIcon}>⚖️</Text>
               <Text style={styles.quickValue}>{displayWeight} kg</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/scan')} style={styles.quickBtn}>
+            <TouchableOpacity onPress={() => router.navigate('/(tabs)/scan')} style={styles.quickBtn}>
               <Text style={styles.quickIcon}>📷</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.quickBtn}>
@@ -145,7 +145,7 @@ export default function ProfileTab() {
         <View style={styles.menuGroup}>
           <MenuItem icon="⏰" label={t('profile.reminders')} onPress={() => router.push('/notifications')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="🖼️" label={t('profile.photoAlbum')} onPress={() => router.push('/(tabs)/history')} />
+          <MenuItem icon="🖼️" label={t('profile.photoAlbum')} onPress={() => router.navigate('/(tabs)/history')} />
         </View>
 
         {/* Menu Section 4 */}

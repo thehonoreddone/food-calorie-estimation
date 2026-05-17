@@ -78,6 +78,8 @@ export function getFirebaseErrorMessage(error: unknown): string {
       return 'Bu hesap devre dışı bırakılmış.';
     case 'auth/network-request-failed':
       return 'İnternet bağlantınızı kontrol edin.';
+    case 'auth/email-not-verified':
+      return 'E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızdaki doğrulama bağlantısına tıklayın. Yeni bir doğrulama e-postası gönderdik.';
     default:
       return 'Bir hata oluştu. Lütfen tekrar deneyin.';
   }
@@ -124,6 +126,7 @@ export async function firebaseRegister(
 
 /**
  * Login with email/password
+ * Rejects login if email is not yet verified
  */
 export async function firebaseLogin(
   email: string,
@@ -131,6 +134,20 @@ export async function firebaseLogin(
 ): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
   const user = credential.user;
+
+  // Enforce email verification — if not verified, sign out and throw
+  if (!user.emailVerified) {
+    // Optionally resend verification email
+    try {
+      await sendEmailVerification(user);
+    } catch {
+      // Ignore — might hit rate limit if user just registered
+    }
+    await signOut(auth);
+    const error: any = new Error('E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızdaki doğrulama bağlantısına tıklayın. Yeni bir doğrulama e-postası gönderdik.');
+    error.code = 'auth/email-not-verified';
+    throw error;
+  }
 
   // Sync email verification status to Firestore
   try {

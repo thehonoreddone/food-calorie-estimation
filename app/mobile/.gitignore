@@ -44,3 +44,9 @@ yarn-error.*
 # ONNX model files (too large for git)
 assets/models/*.onnx
 assets/models/*.tflite
+
+# Google Play Service Account (NEVER commit — contains API credentials)
+play-store-service-account.json
+
+# EAS setup script (contains Firebase keys — keep local)
+# setup_eas_secrets.ps1

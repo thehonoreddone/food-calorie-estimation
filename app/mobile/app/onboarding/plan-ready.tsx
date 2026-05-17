@@ -212,8 +212,7 @@ export default function PlanReadyScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* BG orbs */}
-      <View style={styles.orbLarge} />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.backCircle}>
@@ -339,11 +338,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#080E0C',
     overflow: 'hidden',
   },
-  orbLarge: {
-    position: 'absolute', top: -70, left: -70,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: 'rgba(45,212,160,0.28)', opacity: 0.9,
-  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',

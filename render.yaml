@@ -21,16 +21,18 @@ services:
       - key: APP_ENV
         value: "production"
       - key: CORS_ORIGINS
-        value: '["https://nutrino.app"]'
+        value: '["https://nutrino-backend.onrender.com","https://nutrino.app","exp://"]'
       - key: CONFIDENCE_THRESHOLD
         value: "0.25"
       - key: IOU_THRESHOLD
         value: "0.45"
       - key: YOLO_MODEL_PATH
-        value: "models/food201_seg_best.pt"
+        value: "models/food_seg_best.pt"
       - key: FIREBASE_CREDENTIALS_PATH
         value: "config/firebase_service_account.json"
       - key: FIREBASE_PROJECT_ID
         value: "food-calorie-estimation-2e3bd"
+      - key: MODEL_DOWNLOAD_URL
+        sync: false  # Set manually in Render dashboard (Google Drive link)
       - key: GEMINI_API_KEY
         sync: false  # Set manually in Render dashboard (secret)

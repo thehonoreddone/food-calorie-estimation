@@ -22,8 +22,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:8081",
         "http://10.0.2.2:8000",
+        "https://nutrino-backend.onrender.com",
     ]
-    # Add production domains via env: CORS_ORIGINS=["https://nutrino.app"]
+    # Add production domains via env: CORS_ORIGINS=["https://nutrino-backend.onrender.com"]
     
     # Rate limiting
     RATE_LIMIT_PREDICT: str = "30/minute"  # Prediction endpoint
@@ -47,7 +48,7 @@ class Settings(BaseSettings):
     GEMINI_CACHE_TTL: int = 300  # Gemini result cache TTL in seconds
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = "firebase-credentials.json"
+    FIREBASE_CREDENTIALS_PATH: str = "config/firebase_service_account.json"
     FIREBASE_PROJECT_ID: str = "food-calorie-estimation-2e3bd"
     
     # Redis (optional)

@@ -107,7 +107,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           // Firestore permission errors are expected when rules are restrictive
           // or during initial setup — silently continue with local data only
           const errMsg = fsErr instanceof Error ? fsErr.message : String(fsErr);
-          if (!errMsg.includes('permission') && !errMsg.includes('Permission')) {
+          if (__DEV__ && !errMsg.includes('permission') && !errMsg.includes('Permission')) {
             console.warn('Firestore profile load failed:', errMsg);
           }
         }
@@ -182,7 +182,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
       });
     } catch (error) {
-      console.error('Error loading user state:', error);
+      if (__DEV__) console.error('Error loading user state:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
   }, []);
@@ -218,7 +218,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       try {
         firestoreProfile = await getUserProfile(user.uid);
       } catch (fsErr) {
-        console.warn('Firestore profile load after login failed:', fsErr);
+        if (__DEV__) console.warn('Firestore profile load after login failed:', fsErr);
       }
 
       const localRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
@@ -243,7 +243,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }));
       return { success: true };
     } catch (error) {
-      console.warn('Firebase login error:', (error as {code?: string})?.code);
+      if (__DEV__) console.warn('Firebase login error:', (error as {code?: string})?.code);
       return { success: false, error: getFirebaseErrorMessage(error) };
     }
   }, []);
@@ -252,39 +252,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       const user = await firebaseRegister(name, email, password);
 
-      // Load full profile from Firestore and merge with local (non-critical)
-      let firestoreProfile = null;
-      try {
-        firestoreProfile = await getUserProfile(user.uid);
-      } catch (fsErr) {
-        console.warn('Firestore profile load after register failed:', fsErr);
-      }
-
+      // Save profile locally (for when user verifies and logs in)
       const existingRaw = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROFILE);
       const existing: UserProfile = existingRaw ? (JSON.parse(existingRaw) as UserProfile) : {};
 
-      const rawMerge = {
+      const mergedProfile: UserProfile = {
         ...existing,
-        ...(firestoreProfile ?? {}),
         uid: user.uid,
-        name: firestoreProfile?.name ?? name,
+        name: name,
         email: user.email ?? email,
       };
-      const { createdAt: _c3, updatedAt: _u3, ...profileFields3 } = rawMerge as Record<string, unknown>;
-      const mergedProfile = profileFields3 as UserProfile;
 
       await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProfile));
 
-      // Auto-login after registration
+      // Sign out immediately — user must verify email before logging in
+      await firebaseLogout();
       setState(prev => ({
         ...prev,
-        isAuthenticated: true,
+        isAuthenticated: false,
         profile: mergedProfile,
       }));
 
       return { success: true };
     } catch (error) {
-      console.warn('Firebase register error:', (error as {code?: string})?.code);
+      if (__DEV__) console.warn('Firebase register error:', (error as {code?: string})?.code);
       return { success: false, error: getFirebaseErrorMessage(error) };
     }
   }, []);
@@ -293,7 +284,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       await firebaseLogout();
     } catch (error) {
-      console.error('Firebase logout error:', error);
+      if (__DEV__) console.error('Firebase logout error:', error);
     }
     setState(prev => ({ ...prev, isAuthenticated: false }));
   }, []);
@@ -325,7 +316,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       return state.profile.dailyCalorieTarget;
     }
 
-    const { gender, age, birthDate, height, weight, goal, activityLevel } = state.profile;
+    const { gender, age, birthDate, height, weight, targetWeight, goal, activityLevel } = state.profile;
     // Derive age from birthDate if available, fallback to stored age
     let effectiveAge = age;
     if (birthDate) {
@@ -340,6 +331,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     if (!gender || !effectiveAge || !height || !weight) return 2000;
 
+    // Mifflin-St Jeor BMR
     let bmr: number;
     if (gender === 'male') {
       bmr = 10 * weight + 6.25 * height - 5 * effectiveAge + 5;
@@ -355,10 +347,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
     const tdee = bmr * (multipliers[activityLevel ?? 'moderate']);
 
+    // Kalori hedefi: hedef kiloya göre ayarla
     switch (goal) {
-      case 'lose': return Math.round(tdee - 500);
-      case 'gain': return Math.round(tdee + 300);
-      default: return Math.round(tdee);
+      case 'lose': {
+        // %15 kalori açığı (agresif ama güvenli)
+        const deficit = Math.round(tdee * 0.15);
+        // Minimum 1200 kcal güvenlik sınırı
+        return Math.max(Math.round(tdee - deficit), gender === 'male' ? 1500 : 1200);
+      }
+      case 'gain': {
+        // Kas kazanımı için +360 kcal fazlalık (ayda ~1.5kg tempo)
+        return Math.round(tdee + 360);
+      }
+      default:
+        return Math.round(tdee);
     }
   }, [state.profile]);
 
@@ -377,32 +379,40 @@ export function UserProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Calculate macros based on goal
-    let proteinRatio: number;
-    let fatRatio: number;
-    let carbRatio: number;
+    const bodyWeight = weight ?? 70; // fallback
+
+    // ─── Gram-bazlı makro hesaplama (gerçek beslenme bilimi) ──────────
+    // Protein: vücut ağırlığı × g/kg oranı
+    // Yağ: vücut ağırlığı × g/kg oranı
+    // Karbonhidrat: kalan kaloriler ÷ 4
+    let proteinPerKg: number;
+    let fatPerKg: number;
 
     switch (goal) {
       case 'lose':
-        proteinRatio = 0.35;
-        fatRatio = 0.25;
-        carbRatio = 0.40;
+        // Kas koruma için yüksek protein, düşük yağ
+        proteinPerKg = 2.0;
+        fatPerKg = 0.8;
         break;
       case 'gain':
-        proteinRatio = 0.30;
-        fatRatio = 0.25;
-        carbRatio = 0.45;
+        // Kas yapımı için yeterli protein, yüksek yağ (kalori artışı)
+        proteinPerKg = 1.8;
+        fatPerKg = 1.4;
         break;
       default: // maintain
-        proteinRatio = 0.25;
-        fatRatio = 0.30;
-        carbRatio = 0.45;
+        proteinPerKg = 1.85;
+        fatPerKg = 0.9;
         break;
     }
 
-    const protein = Math.round((calories * proteinRatio) / 4);
-    const carbs = Math.round((calories * carbRatio) / 4);
-    const fat = Math.round((calories * fatRatio) / 9);
+    const protein = Math.round(bodyWeight * proteinPerKg);
+    const fat = Math.round(bodyWeight * fatPerKg);
+
+    // Kalan kaloriler karbonhidrata ayrılır
+    const proteinCals = protein * 4;
+    const fatCals = fat * 9;
+    const remainingCals = Math.max(0, calories - proteinCals - fatCals);
+    const carbs = Math.round(remainingCals / 4);
 
     // Health score based on completeness of profile data
     let healthScore = 5;

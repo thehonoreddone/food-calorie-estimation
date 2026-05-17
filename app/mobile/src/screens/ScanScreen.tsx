@@ -635,7 +635,7 @@ export const ScanScreen: React.FC = () => {
           </Animated.Text>
 
           <Animated.View entering={FadeInUp.delay(500).duration(400)} style={styles.savedActions}>
-            <TouchableOpacity onPress={() => { router.push("/(tabs)"); handleReset(); }} activeOpacity={0.8} style={styles.savedPrimaryBtn}>
+            <TouchableOpacity onPress={() => { router.navigate("/(tabs)"); handleReset(); }} activeOpacity={0.8} style={styles.savedPrimaryBtn}>
               <LinearGradient colors={[SCAN_COLOR, "#65a30d"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.savedPrimaryBtnInner}>
                 <Text style={styles.savedPrimaryBtnText}>Ana Sayfaya Git</Text>
               </LinearGradient>

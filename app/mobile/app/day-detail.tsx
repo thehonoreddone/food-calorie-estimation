@@ -353,7 +353,12 @@ export default function DayDetailScreen() {
                         <Text style={{ fontSize: 18 }}>✏️</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.addBtn, { backgroundColor: section.color }]}
-                        onPress={() => router.push('/(tabs)/scan')}>
+                        onPress={() => {
+                          // Dismiss the modal first, then navigate to the scan tab
+                          // Using replace avoids "Unmatched Route" from modal→tab push
+                          router.dismiss();
+                          setTimeout(() => router.navigate('/(tabs)/scan'), 100);
+                        }}>
                         <Text style={styles.addBtnTxt}>+ 📸</Text>
                       </TouchableOpacity>
                     </View>

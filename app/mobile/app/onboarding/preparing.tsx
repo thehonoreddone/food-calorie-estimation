@@ -8,8 +8,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const BG_DARK    = '#080E0C';
 const NEON_GREEN = '#2DD4A0';
-const ORB_GREEN  = 'rgba(45, 212, 160, 0.28)';
-const ORB_PINK   = 'rgba(236, 72, 153, 0.18)';
 
 const STEPS = [
   { label: 'Kalori',       delay: 800  },
@@ -81,8 +79,6 @@ export default function PreparingScreen() {
 
   return (
     <View style={styles.root}>
-      <Animated.View style={[styles.orbLarge, { backgroundColor: ORB_GREEN, transform: [{ translateY: orbY }] }]} />
-      <View style={[styles.orbMed, { backgroundColor: ORB_PINK }]} />
 
       <View style={styles.container}>
         {/* Percentage */}
@@ -130,14 +126,6 @@ export default function PreparingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_DARK, overflow: 'hidden' },
-  orbLarge: {
-    position: 'absolute', top: -70, left: -70,
-    width: 220, height: 220, borderRadius: 110, opacity: 0.9,
-  },
-  orbMed: {
-    position: 'absolute', top: '30%', left: -50,
-    width: 150, height: 150, borderRadius: 75, opacity: 0.8,
-  },
   container: {
     flex: 1, justifyContent: 'center', paddingHorizontal: 20,
   },

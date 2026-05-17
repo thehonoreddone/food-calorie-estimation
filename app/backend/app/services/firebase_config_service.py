@@ -1,4 +1,5 @@
 import json
+import os
 import asyncio
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -19,19 +20,37 @@ class FirebaseConfigService:
         """Initialize Firebase Admin SDK if not already initialized"""
         try:
             if not firebase_admin._apps:
-                cred_path = Path(settings.FIREBASE_CREDENTIALS_PATH)
-                if not cred_path.exists():
-                    # Try looking in config folder
-                    cred_path = Path("config") / settings.FIREBASE_CREDENTIALS_PATH
+                cred = None
                 
-                if cred_path.exists():
-                    cred = credentials.Certificate(str(cred_path))
+                # Priority 1: JSON string from environment variable (Render Secret Files / env var)
+                env_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+                if env_json:
+                    import json as _json
+                    try:
+                        service_info = _json.loads(env_json)
+                        cred = credentials.Certificate(service_info)
+                        logger.info("Firebase Admin: credentials loaded from FIREBASE_SERVICE_ACCOUNT_JSON env var")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+                
+                # Priority 2: JSON file on disk
+                if not cred:
+                    cred_path = Path(settings.FIREBASE_CREDENTIALS_PATH)
+                    if not cred_path.exists():
+                        # Try looking in config folder
+                        cred_path = Path("config") / settings.FIREBASE_CREDENTIALS_PATH
+                    
+                    if cred_path.exists():
+                        cred = credentials.Certificate(str(cred_path))
+                        logger.info(f"Firebase Admin: credentials loaded from {cred_path}")
+                    else:
+                        logger.warning(f"Firebase credentials not found at {cred_path}")
+                
+                if cred:
                     firebase_admin.initialize_app(cred, {
-                        'storageBucket': f"{settings.FIREBASE_PROJECT_ID}.appspot.com"
+                        'storageBucket': f"{settings.FIREBASE_PROJECT_ID}.firebasestorage.app"
                     })
                     logger.info("Firebase Admin initialized successfully")
-                else:
-                    logger.warning(f"Firebase credentials not found at {cred_path}")
             
             try:
                 self.bucket = storage.bucket()

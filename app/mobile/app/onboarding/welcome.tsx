@@ -16,58 +16,40 @@ const { width: W, height: H } = Dimensions.get('window');
 
 const BG_DARK    = '#080E0C';
 const NEON_GREEN = '#2DD4A0';
-const ORB_GREEN  = 'rgba(45, 212, 160, 0.30)';
-const ORB_PINK   = 'rgba(236, 72, 153, 0.20)';
 
-// ─── Animated orb ────────────────────────────────────────────────────────────
-function FloatingOrb({
-  color, size, style, delay = 0, duration = 8000,
-}: { color: string; size: number; style?: any; delay?: number; duration?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration, delay, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -20] });
-  return (
-    <Animated.View
-      style={[
-        {
-          position: 'absolute',
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: color,
-          opacity: 0.9,
-        },
-        style,
-        { transform: [{ translateY }] },
-      ]}
-    />
-  );
-}
+// ─── Subtle floating particles ───────────────────────────────────────────────
+const PARTICLE_CONFIGS = [
+  { size: 6,  color: NEON_GREEN, top: 60,  left: 40,  dy: 5000, dx: 7000, delay: 0,    ry: 22, rx: 10, o: 0.30 },
+  { size: 8,  color: NEON_GREEN, top: 200, left: W - 60, dy: 6000, dx: 5500, delay: 800, ry: 28, rx: 14, o: 0.22 },
+  { size: 5,  color: '#ec4899',  top: 340, left: 70,  dy: 7000, dx: 6000, delay: 400,  ry: 18, rx: 16, o: 0.18 },
+  { size: 10, color: NEON_GREEN, top: H * 0.55, left: W * 0.65, dy: 8000, dx: 4500, delay: 1200, ry: 30, rx: 8, o: 0.15 },
+  { size: 4,  color: '#a78bfa',  top: 140, left: W * 0.45, dy: 5500, dx: 8000, delay: 600,  ry: 20, rx: 18, o: 0.20 },
+  { size: 7,  color: NEON_GREEN, top: H * 0.7, left: 50, dy: 6500, dx: 7500, delay: 1000, ry: 25, rx: 12, o: 0.25 },
+];
 
-// ─── Ring decoration ─────────────────────────────────────────────────────────
-function Ring({ top, right, delay = 0 }: { top: number; right: number; delay?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
+function WelcomeParticle({ cfg }: { cfg: typeof PARTICLE_CONFIGS[0] }) {
+  const ay = useRef(new Animated.Value(0)).current;
+  const ax = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 9000, delay, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 9000, useNativeDriver: true }),
-      ])
-    ).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(ay, { toValue: 1, duration: cfg.dy, delay: cfg.delay, useNativeDriver: true }),
+      Animated.timing(ay, { toValue: 0, duration: cfg.dy, useNativeDriver: true }),
+    ])).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(ax, { toValue: 1, duration: cfg.dx, delay: cfg.delay + 200, useNativeDriver: true }),
+      Animated.timing(ax, { toValue: 0, duration: cfg.dx, useNativeDriver: true }),
+    ])).start();
   }, []);
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 18] });
+  const tY = ay.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -cfg.ry, 0] });
+  const tX = ax.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, cfg.rx, 0] });
   return (
-    <Animated.View style={{ position: 'absolute', top, right, transform: [{ translateY }] }}>
-      <View style={styles.ringOval} />
-      <View style={styles.ringBall} />
-    </Animated.View>
+    <Animated.View style={{
+      position: 'absolute', top: cfg.top, left: cfg.left,
+      width: cfg.size, height: cfg.size, borderRadius: cfg.size / 2,
+      backgroundColor: cfg.color, opacity: cfg.o,
+      shadowColor: cfg.color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: cfg.size,
+      transform: [{ translateY: tY }, { translateX: tX }],
+    }} />
   );
 }
 
@@ -126,11 +108,10 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* ── Floating orbs ── */}
-      <FloatingOrb color={ORB_GREEN} size={220} style={{ top: -70, left: -70 }} duration={8000} />
-      <FloatingOrb color={ORB_PINK}  size={150} style={{ top: H * 0.32, left: -50 }} delay={1200} duration={10000} />
-      <FloatingOrb color={ORB_GREEN} size={90}  style={{ bottom: 130, left: W * 0.38 }} delay={2000} duration={6500} />
-      <Ring top={H * 0.45} right={10} delay={500} />
+      {/* ── Subtle floating particles ── */}
+      {PARTICLE_CONFIGS.map((cfg, i) => (
+        <WelcomeParticle key={i} cfg={cfg} />
+      ))}
 
       {/* ── Ambient bottom glow ── */}
       <View style={styles.bottomGlow} />
@@ -141,11 +122,7 @@ export default function WelcomeScreen() {
           <Text style={styles.logoText}>nutrino</Text>
         </View>
 
-        {/* ── AI badge ── */}
-        <View style={styles.aiBadge}>
-          <View style={styles.aiBadgeDot} />
-          <Text style={styles.aiBadgeText}>AI-Powered Analysis</Text>
-        </View>
+
 
         {/* ── Center content ── */}
         <Animated.View
@@ -234,30 +211,7 @@ const styles = StyleSheet.create({
     color: '#F0FDF4',
     letterSpacing: -0.5,
   },
-  // ── AI badge ──
-  aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(45,212,160,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(45,212,160,0.25)',
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs + 2,
-    gap: Spacing.xs,
-    marginTop: Spacing.lg,
-  },
-  aiBadgeDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: NEON_GREEN,
-  },
-  aiBadgeText: {
-    color: NEON_GREEN,
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
+
   // ── Center ──
   center: {
     alignItems: 'center',
@@ -369,26 +323,5 @@ const styles = StyleSheet.create({
     width: 24,
     backgroundColor: NEON_GREEN,
   },
-  // ── Ring ──
-  ringOval: {
-    width: 64,
-    height: 30,
-    borderRadius: 32,
-    borderWidth: 3,
-    borderColor: 'rgba(236,72,153,0.45)',
-    transform: [{ scaleY: 0.55 }],
-  },
-  ringBall: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(45,212,160,0.7)',
-    alignSelf: 'center',
-    marginTop: -8,
-    shadowColor: NEON_GREEN,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
-  },
 });
+

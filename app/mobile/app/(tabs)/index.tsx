@@ -639,6 +639,31 @@ export default function HomeTab() {
               </View>
             </View>
 
+            {/* ── AI Scan Banner ─────────────────── */}
+            <TouchableOpacity
+              style={S.scanBanner}
+              onPress={() => router.navigate('/(tabs)/scan')}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#A3E635', '#22c55e']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={S.scanBannerGrad}
+              >
+                <View style={S.scanBannerLeft}>
+                  <View style={S.scanBannerIconWrap}>
+                    <Text style={{ fontSize: 24 }}>📸</Text>
+                  </View>
+                  <View>
+                    <Text style={S.scanBannerTitle}>AI Yemek Tara</Text>
+                    <Text style={S.scanBannerSub}>Kamera veya galeriden yemek analiz et</Text>
+                  </View>
+                </View>
+                <Text style={S.scanBannerArrow}>›</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
             {/* ── Meals Summary ─────────────────── */}
             <TouchableOpacity
               style={[S.mealsSummary, Glass.card]}
@@ -1297,5 +1322,54 @@ const S = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.text.secondary,
     marginTop: 2,
+  },
+
+  // ── AI Scan Banner ─────────────────────────────────────────────
+  scanBanner: {
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    shadowColor: '#A3E635',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scanBannerGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+  },
+  scanBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  scanBannerIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanBannerTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.extrabold,
+    color: '#052e16',
+    letterSpacing: -0.3,
+  },
+  scanBannerSub: {
+    fontSize: FontSize.xs,
+    color: 'rgba(5,46,22,0.65)',
+    fontWeight: FontWeight.medium,
+    marginTop: 1,
+  },
+  scanBannerArrow: {
+    fontSize: 28,
+    color: 'rgba(5,46,22,0.5)',
+    fontWeight: FontWeight.bold,
   },
 });

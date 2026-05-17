@@ -22,8 +22,6 @@ const PICKER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
 
 const BG_DARK    = '#080E0C';
 const NEON_GREEN = '#2DD4A0';
-const ORB_GREEN  = 'rgba(45, 212, 160, 0.28)';
-const ORB_PINK   = 'rgba(236, 72, 153, 0.18)';
 
 const MONTHS = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
@@ -128,8 +126,6 @@ export default function BirthDateScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.orb, { backgroundColor: ORB_GREEN, top: -70, left: -70, width: 220, height: 220, borderRadius: 110 }]} />
-      <View style={[styles.orb, { backgroundColor: ORB_PINK,  top: '30%', left: -50,  width: 150, height: 150, borderRadius: 75 }]} />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
@@ -146,8 +142,8 @@ export default function BirthDateScreen() {
 
         {/* Title */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Ne zaman doğdunuz?</Text>
-          <Text style={styles.subtitle}>Günlük beslenme hedeflerinizi hesaplarken dikkate alınacaktır.</Text>
+          <Text style={styles.title}>Doğum tarihiniz</Text>
+          <Text style={styles.subtitle}>Günlük kalori ve besin ihtiyacınızı hesaplarken yaşınız da dikkate alınacaktır.</Text>
         </View>
 
         {/* Picker Area */}
@@ -182,7 +178,6 @@ export default function BirthDateScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_DARK, overflow: 'hidden' },
   safe: { flex: 1 },
-  orb: { position: 'absolute', opacity: 0.9 },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingTop: 12, gap: 12,

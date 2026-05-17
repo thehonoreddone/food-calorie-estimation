@@ -14,9 +14,6 @@ import { ONBOARDING_CATEGORIES } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Floating orb colors matching the NutriScan reference
-const ORB_GREEN  = 'rgba(45, 212, 160, 0.28)';
-const ORB_PINK   = 'rgba(236, 72, 153, 0.18)';
 const NEON_GREEN = '#2DD4A0';
 const BG_DARK    = '#080E0C';
 
@@ -29,90 +26,82 @@ interface OnboardingLayoutProps {
   illustration?: React.ReactNode;
 }
 
-// ─── Animated floating orb ──────────────────────────────────────────────────
-function FloatingOrb({
-  color,
-  size,
-  top,
-  left,
-  right,
-  bottom,
-  delay = 0,
-  duration = 7000,
-}: {
-  color: string;
+// ─── Subtle floating particle ───────────────────────────────────────────────
+interface ParticleConfig {
   size: number;
-  top?: number | string;
-  left?: number | string;
-  right?: number | string;
-  bottom?: number | string;
-  delay?: number;
-  duration?: number;
-}) {
-  const anim = useRef(new Animated.Value(0)).current;
+  color: string;
+  top: number;
+  left: number;
+  durationY: number;
+  durationX: number;
+  delayMs: number;
+  rangeY: number;
+  rangeX: number;
+  opacity: number;
+}
+
+const PARTICLES: ParticleConfig[] = [
+  { size: 6,  color: NEON_GREEN, top: 80,  left: 30,  durationY: 5000, durationX: 7000, delayMs: 0,    rangeY: 25, rangeX: 12, opacity: 0.35 },
+  { size: 8,  color: NEON_GREEN, top: 180, left: SCREEN_WIDTH - 50, durationY: 6000, durationX: 5500, delayMs: 800, rangeY: 30, rangeX: 15, opacity: 0.25 },
+  { size: 5,  color: '#ec4899',  top: 300, left: 60,  durationY: 7000, durationX: 6000, delayMs: 400,  rangeY: 20, rangeX: 18, opacity: 0.20 },
+  { size: 10, color: NEON_GREEN, top: 450, left: SCREEN_WIDTH * 0.7, durationY: 8000, durationX: 4500, delayMs: 1200, rangeY: 35, rangeX: 10, opacity: 0.18 },
+  { size: 4,  color: '#ec4899',  top: 120, left: SCREEN_WIDTH * 0.5, durationY: 5500, durationX: 8000, delayMs: 600,  rangeY: 22, rangeX: 20, opacity: 0.22 },
+  { size: 7,  color: NEON_GREEN, top: SCREEN_HEIGHT * 0.65, left: 40, durationY: 6500, durationX: 7500, delayMs: 1000, rangeY: 28, rangeX: 14, opacity: 0.30 },
+  { size: 5,  color: '#a78bfa',  top: SCREEN_HEIGHT * 0.5, left: SCREEN_WIDTH - 80, durationY: 9000, durationX: 6000, delayMs: 1500, rangeY: 18, rangeX: 22, opacity: 0.15 },
+  { size: 12, color: NEON_GREEN, top: SCREEN_HEIGHT * 0.8, left: SCREEN_WIDTH * 0.4, durationY: 7500, durationX: 5000, delayMs: 300, rangeY: 32, rangeX: 8, opacity: 0.12 },
+];
+
+function FloatingParticle({ config }: { config: ParticleConfig }) {
+  const animY = useRef(new Animated.Value(0)).current;
+  const animX = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration, delay, useNativeDriver: true, easing: (t) => Math.sin(t * Math.PI) }),
-        Animated.timing(anim, { toValue: 0, duration, useNativeDriver: true }),
+        Animated.timing(animY, { toValue: 1, duration: config.durationY, delay: config.delayMs, useNativeDriver: true }),
+        Animated.timing(animY, { toValue: 0, duration: config.durationY, useNativeDriver: true }),
+      ])
+    ).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(animX, { toValue: 1, duration: config.durationX, delay: config.delayMs + 200, useNativeDriver: true }),
+        Animated.timing(animX, { toValue: 0, duration: config.durationX, useNativeDriver: true }),
       ])
     ).start();
   }, []);
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -18] });
+
+  const translateY = animY.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -config.rangeY, 0] });
+  const translateX = animX.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, config.rangeX, 0] });
+
   return (
     <Animated.View
-      style={[
-        styles.orb,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color, top, left, right, bottom },
-        { transform: [{ translateY }] },
-      ]}
+      style={{
+        position: 'absolute',
+        top: config.top,
+        left: config.left,
+        width: config.size,
+        height: config.size,
+        borderRadius: config.size / 2,
+        backgroundColor: config.color,
+        opacity: config.opacity,
+        shadowColor: config.color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: config.size,
+        elevation: 0,
+        transform: [{ translateY }, { translateX }],
+      }}
     />
   );
 }
 
-// ─── Ring / torus shape ──────────────────────────────────────────────────────
-function FloatingRing({
-  top, right, color = 'rgba(236,72,153,0.35)', size = 72, delay = 0,
-}: { top?: number; right?: number; color?: string; size?: number; delay?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 9000, delay, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 9000, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 20] });
+function FloatingParticles() {
   return (
-    <Animated.View style={{ position: 'absolute', top, right, transform: [{ translateY }] }}>
-      <View
-        style={{
-          width: size,
-          height: size / 2.2,
-          borderRadius: size / 4,
-          borderWidth: 3,
-          borderColor: color,
-          opacity: 0.7,
-          transform: [{ scaleY: 0.55 }],
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.45,
-          height: size * 0.45,
-          borderRadius: size * 0.225,
-          backgroundColor: `${color.replace('0.35', '0.6')}`,
-          alignSelf: 'center',
-          marginTop: -8,
-          shadowColor: NEON_GREEN,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.6,
-          shadowRadius: 12,
-          elevation: 8,
-        }}
-      />
-    </Animated.View>
+    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+      {PARTICLES.map((p, i) => (
+        <FloatingParticle key={i} config={p} />
+      ))}
+    </View>
   );
 }
 
@@ -149,11 +138,8 @@ export function OnboardingLayout({
 
   return (
     <View style={styles.container}>
-      {/* ── Background orbs ── */}
-      <FloatingOrb color={ORB_GREEN} size={200} top={-60} left={-60} duration={8000} />
-      <FloatingOrb color={ORB_PINK}  size={140} top={SCREEN_HEIGHT * 0.3} left={-40} delay={1200} duration={10000} />
-      <FloatingOrb color={ORB_GREEN} size={100} bottom={120} left={SCREEN_WIDTH * 0.35} delay={2000} duration={6500} />
-      <FloatingRing top={SCREEN_HEIGHT * 0.42} right={12} delay={500} />
+      {/* ── Subtle floating particles ── */}
+      <FloatingParticles />
       <AmbientGlow />
 
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -225,12 +211,7 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
   },
-  // ── Orbs / glow ──
-  orb: {
-    position: 'absolute',
-    // blur via opacity + large radius — RN doesn't support CSS blur natively
-    opacity: 0.85,
-  },
+  // ── Glow ──
   ambientGlow: {
     height: 180,
     width: '100%',
