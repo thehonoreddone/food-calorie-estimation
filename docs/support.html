@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nutrino — Destek & İletişim</title>
+  <meta name="description" content="Nutrino uygulaması destek ve iletişim sayfası.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0a0f1a;
+      color: #e5e7eb;
+      line-height: 1.8;
+    }
+    .navbar {
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .navbar a {
+      color: #4ade80;
+      text-decoration: none;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .navbar-links a {
+      color: #9ca3af;
+      font-size: 14px;
+      font-weight: 500;
+      margin-left: 24px;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .navbar-links a:hover { color: #4ade80; }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+    h1 {
+      font-size: 36px;
+      font-weight: 900;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #fff, #4ade80);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      color: #6b7280;
+      font-size: 16px;
+      margin-bottom: 48px;
+    }
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-bottom: 60px;
+    }
+    .contact-card {
+      background: #111827;
+      border: 1px solid rgba(34, 197, 94, 0.12);
+      border-radius: 20px;
+      padding: 32px 28px;
+      transition: transform 0.3s, border-color 0.3s;
+    }
+    .contact-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+    .contact-icon {
+      font-size: 36px;
+      margin-bottom: 16px;
+    }
+    .contact-card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .contact-card p {
+      font-size: 14px;
+      color: #9ca3af;
+      margin-bottom: 16px;
+    }
+    .contact-card a {
+      color: #4ade80;
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .contact-card a:hover { text-decoration: underline; }
+    h2 {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 24px;
+      color: #fff;
+    }
+    .faq-item {
+      background: #111827;
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .faq-item h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .faq-item p {
+      font-size: 14px;
+      color: #9ca3af;
+    }
+    .footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      color: #6b7280;
+      font-size: 13px;
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      .navbar-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html">🥑 Nutrino</a>
+    <div class="navbar-links">
+      <a href="index.html">Ana Sayfa</a>
+      <a href="privacy.html">Gizlilik</a>
+      <a href="terms.html">Koşullar</a>
+      <a href="support.html">Destek</a>
+    </div>
+  </nav>
+  <div class="container">
+    <h1>💬 Destek & İletişim</h1>
+    <p class="subtitle">Nutrino ile ilgili sorularınız mı var? Size yardımcı olmaktan memnuniyet duyarız.</p>
+
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="contact-icon">📧</div>
+        <h3>E-posta</h3>
+        <p>Genel sorular ve destek talepleri için bize yazın. 24 saat içinde yanıtlıyoruz.</p>
+        <a href="mailto:destek@nutrino.app">destek@nutrino.app</a>
+      </div>
+      <div class="contact-card">
+        <div class="contact-icon">🔒</div>
+        <h3>Gizlilik & Veri</h3>
+        <p>Kişisel verilerinizle ilgili talepler (erişim, silme, düzeltme) için:</p>
+        <a href="mailto:privacy@nutrino.app">privacy@nutrino.app</a>
+      </div>
+      <div class="contact-card">
+        <div class="contact-icon">🐛</div>
+        <h3>Hata Bildirimi</h3>
+        <p>Uygulama hatası mı buldunuz? Detaylı açıklama ve ekran görüntüsü ile bildirin.</p>
+        <a href="mailto:bug@nutrino.app">bug@nutrino.app</a>
+      </div>
+      <div class="contact-card">
+        <div class="contact-icon">💡</div>
+        <h3>Öneriler</h3>
+        <p>Yeni özellik önerilerinizi ve geri bildirimlerinizi paylaşın.</p>
+        <a href="mailto:oneri@nutrino.app">oneri@nutrino.app</a>
+      </div>
+    </div>
+
+    <h2>❓ Sıkça Sorulan Sorular</h2>
+
+    <div class="faq-item">
+      <h3>Nutrino tamamen ücretsiz mi?</h3>
+      <p>Evet! Nutrino'nun tüm özellikleri v1.0'da tamamen ücretsizdir. İleride premium özellikler eklenebilir, ancak temel analiz her zaman ücretsiz kalacaktır.</p>
+    </div>
+
+    <div class="faq-item">
+      <h3>Kalori değerleri ne kadar doğru?</h3>
+      <p>AI modelimiz ±%20 hata payıyla çalışır. Sonuçlar tahminidir ve porsiyon boyutuna, yemek türüne ve fotoğraf kalitesine göre değişebilir. Kesin değerler için bir diyetisyenle görüşmenizi öneririz.</p>
+    </div>
+
+    <div class="faq-item">
+      <h3>Fotoğraflarım depolanıyor mu?</h3>
+      <p>Hayır. Yemek fotoğraflarınız yalnızca analiz süresince sunucuda işlenir ve kalıcı olarak depolanmaz. Detaylar için <a href="privacy.html">gizlilik politikamızı</a> inceleyin.</p>
+    </div>
+
+    <div class="faq-item">
+      <h3>Hesabımı nasıl silebilirim?</h3>
+      <p>Uygulama içinde Ayarlar → Hesap → "Hesabı Sil" seçeneğinden hesabınızı ve tüm verilerinizi kalıcı olarak silebilirsiniz.</p>
+    </div>
+
+    <div class="faq-item">
+      <h3>Hangi yemekleri tanıyabilir?</h3>
+      <p>Nutrino 149+ yemek sınıfını tanıyabilir; Türk mutfağı, uluslararası yemekler, fast food ve tatlılar dahil. Model sürekli geliştirilmektedir.</p>
+    </div>
+
+    <div class="faq-item">
+      <h3>İnternet bağlantısı gerekli mi?</h3>
+      <p>Evet. Yemek analizi için AI modeli sunucuda çalıştığından aktif bir internet bağlantısı gereklidir. Geçmiş verilerinizi offline olarak görüntüleyebilirsiniz.</p>
+    </div>
+
+    <div class="footer">
+      <p>© 2026 Nutrino. Tüm hakları saklıdır.</p>
+    </div>
+  </div>
+</body>
+</html>

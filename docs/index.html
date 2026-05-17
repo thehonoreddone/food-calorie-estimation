@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nutrino — AI Kalori Sayacı | Fotoğrafla Kalori Hesapla</title>
+  <meta name="description" content="Yemek fotoğrafı çekin, yapay zeka ile anında kalori ve besin değerlerini öğrenin. 149+ yemek tanıma, kişisel diyet takibi.">
+  <meta name="keywords" content="kalori sayacı, kalori hesaplama, fotoğrafla kalori, AI beslenme, diyet uygulaması, yemek tanıma">
+  <meta property="og:title" content="Nutrino — AI Kalori Sayacı">
+  <meta property="og:description" content="Yemeğinizin fotoğrafını çekin, kalorisini anında öğrenin!">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --green-50: #f0fdf4;
+      --green-100: #dcfce7;
+      --green-400: #4ade80;
+      --green-500: #22c55e;
+      --green-600: #16a34a;
+      --green-700: #15803d;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --dark-bg: #0a0f1a;
+      --dark-card: #111827;
+      --dark-card-border: rgba(34, 197, 94, 0.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--dark-bg);
+      color: #e5e7eb;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ── Navbar ─────────────────────────────────────── */
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(20px);
+      background: rgba(10, 15, 26, 0.8);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      transition: background 0.3s;
+    }
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--green-400);
+      text-decoration: none;
+    }
+    .navbar-brand span { font-size: 28px; }
+    .navbar-links { display: flex; gap: 28px; }
+    .navbar-links a {
+      color: var(--gray-400);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .navbar-links a:hover { color: var(--green-400); }
+
+    /* ── Hero ───────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(34,197,94,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--green-400);
+      margin-bottom: 28px;
+      animation: fadeInUp 0.8s ease;
+    }
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #ffffff 0%, var(--green-400) 50%, var(--green-500) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: fadeInUp 0.8s ease 0.1s both;
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--gray-400);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      animation: fadeInUp 0.8s ease 0.2s both;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      animation: fadeInUp 0.8s ease 0.3s both;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 36px;
+      background: linear-gradient(135deg, var(--green-500), var(--green-600));
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(34, 197, 94, 0.4);
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 36px;
+      background: rgba(255,255,255,0.05);
+      color: var(--gray-200);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    /* ── Features ───────────────────────────────────── */
+    .features {
+      padding: 100px 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .section-title {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+    .section-title h2 {
+      font-size: 36px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+    .section-title p {
+      font-size: 16px;
+      color: var(--gray-400);
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--dark-card);
+      border: 1px solid var(--dark-card-border);
+      border-radius: 20px;
+      padding: 36px 28px;
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(34, 197, 94, 0.3);
+      box-shadow: 0 8px 32px rgba(34, 197, 94, 0.08);
+    }
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      background: rgba(34, 197, 94, 0.1);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+    .feature-card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: var(--gray-400);
+      line-height: 1.7;
+    }
+
+    /* ── How it works ───────────────────────────────── */
+    .how-it-works {
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+      position: relative;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      left: 30px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--green-500), transparent);
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--green-500), var(--green-700));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: white;
+      box-shadow: 0 0 24px rgba(34, 197, 94, 0.3);
+      position: relative;
+      z-index: 1;
+    }
+    .step-content h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .step-content p {
+      font-size: 15px;
+      color: var(--gray-400);
+    }
+
+    /* ── Stats ──────────────────────────────────────── */
+    .stats {
+      padding: 60px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 24px;
+      text-align: center;
+    }
+    .stat h3 {
+      font-size: 40px;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--green-400), var(--green-500));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat p {
+      font-size: 14px;
+      color: var(--gray-400);
+      margin-top: 4px;
+    }
+
+    /* ── Footer ─────────────────────────────────────── */
+    footer {
+      padding: 60px 24px 40px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    .footer-brand h3 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--green-400);
+      margin-bottom: 12px;
+    }
+    .footer-brand p {
+      font-size: 14px;
+      color: var(--gray-500);
+      max-width: 300px;
+    }
+    .footer-col h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-200);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .footer-col a {
+      display: block;
+      color: var(--gray-400);
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 10px;
+      transition: color 0.2s;
+    }
+    .footer-col a:hover { color: var(--green-400); }
+    .footer-bottom {
+      text-align: center;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      color: var(--gray-500);
+      font-size: 13px;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .navbar-links { display: none; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .steps::before { left: 22px; }
+      .step-num { width: 44px; height: 44px; font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand"><span>🥑</span> Nutrino</a>
+    <div class="navbar-links">
+      <a href="#features">Özellikler</a>
+      <a href="#how">Nasıl Çalışır</a>
+      <a href="privacy.html">Gizlilik</a>
+      <a href="terms.html">Koşullar</a>
+      <a href="support.html">Destek</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge">✨ Yapay Zeka Destekli — 149+ Yemek Tanıma</div>
+    <h1>Fotoğrafla Kalori<br>Hesapla</h1>
+    <p>Yemeğinizin fotoğrafını çekin, Nutrino anında kalori ve besin değerlerini hesaplasın. Diyet takibinde yeni nesil deneyim.</p>
+    <div class="hero-cta">
+      <a href="#" class="btn-primary">📱 Google Play'den İndir</a>
+      <a href="#features" class="btn-secondary">Daha Fazla →</a>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section class="stats">
+    <div class="stats-grid">
+      <div class="stat"><h3>149+</h3><p>Yemek Sınıfı</p></div>
+      <div class="stat"><h3>AI</h3><p>Derin Öğrenme</p></div>
+      <div class="stat"><h3>&lt;2sn</h3><p>Analiz Süresi</p></div>
+      <div class="stat"><h3>%100</h3><p>Ücretsiz</p></div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="section-title">
+      <h2>Neden Nutrino?</h2>
+      <p>Manuel kalori girişi devri bitti. Fotoğraf çek, gerisini yapay zekaya bırak.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📸</div>
+        <h3>Fotoğrafla Analiz</h3>
+        <p>YOLOv8 tabanlı segmentasyon ile yemeği piksel düzeyinde tanır. Porsiyon boyutunu otomatik tahmin eder.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Kişisel Hedefler</h3>
+        <p>Boy, kilo, yaş ve aktivite seviyenize göre BMR/TDEE hesaplama. Kilo vermek, korumak veya almak — sizin seçiminiz.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Detaylı Takip</h3>
+        <p>Günlük, haftalık ve aylık kalori alımınızı grafik ve istatistiklerle takip edin.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏆</div>
+        <h3>Başarımlar</h3>
+        <p>Hedeflerinize ulaştıkça rozetler kazanın. Motivasyonunuzu yüksek tutun.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>Topluluk</h3>
+        <p>Yemeklerinizi paylaşın, diğer kullanıcıların analizlerini görün, birlikte sağlıklı yaşayın.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌙</div>
+        <h3>Karanlık Mod</h3>
+        <p>Göz yorgunluğunu azaltan şık ve modern karanlık tema. Gündüz/gece otomatik geçiş.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works" id="how">
+    <div class="section-title">
+      <h2>Nasıl Çalışır?</h2>
+      <p>3 adımda kalori takibine başla</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Fotoğraf Çek</h3>
+          <p>Yemeğinizin fotoğrafını kameranızla çekin veya galeriden seçin.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>AI Analiz Etsin</h3>
+          <p>Yapay zeka modelimiz yemeği otomatik tanır, segmente eder ve porsiyonu tahmin eder.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Sonuçları Gör</h3>
+          <p>Kalori, protein, karbonhidrat ve yağ değerlerini anında öğrenin. Günlük hedefinize ekleyin.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <h3>🥑 Nutrino</h3>
+        <p>AI destekli yemek tanıma ve kalori takibi. Fotoğrafla sağlıklı yaşam.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Uygulama</h4>
+        <a href="#">Google Play</a>
+        <a href="#features">Özellikler</a>
+        <a href="#how">Nasıl Çalışır</a>
+      </div>
+      <div class="footer-col">
+        <h4>Yasal</h4>
+        <a href="privacy.html">Gizlilik Politikası</a>
+        <a href="terms.html">Kullanım Koşulları</a>
+        <a href="support.html">Destek & İletişim</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 Nutrino. Tüm hakları saklıdır.
+    </div>
+  </footer>
+
+</body>
+</html>
