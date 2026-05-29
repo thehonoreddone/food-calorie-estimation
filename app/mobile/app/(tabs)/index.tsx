@@ -99,6 +99,7 @@ function getMonthGrid(year: number, month: number) {
 // ─── Premium Calorie Ring ───────────────────────────────────────────────────
 
 function CalRing({ eaten, target, sz = 190 }: { eaten: number; target: number; sz?: number }) {
+  const { t } = useTranslation();
   const sw = 14;
   const r = (sz - sw) / 2;
   const c = 2 * Math.PI * r;
@@ -163,10 +164,10 @@ function CalRing({ eaten, target, sz = 190 }: { eaten: number; target: number; s
       {/* Center content */}
       <View style={{ position: 'absolute', alignItems: 'center' }}>
         <Text style={S.ringValue}>{eaten.toLocaleString('tr-TR')}</Text>
-        <Text style={S.ringLabel}>of {target.toLocaleString('tr-TR')} kcal</Text>
+        <Text style={S.ringLabel}>{t('home.ofTarget', { target: target.toLocaleString('tr-TR') })}</Text>
         <View style={S.ringRemRow}>
           <View style={[S.ringDot, { backgroundColor: gradColors.start }]} />
-          <Text style={S.ringRemText}>{rem.toLocaleString('tr-TR')} left</Text>
+          <Text style={S.ringRemText}>{rem.toLocaleString('tr-TR')} {t('home.left')}</Text>
         </View>
       </View>
     </View>
@@ -540,12 +541,12 @@ export default function HomeTab() {
                 >
                   <Text style={{ fontSize: 16, color: '#fff' }}>📊</Text>
                 </LinearGradient>
-                <Text style={S.macroCardTitle}>Macros</Text>
+                <Text style={S.macroCardTitle}>{t('home.macros')}</Text>
               </View>
               <View style={S.macroList}>
-                <MacroBar label="Protein" eaten={eProt} goal={macros.protein} color="#22c55e" />
-                <MacroBar label="Carbs" eaten={eCarb} goal={macros.carbs} color="#3b82f6" />
-                <MacroBar label="Fat" eaten={eFat} goal={macros.fat} color="#f59e0b" />
+                <MacroBar label={t('home.protein')} eaten={eProt} goal={macros.protein} color="#22c55e" />
+                <MacroBar label={t('home.carbs')} eaten={eCarb} goal={macros.carbs} color="#3b82f6" />
+                <MacroBar label={t('home.fat')} eaten={eFat} goal={macros.fat} color="#f59e0b" />
               </View>
             </View>
 
@@ -559,7 +560,7 @@ export default function HomeTab() {
                     <LinearGradient colors={['#3b82f6', '#06b6d4'] as any} style={S.halfCardIconBg}>
                       <Text style={{ fontSize: 14, color: '#fff' }}>💧</Text>
                     </LinearGradient>
-                    <Text style={S.halfCardTitle}>Water</Text>
+                    <Text style={S.halfCardTitle}>{t('home.water')}</Text>
                   </View>
                   <TouchableOpacity
                     style={S.waterAddBtn}
@@ -572,7 +573,7 @@ export default function HomeTab() {
                 <View style={S.waterContent}>
                   <View>
                     <Text style={S.waterValue}>{waterGlasses}</Text>
-                    <Text style={S.waterGoalText}>/{waterGlassGoal} glasses</Text>
+                    <Text style={S.waterGoalText}>/{waterGlassGoal} {t('home.glasses')}</Text>
                   </View>
                   <WaterDropBars glasses={waterGlasses} goal={waterGlassGoal} />
                 </View>
@@ -596,13 +597,13 @@ export default function HomeTab() {
                     <LinearGradient colors={['#22c55e', '#16a34a'] as any} style={S.halfCardIconBg}>
                       <Text style={{ fontSize: 14, color: '#fff' }}>👟</Text>
                     </LinearGradient>
-                    <Text style={S.halfCardTitle}>Steps</Text>
+                    <Text style={S.halfCardTitle}>{t('home.steps')}</Text>
                   </View>
                 </View>
                 <Text style={S.stepsValue}>{steps.toLocaleString('tr-TR')}</Text>
                 <Text style={S.stepsGoalText}>/{stGoal.toLocaleString('tr-TR')}</Text>
                 <View style={S.stepsExtraRow}>
-                  <Text style={S.stepsBurnedText}>• {stepsBurned} kcal burned</Text>
+                  <Text style={S.stepsBurnedText}>• {t('home.burnedKcal', { value: stepsBurned })}</Text>
                 </View>
                 <View style={S.stepsProgressRow}>
                   <StepsBadge percent={stepsPercent} />

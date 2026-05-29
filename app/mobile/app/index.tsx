@@ -1,31 +1,38 @@
+import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Redirect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
 import { Colors } from '@/constants/theme';
 
 export default function Index() {
   const { isLoading, hasCompletedOnboarding, isAuthenticated } = useUser();
+  const router = useRouter();
+  const [hasNavigated, setHasNavigated] = useState(false);
 
-  if (isLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={Colors.primary[500]} />
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (isLoading || hasNavigated) return;
 
-  // If user is already authenticated, skip onboarding entirely
-  if (isAuthenticated) {
-    return <Redirect href="/(tabs)" />;
-  }
+    // Use router.replace so this index route is REMOVED from the stack.
+    // This prevents the back button from returning to the decision screen.
+    if (isAuthenticated && hasCompletedOnboarding) {
+      router.replace('/(tabs)');
+    } else if (isAuthenticated && !hasCompletedOnboarding) {
+      router.replace('/onboarding/welcome');
+    } else if (!hasCompletedOnboarding) {
+      router.replace('/onboarding/welcome');
+    } else {
+      router.replace('/auth/login');
+    }
 
-  // Not authenticated: if onboarding not done, show onboarding first
-  if (!hasCompletedOnboarding) {
-    return <Redirect href="/onboarding/welcome" />;
-  }
+    setHasNavigated(true);
+  }, [isLoading, isAuthenticated, hasCompletedOnboarding, hasNavigated, router]);
 
-  // Onboarding done but not authenticated → login
-  return <Redirect href="/auth/login" />;
+  // Always show loading while deciding where to go
+  return (
+    <View style={styles.loading}>
+      <ActivityIndicator size="large" color={Colors.primary[500]} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

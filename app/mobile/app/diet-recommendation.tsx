@@ -446,10 +446,12 @@ const styles = StyleSheet.create({
   // Tabs
   tabRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: Colors.surfaceHigh,
     borderRadius: BorderRadius.lg,
     padding: 4,
     marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
   },
   tab: {
     flex: 1,
@@ -458,24 +460,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: Colors.surface,
-    ...Shadows.sm,
+    backgroundColor: Colors.neon.limeGlow,
+    borderWidth: 1,
+    borderColor: Colors.neon.lime,
   },
   tabText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text.secondary },
-  tabTextActive: { color: Colors.primary[700] },
+  tabTextActive: { color: Colors.neon.lime },
   // Target
   targetCard: {
-    backgroundColor: Colors.primary[50],
+    backgroundColor: Colors.neon.limeGlow,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.primary[200],
+    borderColor: Colors.neon.lime,
   },
   targetLabel: { fontSize: FontSize.sm, color: Colors.text.secondary },
-  targetValue: { fontSize: 36, fontWeight: '800', color: Colors.primary[700], marginVertical: 4 },
-  targetSub: { fontSize: FontSize.sm, color: Colors.primary[600] },
+  targetValue: { fontSize: 36, fontWeight: '800', color: Colors.neon.lime, marginVertical: 4 },
+  targetSub: { fontSize: FontSize.sm, color: Colors.text.secondary },
   // Meal cards
   mealCard: {
     backgroundColor: Colors.surface,
@@ -498,7 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: Colors.glassBorder,
   },
   mealEmoji: { fontSize: 24, marginRight: 10 },
   mealInfo: { flex: 1 },
@@ -515,7 +518,7 @@ const styles = StyleSheet.create({
   totalsTitle: { fontSize: FontSize.base, fontWeight: '700', color: Colors.text.primary, marginBottom: Spacing.md, textAlign: 'center' },
   totalsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   totalItem: { alignItems: 'center' },
-  totalValue: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.primary[700] },
+  totalValue: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.neon.lime },
   totalLabel: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 2 },
   // Regenerate
   regenerateBtn: {
@@ -576,16 +579,16 @@ const styles = StyleSheet.create({
   macroLabel: { fontSize: FontSize.xs, color: Colors.text.secondary, marginTop: 4 },
   // Tips
   tipsCard: {
-    backgroundColor: Colors.primary[50],
+    backgroundColor: Colors.neon.limeGlow,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.primary[200],
+    borderColor: Colors.neon.lime,
   },
-  tipsTitle: { fontSize: FontSize.base, fontWeight: '700', color: Colors.primary[700], marginBottom: Spacing.md },
+  tipsTitle: { fontSize: FontSize.base, fontWeight: '700', color: Colors.neon.lime, marginBottom: Spacing.md },
   tipRow: { flexDirection: 'row', marginBottom: 8, paddingRight: 12 },
-  tipBullet: { fontSize: FontSize.base, color: Colors.primary[600], marginRight: 8, fontWeight: '700' },
+  tipBullet: { fontSize: FontSize.base, color: Colors.neon.lime, marginRight: 8, fontWeight: '700' },
   tipText: { fontSize: FontSize.sm, color: Colors.text.primary, flex: 1, lineHeight: 20 },
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: Spacing['4xl'] },
@@ -645,7 +648,7 @@ const styles = StyleSheet.create({
   barTrack: {
     height: 140,
     width: 28,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: Colors.surfaceHigh,
     borderRadius: 8,
     justifyContent: 'flex-end',
     alignItems: 'center',
@@ -729,7 +732,7 @@ const styles = StyleSheet.create({
   },
   macroBarTrack: {
     height: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: Colors.surfaceHigh,
     borderRadius: 6,
     overflow: 'hidden',
   },

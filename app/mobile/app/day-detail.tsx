@@ -30,6 +30,7 @@ import {
   logExercise,
   ExerciseEntry,
   recordMealLog,
+  getRecentFoodNames,
 } from '../src/services/firestoreService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import {
@@ -92,6 +93,10 @@ export default function DayDetailScreen() {
   const [manualUnit, setManualUnit] = useState<FoodUnit>('gram');
   const [selectedFood, setSelectedFood] = useState<FoodInfo | null>(null);
   const [showFoodSuggestions, setShowFoodSuggestions] = useState(false);
+
+  // Recent food name history (from Firebase)
+  const [recentFoodNames, setRecentFoodNames] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Open Food Facts integration
   const [offResults, setOffResults] = useState<OFFFood[]>([]);
@@ -274,9 +279,16 @@ export default function DayDetailScreen() {
     }
   };
 
-  const openManualModal = (mealType: MealType) => {
+  const openManualModal = async (mealType: MealType) => {
     setManualMealType(mealType); setManualFoodName(''); setManualAmount(''); setSelectedFood(null); setSelectedOFF(null); setManualUnit('gram');
-    setShowFoodSuggestions(false); setOffResults([]); setShowManualModal(true);
+    setShowFoodSuggestions(false); setOffResults([]); setShowHistory(false); setShowManualModal(true);
+    // Load recent food names from Firebase
+    if (profile.uid) {
+      try {
+        const names = await getRecentFoodNames(profile.uid, 20);
+        setRecentFoodNames(names);
+      } catch { setRecentFoodNames([]); }
+    }
   };
 
   // Date display
@@ -292,7 +304,7 @@ export default function DayDetailScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{dateLabel}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.doneBtn}>
-          <Text style={styles.doneBtnText}>✓ Tamam</Text>
+          <Text style={styles.doneBtnText}>✓ Kaydet</Text>
         </TouchableOpacity>
       </View>
 
@@ -354,10 +366,10 @@ export default function DayDetailScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.addBtn, { backgroundColor: section.color }]}
                         onPress={() => {
-                          // Dismiss the modal first, then navigate to the scan tab
-                          // Using replace avoids "Unmatched Route" from modal→tab push
-                          router.dismiss();
-                          setTimeout(() => router.navigate('/(tabs)/scan'), 100);
+                          // Close the day-detail modal, then navigate to scan tab
+                          setShowManualModal(false);
+                          router.back();
+                          setTimeout(() => router.push('/(tabs)/scan'), 200);
                         }}>
                         <Text style={styles.addBtnTxt}>+ 📸</Text>
                       </TouchableOpacity>
@@ -453,7 +465,7 @@ export default function DayDetailScreen() {
               onPress={() => router.back()}
               activeOpacity={0.8}
             >
-              <Text style={styles.floatingDoneBtnText}>✓ Tamam — Anasayfaya Dön</Text>
+              <Text style={styles.floatingDoneBtnText}>✓ Kaydet</Text>
             </TouchableOpacity>
           </>
         )}
@@ -463,25 +475,80 @@ export default function DayDetailScreen() {
       <Modal visible={showManualModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('home.addFood')}</Text>
-            <Text style={styles.modalSub}>
-              {MEAL_SECTIONS.find(s => s.key === manualMealType)?.icon}{' '}
-              {MEAL_SECTIONS.find(s => s.key === manualMealType)?.label}
-            </Text>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>{t('home.addFood')}</Text>
+                <View style={styles.modalSubRow}>
+                  <Text style={styles.modalSubIcon}>{MEAL_SECTIONS.find(s => s.key === manualMealType)?.icon}</Text>
+                  <Text style={styles.modalSub}>{MEAL_SECTIONS.find(s => s.key === manualMealType)?.label}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setShowManualModal(false)} style={styles.modalCloseBtn}>
+                <Text style={styles.modalCloseTxt}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-            <TextInput style={styles.input} placeholder="Yemek adı (ör: mercimek çorbası, döner, süt, çikolata)"
-              placeholderTextColor={Colors.text.light} value={manualFoodName}
-              onChangeText={(text) => {
-                setManualFoodName(text); setShowFoodSuggestions(true); setSelectedOFF(null);
-                const results = searchFoods(text, 1);
-                if (results.length > 0 && results[0].displayName.toLowerCase() === text.toLowerCase()) {
-                  setSelectedFood(results[0]); setManualUnit(results[0].unit); setManualAmount(String(results[0].defaultPortion));
-                } else {
-                  // Trigger debounced OFF search when local DB has few results
-                  if (searchFoods(text, 3).length < 3) searchOFFDebounced(text);
-                }
-              }}
-            />
+            {/* Food name input with history */}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="Yemek adı ara..."
+                placeholderTextColor={Colors.text.muted}
+                value={manualFoodName}
+                onFocus={() => { if (!manualFoodName) setShowHistory(true); }}
+                onChangeText={(text) => {
+                  setManualFoodName(text);
+                  setShowHistory(false);
+                  setShowFoodSuggestions(true);
+                  setSelectedOFF(null);
+                  const results = searchFoods(text, 1);
+                  if (results.length > 0 && results[0].displayName.toLowerCase() === text.toLowerCase()) {
+                    setSelectedFood(results[0]); setManualUnit(results[0].unit); setManualAmount(String(results[0].defaultPortion));
+                  } else {
+                    if (searchFoods(text, 3).length < 3) searchOFFDebounced(text);
+                  }
+                }}
+              />
+              {manualFoodName.length > 0 && (
+                <TouchableOpacity
+                  style={styles.inputClearBtn}
+                  onPress={() => { setManualFoodName(''); setSelectedFood(null); setSelectedOFF(null); setShowFoodSuggestions(false); setShowHistory(true); }}
+                >
+                  <Text style={styles.inputClearTxt}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Recent search history dropdown */}
+            {showHistory && recentFoodNames.length > 0 && !manualFoodName && (
+              <View style={styles.historyBox}>
+                <View style={styles.historyHeader}>
+                  <Text style={styles.historyHeaderTxt}>🕐 Son Aramalar</Text>
+                </View>
+                <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {recentFoodNames.map((name, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.historyItem}
+                      onPress={() => {
+                        setManualFoodName(name);
+                        setShowHistory(false);
+                        setShowFoodSuggestions(true);
+                        const results = searchFoods(name, 1);
+                        if (results.length > 0 && results[0].displayName.toLowerCase() === name.toLowerCase()) {
+                          setSelectedFood(results[0]); setManualUnit(results[0].unit); setManualAmount(String(results[0].defaultPortion));
+                        }
+                      }}
+                    >
+                      <Text style={styles.historyIcon}>🕐</Text>
+                      <Text style={styles.historyItemTxt}>{name}</Text>
+                      <Text style={styles.historyArrow}>↗</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
             {showFoodSuggestions && (foodSuggestions.length > 0 || offResults.length > 0) && (
               <ScrollView style={styles.suggestBox} nestedScrollEnabled>
@@ -658,10 +725,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  doneBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: Colors.primary[500] },
-  doneBtnText: { color: '#fff', fontSize: FontSize.sm, fontWeight: '700' },
-  floatingDoneBtn: { backgroundColor: Colors.primary[500], borderRadius: BorderRadius.xl, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg, marginBottom: Spacing.xl, ...Shadows.md },
-  floatingDoneBtnText: { color: '#fff', fontSize: FontSize.base, fontWeight: '800' },
+  doneBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: Colors.neon.lime },
+  doneBtnText: { color: '#0D0D12', fontSize: FontSize.sm, fontWeight: '800' },
+  floatingDoneBtn: { backgroundColor: Colors.neon.lime, borderRadius: BorderRadius.xl, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg, marginBottom: Spacing.xl, ...Shadows.md },
+  floatingDoneBtnText: { color: '#0D0D12', fontSize: FontSize.base, fontWeight: '900', letterSpacing: 0.5 },
   headerTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text.primary },
   summaryBar: { flexDirection: 'row', backgroundColor: Colors.surface, paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, justifyContent: 'space-between', alignItems: 'center' },
   summaryItem: { flex: 1, alignItems: 'center' },
@@ -693,16 +760,33 @@ const styles = StyleSheet.create({
   swipeDelTxt: { color: '#fff', fontSize: 11, fontWeight: '700' },
   footer: { textAlign: 'center', fontSize: FontSize.xs, color: Colors.text.light, marginTop: Spacing.xl, marginBottom: Spacing.xl },
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 44 : 24 },
-  modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text.primary, marginBottom: 4, textAlign: 'center' },
-  modalSub: { fontSize: FontSize.base, color: Colors.text.secondary, marginBottom: Spacing.lg, textAlign: 'center' },
-  input: { backgroundColor: Colors.neutral[50], borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: 14, fontSize: FontSize.base, color: Colors.text.primary, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 44 : 24, borderTopWidth: 1, borderTopColor: Colors.glassBorder },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.lg },
+  modalTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.text.primary },
+  modalSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  modalSubIcon: { fontSize: 16 },
+  modalSub: { fontSize: FontSize.sm, color: Colors.text.secondary, fontWeight: '500' },
+  modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.glass, alignItems: 'center', justifyContent: 'center' },
+  modalCloseTxt: { fontSize: 14, color: Colors.text.secondary, fontWeight: '700' },
+  // Input with clear button
+  inputWrapper: { position: 'relative', marginBottom: Spacing.md },
+  inputClearBtn: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 4 },
+  inputClearTxt: { fontSize: 14, color: Colors.text.muted, fontWeight: '700' },
+  // History dropdown
+  historyBox: { backgroundColor: Colors.surfaceHigh, borderRadius: BorderRadius.lg, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.glassBorder, overflow: 'hidden' },
+  historyHeader: { paddingHorizontal: Spacing.lg, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.glassBorder, backgroundColor: Colors.surface },
+  historyHeaderTxt: { fontSize: FontSize.xs, color: Colors.neon.cyan, fontWeight: '700', letterSpacing: 0.5 },
+  historyItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  historyIcon: { fontSize: 14, marginRight: Spacing.md, opacity: 0.5 },
+  historyItemTxt: { flex: 1, fontSize: FontSize.sm, color: Colors.text.primary, fontWeight: '500' },
+  historyArrow: { fontSize: 12, color: Colors.neon.lime, fontWeight: '700' },
+  input: { backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: 14, paddingRight: 44, fontSize: FontSize.base, color: Colors.text.primary, borderWidth: 1, borderColor: Colors.glassBorder },
   modalActions: { flexDirection: 'row', marginTop: Spacing.md, gap: 12 },
-  modalCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  modalCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.glassBorder, alignItems: 'center' },
   modalCancelTxt: { color: Colors.text.secondary, fontWeight: '600', fontSize: FontSize.base },
-  modalConfirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: Colors.primary[500], alignItems: 'center' },
-  modalConfirmTxt: { color: '#fff', fontWeight: '700', fontSize: FontSize.base },
+  modalConfirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: Colors.neon.lime, alignItems: 'center' },
+  modalConfirmTxt: { color: '#0D0D12', fontWeight: '800', fontSize: FontSize.base },
   // Food suggestions
   suggestBox: { maxHeight: 160, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.primary[200] },
   suggestItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },

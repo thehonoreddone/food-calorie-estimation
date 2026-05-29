@@ -69,7 +69,7 @@ class PredictionService:
         return response
 
     def _cache_set(self, key: str, response: PredictionResponse) -> None:
-        """Store a Gemini result in cache"""
+        """Store a Gemini result in cache with LRU eviction"""
         self._gemini_cache[key] = (response, time.time())
         # Evict old entries if cache grows too large
         if len(self._gemini_cache) > 500:
@@ -77,6 +77,15 @@ class PredictionService:
             expired = [k for k, (_, ts) in self._gemini_cache.items() if ts < cutoff]
             for k in expired:
                 del self._gemini_cache[k]
+            # Hard cap: if still over 400 after expired cleanup, remove oldest
+            if len(self._gemini_cache) > 400:
+                sorted_keys = sorted(
+                    self._gemini_cache.keys(),
+                    key=lambda k: self._gemini_cache[k][1],
+                )
+                for k in sorted_keys[:len(self._gemini_cache) - 400]:
+                    del self._gemini_cache[k]
+
     
     async def initialize_legacy(self) -> bool:
         """Initialize legacy pipeline if available"""
@@ -186,17 +195,23 @@ class PredictionService:
         language: str = "tr",
     ) -> PredictionResponse:
         """
-        3-tier confidence caching with Gemini fallback:
-          - >80% (HIGH):   Trust model, return immediately
-          - 50-80% (MID):  Return model result now, fire background Gemini call + cache
-          - <50% (LOW):    Wait for Gemini result, then return it
+        Hybrid prediction: model classifies food, Gemini estimates nutrition.
+        
+        The legacy model is excellent at identifying food classes but its
+        geometry-based weight estimation (mask area → volume → mass) is unreliable
+        because a close-up photo of a slice can have a larger mask area than a 
+        whole pizza photographed from further away.
+        
+        Gemini is much better at understanding visual portion context, so we 
+        always use it for weight/calorie estimation while trusting the model 
+        for classification when confidence is high.
         """
         result = await legacy_pipeline.predict(image, top_k=5)
         confidence = result.confidence
         high_thresh = settings.GEMINI_HIGH_CONFIDENCE_THRESHOLD
         low_thresh = settings.GEMINI_CONFIDENCE_THRESHOLD
 
-        # Check cache first (for MID-tier background results from a previous call)
+        # Check cache first (for background results from a previous call)
         img_hash = self._image_hash(image)
         cached = self._cache_get(img_hash)
         if cached is not None:
@@ -204,32 +219,10 @@ class PredictionService:
             cached.mask_base64 = self._encode_mask(result.mask) if include_mask else None
             return cached
 
-        # ---- TIER 1: HIGH confidence (>=80%) → trust model directly ----
-        if confidence >= high_thresh:
-            logger.info(
-                f"[Tier-1 HIGH] confidence {confidence:.2f} >= {high_thresh} "
-                f"- trusting model: {result.predicted_class}"
-            )
-            return self._build_legacy_response(result, include_mask, start_time, source="model")
+        mask_b64 = self._encode_mask(result.mask) if include_mask else None
 
-        # ---- TIER 2: MID confidence (50-80%) → return model + background Gemini ----
-        if confidence >= low_thresh:
-            logger.info(
-                f"[Tier-2 MID] confidence {confidence:.2f} in [{low_thresh},{high_thresh}) "
-                f"- returning model, scheduling background Gemini"
-            )
-            # Fire-and-forget background Gemini call
-            if self.gemini_enabled and gemini_service is not None:
-                asyncio.create_task(
-                    self._background_gemini(image, result.predicted_class, confidence, img_hash, language=language)
-                )
-            return self._build_legacy_response(result, include_mask, start_time, source="model")
-
-        # ---- TIER 3: LOW confidence (<50%) → wait for Gemini ----
-        logger.info(
-            f"[Tier-3 LOW] confidence {confidence:.2f} < {low_thresh} "
-            f"- waiting for Gemini..."
-        )
+        # Always try Gemini for weight/calorie estimation (regardless of tier)
+        gemini_result = None
         if self.gemini_enabled and gemini_service is not None:
             try:
                 gemini_result = await gemini_service.classify_food(
@@ -238,33 +231,64 @@ class PredictionService:
                     hint_confidence=confidence,
                     language=language,
                 )
-                if gemini_result and gemini_result.is_food and gemini_result.confidence > confidence:
-                    logger.info(
-                        f"[Tier-3] Gemini override: {gemini_result.food_class} "
-                        f"({gemini_result.confidence:.2f}) > model {result.predicted_class} "
-                        f"({confidence:.2f})"
-                    )
-                    mask_b64 = self._encode_mask(result.mask) if include_mask else None
-                    resp = PredictionResponse(
-                        class_name=gemini_result.food_class,
-                        confidence=gemini_result.confidence,
-                        estimated_weight_grams=round(gemini_result.portion_grams, 1),
-                        estimated_calories=round(gemini_result.calories, 1),
-                        calories_min=round(gemini_result.calories_min, 1),
-                        calories_max=round(gemini_result.calories_max, 1),
-                        mask_base64=mask_b64,
-                        source="gemini",
-                        macros=gemini_result.macros if gemini_result.macros else None,
-                        food_name_tr=gemini_result.food_class_tr if gemini_result.food_class_tr else None,
-                        food_name_local=gemini_result.food_class_local if gemini_result.food_class_local else None,
-                        description=gemini_result.description if gemini_result.description else None,
-                    )
-                    self._cache_set(img_hash, resp)
-                    return resp
             except Exception as e:
-                logger.warning(f"[Tier-3] Gemini failed, using model result: {e}")
+                logger.warning(f"Gemini estimation failed, falling back to model: {e}")
 
-        # Gemini disabled or failed → fall back to model
+        # Build response based on tier + Gemini availability
+        if gemini_result and gemini_result.is_food:
+            # Use model's classification for HIGH confidence, Gemini's for LOW
+            if confidence >= high_thresh:
+                # TIER 1: Trust model's class name, use Gemini's nutrition
+                use_class = result.predicted_class
+                use_confidence = confidence
+                source = "model+gemini"
+                logger.info(
+                    f"[Tier-1 HIGH] class from model: {use_class} ({confidence:.2f}), "
+                    f"nutrition from Gemini: {gemini_result.portion_grams:.0f}g / "
+                    f"{gemini_result.calories:.0f} kcal"
+                )
+            elif confidence >= low_thresh:
+                # TIER 2: Use model class but Gemini nutrition
+                use_class = result.predicted_class
+                use_confidence = confidence
+                source = "model+gemini"
+                logger.info(
+                    f"[Tier-2 MID] class from model: {use_class} ({confidence:.2f}), "
+                    f"nutrition from Gemini: {gemini_result.portion_grams:.0f}g / "
+                    f"{gemini_result.calories:.0f} kcal"
+                )
+            else:
+                # TIER 3: Trust Gemini fully (class + nutrition)
+                use_class = gemini_result.food_class
+                use_confidence = gemini_result.confidence
+                source = "gemini"
+                logger.info(
+                    f"[Tier-3 LOW] full Gemini override: {use_class} ({use_confidence:.2f}) "
+                    f"- {gemini_result.portion_grams:.0f}g / {gemini_result.calories:.0f} kcal"
+                )
+
+            resp = PredictionResponse(
+                class_name=use_class,
+                confidence=use_confidence,
+                estimated_weight_grams=round(gemini_result.portion_grams, 1),
+                estimated_calories=round(gemini_result.calories, 1),
+                calories_min=round(gemini_result.calories_min, 1),
+                calories_max=round(gemini_result.calories_max, 1),
+                mask_base64=mask_b64,
+                source=source,
+                macros=gemini_result.macros if gemini_result.macros else None,
+                food_name_tr=gemini_result.food_class_tr if gemini_result.food_class_tr else None,
+                food_name_local=gemini_result.food_class_local if gemini_result.food_class_local else None,
+                description=gemini_result.description if gemini_result.description else None,
+            )
+            self._cache_set(img_hash, resp)
+            return resp
+
+        # Gemini unavailable or failed → fall back to legacy model estimation
+        logger.warning(
+            f"[Fallback] Gemini unavailable, using geometry-based estimation for "
+            f"{result.predicted_class} ({confidence:.2f})"
+        )
         return self._build_legacy_response(result, include_mask, start_time, source="model")
 
     async def _background_gemini(

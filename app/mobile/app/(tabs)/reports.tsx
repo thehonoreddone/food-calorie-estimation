@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useUser } from '@/contexts/UserContext';
+import { useTheme, getColors } from '@/contexts/ThemeContext';
+import { useTranslation } from '@/i18n';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import {
   getMealsForDate,
@@ -35,13 +37,13 @@ interface DayData {
   meals: MealEntry[];
 }
 
-const WEEK_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+// WEEK_LABELS moved inside component for i18n
 
 function formatDateKey(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-function getWeekRange(weekOffset: number): { start: Date; end: Date; label: string } {
+function getWeekRange(weekOffset: number, t?: (key: any, params?: any) => string): { start: Date; end: Date; label: string } {
   const now = new Date();
   const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // Monday=0
   const monday = new Date(now);
@@ -50,8 +52,8 @@ function getWeekRange(weekOffset: number): { start: Date; end: Date; label: stri
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
-  if (weekOffset === 0) return { start: monday, end: sunday, label: 'Bu Hafta' };
-  if (weekOffset === -1) return { start: monday, end: sunday, label: 'Geçen Hafta' };
+  if (weekOffset === 0) return { start: monday, end: sunday, label: t ? t('reports.thisWeek') : 'Bu Hafta' };
+  if (weekOffset === -1) return { start: monday, end: sunday, label: t ? t('reports.lastWeek') : 'Geçen Hafta' };
   const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
   return {
     start: monday,
@@ -64,14 +66,23 @@ function getWeekRange(weekOffset: number): { start: Date; end: Date; label: stri
 
 export default function ReportsTab() {
   const { profile, calculateDailyCalories } = useUser();
+  const { isDark } = useTheme();
+  const C = getColors(isDark);
+  const { t } = useTranslation();
   const dailyTarget = calculateDailyCalories();
+
+  const WEEK_LABELS = [
+    t('reports.weekDays.mon'), t('reports.weekDays.tue'), t('reports.weekDays.wed'),
+    t('reports.weekDays.thu'), t('reports.weekDays.fri'), t('reports.weekDays.sat'),
+    t('reports.weekDays.sun'),
+  ];
 
   const [activeTab, setActiveTab] = useState<ReportTab>('calories');
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [weekData, setWeekData] = useState<DayData[]>([]);
 
-  const weekRange = useMemo(() => getWeekRange(weekOffset), [weekOffset]);
+  const weekRange = useMemo(() => getWeekRange(weekOffset, t), [weekOffset, t]);
 
   const loadData = useCallback(async () => {
     if (!profile.uid) { setLoading(false); return; }
@@ -171,48 +182,48 @@ export default function ReportsTab() {
   // ─── Tabs ────────────────────────────────────────────────────────────────
 
   const tabs: { key: ReportTab; label: string }[] = [
-    { key: 'calories', label: 'KALORİLER' },
-    { key: 'macros', label: 'MAKROLAR' },
-    { key: 'nutrients', label: 'BESİNLER' },
+    { key: 'calories', label: t('reports.calories') },
+    { key: 'macros', label: t('reports.macros') },
+    { key: 'nutrients', label: t('reports.nutrients') },
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]} edges={['top']}>
       {/* Top bar */}
       <View style={styles.topBar}>
-        <Text style={styles.topTitle}>Hedefler</Text>
-        <TouchableOpacity style={styles.settingsBtn}>
+        <Text style={[styles.topTitle, { color: C.text }]}>{t('reports.title')}</Text>
+        <TouchableOpacity style={[styles.settingsBtn, { backgroundColor: C.surfaceElevated }]}>
           <Text style={{ fontSize: 22 }}>🎯</Text>
         </TouchableOpacity>
       </View>
 
       {/* Week selector */}
-      <View style={styles.weekSelector}>
+      <View style={[styles.weekSelector, { backgroundColor: C.surfaceElevated }]}>
         <TouchableOpacity onPress={() => setWeekOffset(w => w - 1)} style={styles.weekArrow}>
-          <Text style={styles.weekArrowText}>◀</Text>
+          <Text style={[styles.weekArrowText, { color: C.textSecondary }]}>◀</Text>
         </TouchableOpacity>
         <View style={styles.weekLabelContainer}>
-          <Text style={styles.weekLabel}>{weekRange.label}</Text>
+          <Text style={[styles.weekLabel, { color: C.text }]}>{weekRange.label}</Text>
         </View>
         <TouchableOpacity
           onPress={() => { if (weekOffset < 0) setWeekOffset(w => w + 1); }}
           style={[styles.weekArrow, weekOffset >= 0 && { opacity: 0.3 }]}
           disabled={weekOffset >= 0}
         >
-          <Text style={styles.weekArrowText}>▶</Text>
+          <Text style={[styles.weekArrowText, { color: C.textSecondary }]}>▶</Text>
         </TouchableOpacity>
       </View>
 
       {/* Tab bar */}
       <View style={styles.tabRow}>
-        {tabs.map(t => (
+        {tabs.map(tab => (
           <TouchableOpacity
-            key={t.key}
-            onPress={() => setActiveTab(t.key)}
-            style={[styles.tabBtn, activeTab === t.key && styles.tabBtnActive]}
+            key={tab.key}
+            onPress={() => setActiveTab(tab.key)}
+            style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
           >
-            <Text style={[styles.tabBtnText, activeTab === t.key && styles.tabBtnTextActive]}>
-              {t.label}
+            <Text style={[styles.tabBtnText, { color: C.textMuted }, activeTab === tab.key && styles.tabBtnTextActive]}>
+              {tab.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -220,7 +231,7 @@ export default function ReportsTab() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary[500]} />
+          <ActivityIndicator size="large" color={C.accent} />
         </View>
       ) : (
         <ScrollView
@@ -235,6 +246,7 @@ export default function ReportsTab() {
               totals={totals}
               weeklyTarget={weeklyTarget}
               mealBreakdown={mealBreakdown}
+              colors={C}
             />
           )}
           {activeTab === 'macros' && (
@@ -242,12 +254,14 @@ export default function ReportsTab() {
               weekData={weekData}
               totals={totals}
               macroPcts={macroPcts}
+              colors={C}
             />
           )}
           {activeTab === 'nutrients' && (
             <NutrientsReport
               nutrientTargets={nutrientTargets}
               weeklyTarget={weeklyTarget}
+              colors={C}
             />
           )}
         </ScrollView>
@@ -259,7 +273,7 @@ export default function ReportsTab() {
 // ─── Calories Report ────────────────────────────────────────────────────────
 
 function CaloriesReport({
-  weekData, dailyTarget, maxCal, totals, weeklyTarget, mealBreakdown,
+  weekData, dailyTarget, maxCal, totals, weeklyTarget, mealBreakdown, colors,
 }: {
   weekData: DayData[];
   dailyTarget: number;
@@ -267,24 +281,26 @@ function CaloriesReport({
   totals: { calories: number; burned: number };
   weeklyTarget: number;
   mealBreakdown: Record<string, { cal: number; pct: number }>;
+  colors: ReturnType<typeof getColors>;
 }) {
+  const { t } = useTranslation();
   const avg = weekData.length ? Math.round(totals.calories / weekData.length) : 0;
 
   return (
     <View style={styles.reportContainer}>
       {/* Summary card */}
-      <View style={[styles.card, Shadows.sm]}>
-        <Text style={styles.cardTitle}>Kaloriler</Text>
-        <Text style={styles.bigNumber}>{totals.calories.toLocaleString('tr-TR')}</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>{t('reports.calories')}</Text>
+        <Text style={[styles.bigNumber, { color: colors.text }]}>{totals.calories.toLocaleString('tr-TR')}</Text>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Günlük Ortalama: {avg}</Text>
-          <Text style={styles.summaryLabel}>Hedef: {dailyTarget}kcal</Text>
+          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>{t('reports.dailyAvg')}: {avg}</Text>
+          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>{t('reports.target')}: {dailyTarget}kcal</Text>
         </View>
 
         {/* Goal dashed line */}
         <View style={styles.goalLineRow}>
-          <View style={styles.goalDash} />
-          <Text style={styles.goalLineText}>{dailyTarget}</Text>
+          <View style={[styles.goalDash, { borderColor: colors.textDim }]} />
+          <Text style={[styles.goalLineText, { color: colors.textMuted }]}>{dailyTarget}</Text>
         </View>
 
         {/* Bar chart */}
@@ -300,7 +316,7 @@ function CaloriesReport({
                     style={[styles.barFill, { height: Math.max(h, 2) }]}
                   />
                 </View>
-                <Text style={styles.barLabel}>{d.label} {d.dayNum}</Text>
+                <Text style={[styles.barLabel, { color: colors.textMuted }]}>{d.label} {d.dayNum}</Text>
               </View>
             );
           })}
@@ -308,29 +324,30 @@ function CaloriesReport({
       </View>
 
       {/* Meal breakdown */}
-      <View style={[styles.card, Shadows.sm]}>
-        <View style={styles.mealHeaderRow}>
-          <Text style={styles.mealHeaderText} />
-          <Text style={styles.mealHeaderText} />
-          <Text style={styles.mealHeaderCol}>Kal{'\n'}(kcal)</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <View style={[styles.mealHeaderRow, { borderBottomColor: colors.surfaceBorder }]}>
+          <Text style={[styles.mealHeaderText, { color: colors.textDim }]} />
+          <Text style={[styles.mealHeaderText, { color: colors.textDim }]} />
+          <Text style={[styles.mealHeaderCol, { color: colors.textMuted }]}>Kal{'\n'}(kcal)</Text>
         </View>
 
-        <MealRow icon="🟧" label="Kahvaltı" pct={mealBreakdown.breakfast.pct} cal={mealBreakdown.breakfast.cal} color="#f59e0b" />
-        <MealRow icon="🟦" label="Öğle Yemeği" pct={mealBreakdown.lunch.pct} cal={mealBreakdown.lunch.cal} color="#3b82f6" />
-        <MealRow icon="🟧" label="Akşam Yemeği" pct={mealBreakdown.dinner.pct} cal={mealBreakdown.dinner.cal} color="#f97316" />
-        <MealRow icon="🟪" label="Aperatifler/Diğer" pct={mealBreakdown.snack.pct} cal={mealBreakdown.snack.cal} color="#8b5cf6" />
+        <MealRow icon="🟧" label="Kahvaltı" pct={mealBreakdown.breakfast.pct} cal={mealBreakdown.breakfast.cal} color="#f59e0b" colors={colors} />
+        <MealRow icon="🟦" label="Öğle Yemeği" pct={mealBreakdown.lunch.pct} cal={mealBreakdown.lunch.cal} color="#3b82f6" colors={colors} />
+        <MealRow icon="🟧" label="Akşam Yemeği" pct={mealBreakdown.dinner.pct} cal={mealBreakdown.dinner.cal} color="#f97316" colors={colors} />
+        <MealRow icon="🟪" label="Aperatifler/Diğer" pct={mealBreakdown.snack.pct} cal={mealBreakdown.snack.cal} color="#8b5cf6" colors={colors} />
+      </View>
       </View>
     </View>
   );
 }
 
-function MealRow({ icon, label, pct, cal, color }: { icon: string; label: string; pct: number; cal: number; color: string }) {
+function MealRow({ icon, label, pct, cal, color, colors }: { icon: string; label: string; pct: number; cal: number; color: string; colors: ReturnType<typeof getColors> }) {
   return (
-    <View style={styles.mealRow}>
+    <View style={[styles.mealRow, { borderBottomColor: colors.surfaceBorder }]}>
       <View style={[styles.mealDot, { backgroundColor: color }]} />
-      <Text style={styles.mealLabel}>{label}</Text>
-      <Text style={styles.mealPct}>({pct}%)</Text>
-      <Text style={styles.mealCal}>{cal > 0 ? cal.toLocaleString('tr-TR') : '-'}</Text>
+      <Text style={[styles.mealLabel, { color: colors.accent }]}>{label}</Text>
+      <Text style={[styles.mealPct, { color: colors.textMuted }]}>({pct}%)</Text>
+      <Text style={[styles.mealCal, { color: colors.textSecondary }]}>{cal > 0 ? cal.toLocaleString('tr-TR') : '-'}</Text>
     </View>
   );
 }
@@ -338,12 +355,14 @@ function MealRow({ icon, label, pct, cal, color }: { icon: string; label: string
 // ─── Macros Report ──────────────────────────────────────────────────────────
 
 function MacrosReport({
-  weekData, totals, macroPcts,
+  weekData, totals, macroPcts, colors,
 }: {
   weekData: DayData[];
   totals: { protein: number; carbs: number; fat: number };
   macroPcts: { protein: number; carbs: number; fat: number };
+  colors: ReturnType<typeof getColors>;
 }) {
+  const { t } = useTranslation();
   const maxMacro = Math.max(
     ...weekData.map(d => d.protein + d.carbs + d.fat),
     1
@@ -354,8 +373,8 @@ function MacrosReport({
   return (
     <View style={styles.reportContainer}>
       {/* Stacked bar chart */}
-      <View style={[styles.card, Shadows.sm]}>
-        <Text style={styles.cardTitle}>Makrobesinler</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>{t('reports.macros')}</Text>
 
         <View style={styles.barChartRow}>
           {weekData.map((d, i) => {
@@ -370,7 +389,7 @@ function MacrosReport({
                   <View style={[styles.stackSegment, { height: Math.max(hC, 0), backgroundColor: '#3b82f6' }]} />
                   <View style={[styles.stackSegment, { height: Math.max(hP, 0), backgroundColor: '#ef4444' }]} />
                 </View>
-                <Text style={styles.barLabel}>{d.label} {d.dayNum}</Text>
+                <Text style={[styles.barLabel, { color: colors.textMuted }]}>{d.label} {d.dayNum}</Text>
               </View>
             );
           })}
@@ -378,47 +397,47 @@ function MacrosReport({
       </View>
 
       {/* Percentages table */}
-      <View style={[styles.card, Shadows.sm]}>
-        <View style={styles.macroTableHeader}>
-          <Text style={styles.macroTableHeaderCell} />
-          <Text style={styles.macroTableHeaderCell}>Toplam</Text>
-          <Text style={styles.macroTableHeaderCell}>Hedef</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <View style={[styles.macroTableHeader, { borderBottomColor: colors.surfaceBorder }]}>
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]} />
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]}>{t('reports.consumed')}</Text>
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]}>{t('reports.target')}</Text>
         </View>
 
-        <MacroTableRow color="#3b82f6" label="Karbonhidrat" actual={macroPcts.carbs} target={idealPcts.carbs} grams={totals.carbs} />
-        <MacroTableRow color="#f59e0b" label="Yağ" actual={macroPcts.fat} target={idealPcts.fat} grams={totals.fat} />
-        <MacroTableRow color="#ef4444" label="Protein" actual={macroPcts.protein} target={idealPcts.protein} grams={totals.protein} />
+        <MacroTableRow color="#3b82f6" label={t('reports.carbs')} actual={macroPcts.carbs} target={idealPcts.carbs} grams={totals.carbs} colors={colors} />
+        <MacroTableRow color="#f59e0b" label={t('reports.fat')} actual={macroPcts.fat} target={idealPcts.fat} grams={totals.fat} colors={colors} />
+        <MacroTableRow color="#ef4444" label={t('reports.protein')} actual={macroPcts.protein} target={idealPcts.protein} grams={totals.protein} colors={colors} />
       </View>
 
       {/* Eaten foods summary */}
-      <View style={[styles.card, Shadows.sm]}>
-        <Text style={styles.cardTitle}>Yenen Gıdalar</Text>
-        <View style={styles.macroTableHeader}>
-          <Text style={[styles.macroTableHeaderCell, { flex: 2 }]}>Yemekler</Text>
-          <Text style={styles.macroTableHeaderCell}>Karb{'\n'}(g)</Text>
-          <Text style={styles.macroTableHeaderCell}>Yağ{'\n'}(g)</Text>
-          <Text style={styles.macroTableHeaderCell}>Prot{'\n'}(g)</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>Yenen Gıdalar</Text>
+        <View style={[styles.macroTableHeader, { borderBottomColor: colors.surfaceBorder }]}>
+          <Text style={[styles.macroTableHeaderCell, { flex: 2, color: colors.textMuted }]}>Yemekler</Text>
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]}>Karb{'\n'}(g)</Text>
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]}>Yağ{'\n'}(g)</Text>
+          <Text style={[styles.macroTableHeaderCell, { color: colors.textMuted }]}>Prot{'\n'}(g)</Text>
         </View>
-        <View style={styles.macroTableRow}>
-          <Text style={[styles.macroTableCell, { flex: 2, fontWeight: '700' }]}>Toplam</Text>
-          <Text style={styles.macroTableCell}>{totals.carbs > 0 ? totals.carbs : '-'}</Text>
-          <Text style={styles.macroTableCell}>{totals.fat > 0 ? totals.fat : '-'}</Text>
-          <Text style={styles.macroTableCell}>{totals.protein > 0 ? totals.protein : '-'}</Text>
+        <View style={[styles.macroTableRow, { borderBottomColor: colors.surfaceBorder }]}>
+          <Text style={[styles.macroTableCell, { flex: 2, fontWeight: '700', color: colors.text }]}>Toplam</Text>
+          <Text style={[styles.macroTableCell, { color: colors.textSecondary }]}>{totals.carbs > 0 ? totals.carbs : '-'}</Text>
+          <Text style={[styles.macroTableCell, { color: colors.textSecondary }]}>{totals.fat > 0 ? totals.fat : '-'}</Text>
+          <Text style={[styles.macroTableCell, { color: colors.textSecondary }]}>{totals.protein > 0 ? totals.protein : '-'}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-function MacroTableRow({ color, label, actual, target, grams }: { color: string; label: string; actual: number; target: number; grams: number }) {
+function MacroTableRow({ color, label, actual, target, grams, colors }: { color: string; label: string; actual: number; target: number; grams: number; colors: ReturnType<typeof getColors> }) {
   return (
-    <View style={styles.macroTableRow}>
+    <View style={[styles.macroTableRow, { borderBottomColor: colors.surfaceBorder }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         <View style={[styles.macroColorDot, { backgroundColor: color }]} />
-        <Text style={styles.macroRowLabel}>{label}</Text>
+        <Text style={[styles.macroRowLabel, { color: colors.accent }]}>{label}</Text>
       </View>
-      <Text style={styles.macroTableCell}>{actual}%</Text>
-      <Text style={styles.macroTableCell}>{target}%</Text>
+      <Text style={[styles.macroTableCell, { color: colors.textSecondary }]}>{actual}%</Text>
+      <Text style={[styles.macroTableCell, { color: colors.textSecondary }]}>{target}%</Text>
     </View>
   );
 }
@@ -426,50 +445,52 @@ function MacroTableRow({ color, label, actual, target, grams }: { color: string;
 // ─── Nutrients Report ───────────────────────────────────────────────────────
 
 function NutrientsReport({
-  nutrientTargets, weeklyTarget,
+  nutrientTargets, weeklyTarget, colors,
 }: {
   nutrientTargets: Record<string, { total: number; target: number }>;
   weeklyTarget: number;
+  colors: ReturnType<typeof getColors>;
 }) {
+  const { t } = useTranslation();
   const nutrients = [
-    { key: 'calories', label: 'Kaloriler (kcal)', color: '#22c55e' },
-    { key: 'protein', label: 'Protein (g)', color: '#ef4444' },
-    { key: 'carbs', label: 'Karbonhidrat (g)', color: '#3b82f6' },
-    { key: 'fat', label: 'Yağ (g)', color: '#f59e0b' },
-    { key: 'fiber', label: 'Lif (g)', color: '#a855f7' },
+    { key: 'calories', label: `${t('reports.calories')} (kcal)`, color: '#22c55e' },
+    { key: 'protein', label: `${t('reports.protein')} (g)`, color: '#ef4444' },
+    { key: 'carbs', label: `${t('reports.carbs')} (g)`, color: '#3b82f6' },
+    { key: 'fat', label: `${t('reports.fat')} (g)`, color: '#f59e0b' },
+    { key: 'fiber', label: `${t('reports.fiber')} (g)`, color: '#a855f7' },
   ];
 
   const extraNutrients = [
-    { label: 'Şeker (g)', total: '-', target: '-' },
-    { label: 'Doymuş Yağ (g)', total: '-', target: '-' },
+    { label: `${t('reports.sugar')} (g)`, total: '-', target: '-' },
+    { label: `${t('reports.satFat')} (g)`, total: '-', target: '-' },
     { label: 'Çoklu Doymamış Yağ (g)', total: '-', target: '-' },
     { label: 'Tekli Doymamış Yağ (g)', total: '-', target: '-' },
   ];
 
   return (
     <View style={styles.reportContainer}>
-      <View style={[styles.card, Shadows.sm]}>
-        <Text style={styles.cardTitle}>Besinler</Text>
-        <View style={styles.nutrientHeader}>
-          <Text style={[styles.nutrientHeaderCell, { flex: 2 }]}>Besin</Text>
-          <Text style={styles.nutrientHeaderCell}>Topl...</Text>
-          <Text style={styles.nutrientHeaderCell}>Hedef</Text>
-          <Text style={styles.nutrientHeaderCell}>[+/-]</Text>
+      <View style={[styles.card, Shadows.sm, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>{t('reports.nutrients')}</Text>
+        <View style={[styles.nutrientHeader, { borderBottomColor: colors.surfaceBorder }]}>
+          <Text style={[styles.nutrientHeaderCell, { flex: 2, color: colors.textMuted }]}>Besin</Text>
+          <Text style={[styles.nutrientHeaderCell, { color: colors.textMuted }]}>Topl...</Text>
+          <Text style={[styles.nutrientHeaderCell, { color: colors.textMuted }]}>Hedef</Text>
+          <Text style={[styles.nutrientHeaderCell, { color: colors.textMuted }]}>[+/-]</Text>
         </View>
 
         {nutrients.map(n => {
           const data = nutrientTargets[n.key];
           const diff = data ? data.total - data.target : 0;
           return (
-            <View key={n.key} style={styles.nutrientRow}>
+            <View key={n.key} style={[styles.nutrientRow, { borderBottomColor: colors.surfaceBorder }]}>
               <Text style={[styles.nutrientLabel, { color: n.color, flex: 2 }]}>{n.label}</Text>
-              <Text style={styles.nutrientCell}>
+              <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>
                 {data && data.total > 0 ? data.total.toLocaleString('tr-TR') : '-'}
               </Text>
-              <Text style={styles.nutrientCell}>
+              <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>
                 {data ? data.target.toLocaleString('tr-TR') : '-'}
               </Text>
-              <Text style={styles.nutrientCell}>
+              <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>
                 {data && data.total > 0 ? (diff >= 0 ? `+${diff}` : `${diff}`) : '-'}
               </Text>
             </View>
@@ -477,11 +498,11 @@ function NutrientsReport({
         })}
 
         {extraNutrients.map((n, i) => (
-          <View key={i} style={styles.nutrientRow}>
+          <View key={i} style={[styles.nutrientRow, { borderBottomColor: colors.surfaceBorder }]}>
             <Text style={[styles.nutrientLabel, { color: Colors.primary[600], flex: 2 }]}>{n.label}</Text>
-            <Text style={styles.nutrientCell}>{n.total}</Text>
-            <Text style={styles.nutrientCell}>{n.target}</Text>
-            <Text style={styles.nutrientCell}>-</Text>
+            <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>{n.total}</Text>
+            <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>{n.target}</Text>
+            <Text style={[styles.nutrientCell, { color: colors.textSecondary }]}>-</Text>
           </View>
         ))}
       </View>

@@ -44,28 +44,6 @@ def validate_file(file: UploadFile) -> None:
             raise InvalidFileTypeException(settings.ALLOWED_EXTENSIONS)
 
 
-async def load_image(file: UploadFile) -> Image.Image:
-    """Load and validate image from uploaded file"""
-    try:
-        contents = await file.read()
-        
-        # Check file size
-        if len(contents) > settings.MAX_UPLOAD_SIZE:
-            raise FileTooLargeException(settings.MAX_UPLOAD_SIZE // (1024 * 1024))
-        
-        # Open image
-        image = Image.open(BytesIO(contents))
-        
-        # Convert to RGB if necessary
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-        
-        return image
-        
-    except Exception as e:
-        logger.error(f"Failed to load image: {e}")
-        raise ImageProcessingException(str(e))
-
 
 @router.post("/predict/", response_model=PredictionResponse)
 @limiter.limit(settings.RATE_LIMIT_PREDICT)

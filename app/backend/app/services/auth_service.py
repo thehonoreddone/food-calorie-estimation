@@ -3,7 +3,7 @@ Firebase Authentication Service
 Handles user registration, login, and token verification
 """
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import auth, firestore
 from loguru import logger
@@ -66,7 +66,7 @@ class AuthService:
                     "uid": user.uid,
                     "email": user.email,
                     "display_name": user.display_name,
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                     "total_predictions": 0,
                     "total_calories_tracked": 0
                 }
@@ -168,11 +168,26 @@ class AuthService:
     
     async def login_user(self, login_data: UserLogin) -> Optional[Dict[str, Any]]:
         """
-        Login user - Get user by email and create custom token
+        Login user - Generate a custom token for backend API access.
         
-        Note: Firebase Admin SDK doesn't support password verification directly.
-        This method returns user info for email that exists and creates a custom token.
-        For full password auth, use Firebase Client SDK on frontend.
+        ⚠️  SECURITY NOTE — NO SERVER-SIDE PASSWORD VERIFICATION
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        Firebase Admin SDK does not support password verification.
+        This endpoint is designed to work WITH client-side Firebase Auth:
+        
+          1. The mobile client authenticates first via Firebase Client SDK
+             (signInWithEmailAndPassword) which verifies credentials.
+          2. After successful client-side auth, the client calls this endpoint
+             to obtain a custom token for backend API access.
+          3. This endpoint only checks that the email exists in Firebase and
+             returns a custom token — it does NOT verify the password.
+        
+        WARNING: Do NOT expose this endpoint to untrusted callers without
+        requiring a valid Firebase ID token first. Anyone who knows a
+        registered email can currently obtain a custom token.
+        
+        TODO: Consider requiring a valid Firebase ID token (from step 1)
+        as a prerequisite before issuing the custom token here.
         """
         try:
             # Get user by email

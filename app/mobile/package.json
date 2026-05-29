@@ -4,7 +4,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --clear",
-    "wifi": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=10.183.158.17 expo start --lan --clear",
+    "wifi": "expo start --lan --clear",
     "usb": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --localhost --clear",
     "tunnel": "expo start --tunnel --clear",
     "lan": "expo start --lan --clear",

@@ -236,9 +236,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProfile));
 
+      // If a DIFFERENT user logged in, reset onboarding flag so they go through setup
+      const onboardingRaw = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETE);
+      const prevUid = localProfile.uid;
+      let onboardingDone = onboardingRaw === 'true';
+      if (prevUid && prevUid !== user.uid) {
+        // Different user — clear onboarding so the new account sees onboarding
+        await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETE, 'false');
+        onboardingDone = false;
+      }
+
       setState(prev => ({
         ...prev,
         isAuthenticated: true,
+        hasCompletedOnboarding: onboardingDone,
         profile: mergedProfile,
       }));
       return { success: true };

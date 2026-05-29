@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Colors, FontSize, FontWeight, BorderRadius } from '@/constants/theme';
+import { useTranslation } from '@/i18n';
 
 // ─── Premium Neon Tab Icon ───────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ function ScanTabIcon({ focused }: { focused: boolean }) {
 // ─── Tab Layout ──────────────────────────────────────────────────────────────
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   return (
     <Tabs
       screenOptions={{
@@ -59,7 +61,7 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🏠" label="Ana Sayfa" focused={focused} />
+            <TabIcon icon="🏠" label={t('tabs.home')} focused={focused} />
           ),
         }}
       />
@@ -67,7 +69,7 @@ export default function TabLayout() {
         name="history"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="📋" label="Geçmiş" focused={focused} />
+            <TabIcon icon="📋" label={t('tabs.history')} focused={focused} />
           ),
         }}
       />
@@ -82,7 +84,7 @@ export default function TabLayout() {
         name="reports"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="📊" label="Raporlar" focused={focused} />
+            <TabIcon icon="📊" label={t('tabs.reports')} focused={focused} />
           ),
         }}
       />
@@ -90,7 +92,7 @@ export default function TabLayout() {
         name="community"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="👥" label="Topluluk" focused={focused} />
+            <TabIcon icon="👥" label={t('tabs.community')} focused={focused} />
           ),
         }}
       />
@@ -98,7 +100,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="👤" label="Profil" focused={focused} />
+            <TabIcon icon="👤" label={t('tabs.profile')} focused={focused} />
           ),
         }}
       />

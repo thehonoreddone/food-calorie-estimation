@@ -165,10 +165,6 @@ export default function SettingsScreen() {
     }
   };
 
-  // ─── Styles (dynamic) ──────────────────────────────────────────────────
-
-  const ds = dynamicStyles(C);
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]} edges={['top']}>
       <StatusBar style={C.statusBar} />
@@ -471,11 +467,7 @@ export default function SettingsScreen() {
   );
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
-function dynamicStyles(C: ReturnType<typeof getColors>) {
-  return {};
-}
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 

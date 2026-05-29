@@ -1,7 +1,6 @@
 import { apiClient } from "./apiClient";
 import { PredictionResponse, ImagePickerResult } from "../types";
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 
 /**
@@ -11,14 +10,7 @@ import * as ImageManipulator from "expo-image-manipulator";
  */
 async function compressImage(uri: string): Promise<string> {
   try {
-    // Get file info to check size
-    const info = await FileSystem.getInfoAsync(uri);
-    if (!info.exists) return uri;
-
-    // If file is already small (<300KB), skip compression
-    if (info.size && info.size < 300 * 1024) return uri;
-
-    // Resize to max 1024px width and compress
+    // Always resize and compress — avoids deprecated FileSystem API
     const result = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 1024 } }],

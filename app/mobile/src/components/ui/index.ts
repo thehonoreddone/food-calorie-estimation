@@ -28,3 +28,7 @@ export { DailyGoalCelebration } from './DailyGoalCelebration';
 
 // Gamification
 export { StreakBadge } from './StreakBadge';
+
+// Premium Modal (replaces native Alert.alert)
+export { PremiumModal, usePremiumModal } from './PremiumModal';
+export type { PremiumModalProps, ModalType, ModalButton, ModalState } from './PremiumModal';

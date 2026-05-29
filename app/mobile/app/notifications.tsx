@@ -335,9 +335,11 @@ const styles = StyleSheet.create({
   scheduleItem: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: Colors.primary[50],
+    backgroundColor: Colors.surfaceHigh,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
   },
   scheduleIcon: {
     fontSize: 24,
@@ -351,17 +353,17 @@ const styles = StyleSheet.create({
   scheduleTime: {
     fontSize: FontSize.base,
     fontWeight: '700',
-    color: Colors.primary[700],
+    color: Colors.neon.lime,
     marginTop: 2,
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: Colors.surfaceHigh,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     gap: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: Colors.glassBorder,
   },
   infoIcon: {
     fontSize: 16,
@@ -369,7 +371,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: FontSize.xs,
-    color: '#1E40AF',
+    color: Colors.text.secondary,
     lineHeight: 18,
   },
 });

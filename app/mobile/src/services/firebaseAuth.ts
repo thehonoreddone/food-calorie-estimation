@@ -20,6 +20,14 @@ import {
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
+// ─── Auth Language & Action Settings ────────────────────────────────────────
+// Set Firebase auth emails to Turkish
+auth.languageCode = 'tr';
+
+// NOTE: ACTION_CODE_SETTINGS removed — using Firebase defaults.
+// Custom continueUrl requires the domain to be in Firebase Console → Authorized Domains.
+// Without proper domain setup, sendEmailVerification / sendPasswordResetEmail silently fail.
+
 export interface FirebaseUserProfile {
   uid: string;
   name: string;
@@ -100,9 +108,11 @@ export async function firebaseRegister(
   // Set display name
   await updateProfile(user, { displayName: name });
 
-  // Send verification email
+  // Send verification email with custom action settings
+  // Send verification email (using Firebase defaults — no custom continueUrl)
   try {
     await sendEmailVerification(user);
+    console.log('Verification email sent to:', user.email);
   } catch (verifyErr) {
     console.warn('Email verification could not be sent:', verifyErr);
   }
@@ -137,7 +147,7 @@ export async function firebaseLogin(
 
   // Enforce email verification — if not verified, sign out and throw
   if (!user.emailVerified) {
-    // Optionally resend verification email
+    // Resend verification email
     try {
       await sendEmailVerification(user);
     } catch {

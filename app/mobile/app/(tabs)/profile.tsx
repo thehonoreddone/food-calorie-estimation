@@ -12,11 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser } from '@/contexts/UserContext';
+import { useTheme, getColors } from '@/contexts/ThemeContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 import { useTranslation } from '@/i18n';
 
 export default function ProfileTab() {
   const { profile, logout, calculateDailyCalories, updateProfile } = useUser();
+  const { isDark } = useTheme();
+  const C = getColors(isDark);
   const { t } = useTranslation();
   const dailyCalories = calculateDailyCalories();
   const userName = profile.name || t('profile.addName');
@@ -41,7 +44,7 @@ export default function ProfileTab() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Top bar */}
         <View style={styles.topBar}>
@@ -49,17 +52,17 @@ export default function ProfileTab() {
             {profile.avatarUri ? (
               <Image source={{ uri: profile.avatarUri }} style={styles.topAvatar} />
             ) : (
-              <View style={styles.topAvatarPlaceholder}>
+              <View style={[styles.topAvatarPlaceholder, { backgroundColor: C.surfaceElevated }]}>
                 <Text style={{ fontSize: 24 }}>🎃</Text>
               </View>
             )}
-            <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
+            <TouchableOpacity onPress={() => router.push('/notifications')} style={[styles.bellBtn, { backgroundColor: C.surfaceElevated }]}>
               <Text style={{ fontSize: 18 }}>🔔</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.topBarRight}>
-            <Text style={styles.topBarTitle}>{t('profile.settings')}</Text>
-            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsGearBtn}>
+            <Text style={[styles.topBarTitle, { color: C.text }]}>{t('profile.settings')}</Text>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={[styles.settingsGearBtn, { backgroundColor: C.surfaceElevated }]}>
               <Text style={{ fontSize: 20 }}>⚙️</Text>
             </TouchableOpacity>
           </View>
@@ -68,60 +71,60 @@ export default function ProfileTab() {
         {/* Profile Identity */}
         <View style={styles.identitySection}>
           <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.editAvatarArea}>
-            <View style={styles.identityAvatar}>
+            <View style={[styles.identityAvatar, { backgroundColor: C.inputBg }]}>
               {profile.avatarUri ? (
                 <Image source={{ uri: profile.avatarUri }} style={styles.identityAvatarImg} />
               ) : (
                 <Text style={{ fontSize: 30 }}>👤</Text>
               )}
             </View>
-            <Text style={styles.editBtnText}>{t('common.edit')}</Text>
+            <Text style={[styles.editBtnText, { color: C.accent }]}>{t('common.edit')}</Text>
           </TouchableOpacity>
           <View style={styles.identityInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.editIcon}>✏️</Text>
-              <Text style={styles.nameText}>{userName}</Text>
+              <Text style={[styles.nameText, { color: C.text }]}>{userName}</Text>
             </View>
-            {userEmail ? <Text style={styles.emailText}>{userEmail}</Text> : null}
-            <Text style={styles.accountType}>{t('profile.accountTypeFree')}</Text>
+            {userEmail ? <Text style={[styles.emailText, { color: C.textSecondary }]}>{userEmail}</Text> : null}
+            <Text style={[styles.accountType, { color: C.textDim }]}>{t('profile.accountTypeFree')}</Text>
           </View>
         </View>
 
         {/* Quick Action Buttons */}
         <View style={styles.quickActions}>
           <View style={styles.quickRow}>
-            <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/edit-profile')}>
+            <TouchableOpacity style={[styles.quickBtn, { backgroundColor: C.surfaceElevated }]} onPress={() => router.push('/edit-profile')}>
               <Text style={styles.quickIcon}>🍴</Text>
-              <Text style={styles.quickValue}>{dailyCalories} kal</Text>
+              <Text style={[styles.quickValue, { color: C.textSecondary }]}>{dailyCalories} kal</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickBtn}>
+            <TouchableOpacity style={[styles.quickBtn, { backgroundColor: C.surfaceElevated }]}>
               <Text style={styles.quickIcon}>🏃</Text>
-              <Text style={styles.quickValue}>0 kal</Text>
+              <Text style={[styles.quickValue, { color: C.textSecondary }]}>0 kal</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.quickRow}>
-            <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/weight-tracking')}>
+            <TouchableOpacity style={[styles.quickBtn, { backgroundColor: C.surfaceElevated }]} onPress={() => router.push('/weight-tracking')}>
               <Text style={styles.quickIcon}>⚖️</Text>
-              <Text style={styles.quickValue}>{displayWeight} kg</Text>
+              <Text style={[styles.quickValue, { color: C.textSecondary }]}>{displayWeight} kg</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.navigate('/(tabs)/scan')} style={styles.quickBtn}>
+            <TouchableOpacity onPress={() => router.navigate('/(tabs)/scan')} style={[styles.quickBtn, { backgroundColor: C.surfaceElevated }]}>
               <Text style={styles.quickIcon}>📷</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.quickBtn}>
+            <TouchableOpacity onPress={() => router.push('/edit-profile')} style={[styles.quickBtn, { backgroundColor: C.surfaceElevated }]}>
               <Text style={styles.quickIcon}>✏️</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Menu Section 1 */}
-        <View style={styles.menuGroup}>
-          <MenuItem icon="📊" label={t('profile.myGoals')} subtitle={`${profile.weight ?? '-'} kg → ${profile.targetWeight ?? '-'} kg`} onPress={() => router.push('/weight-tracking')} />
-          <View style={styles.menuDivider} />
-          <MenuItem icon="⭐" label={t('profile.achievements')} onPress={() => router.push('/achievements')} />
+        <View style={[styles.menuGroup, { backgroundColor: C.surface, borderColor: C.surfaceBorder }]}>
+          <MenuItem icon="📊" label={t('profile.myGoals')} subtitle={`${profile.weight ?? '-'} kg → ${profile.targetWeight ?? '-'} kg`} onPress={() => router.push('/weight-tracking')} colors={C} />
+          <View style={[styles.menuDivider, { backgroundColor: C.surfaceBorder }]} />
+          <MenuItem icon="⭐" label={t('profile.achievements')} onPress={() => router.push('/achievements')} colors={C} />
         </View>
 
         {/* Menu Section 2: Activity & Diet */}
-        <View style={styles.menuGroup}>
+        <View style={[styles.menuGroup, { backgroundColor: C.surface, borderColor: C.surfaceBorder }]}>
           <MenuItem
             icon="🏋️"
             label={t('profile.activityLevel')}
@@ -132,40 +135,42 @@ export default function ProfileTab() {
               : t('profile.moderate')
             }
             onPress={() => setShowActivityModal(true)}
+            colors={C}
           />
-          <View style={styles.menuDivider} />
+          <View style={[styles.menuDivider, { backgroundColor: C.surfaceBorder }]} />
           <MenuItem
             icon="🥗"
             label={t('profile.dietSuggestion')}
             onPress={() => router.push('/diet-recommendation')}
+            colors={C}
           />
         </View>
 
         {/* Menu Section 3 */}
-        <View style={styles.menuGroup}>
-          <MenuItem icon="⏰" label={t('profile.reminders')} onPress={() => router.push('/notifications')} />
-          <View style={styles.menuDivider} />
-          <MenuItem icon="🖼️" label={t('profile.photoAlbum')} onPress={() => router.navigate('/(tabs)/history')} />
+        <View style={[styles.menuGroup, { backgroundColor: C.surface, borderColor: C.surfaceBorder }]}>
+          <MenuItem icon="⏰" label={t('profile.reminders')} onPress={() => router.push('/notifications')} colors={C} />
+          <View style={[styles.menuDivider, { backgroundColor: C.surfaceBorder }]} />
+          <MenuItem icon="🖼️" label={t('profile.photoAlbum')} onPress={() => router.navigate('/(tabs)/history')} colors={C} />
         </View>
 
         {/* Menu Section 4 */}
-        <View style={styles.menuGroup}>
-          <MenuItem icon="🔒" label={t('profile.contactAndPrivacy')} onPress={() => router.push('/contact-privacy')} />
-          <View style={styles.menuDivider} />
-          <MenuItem icon="💬" label={t('profile.contactUs')} onPress={() => router.push('/help')} />
+        <View style={[styles.menuGroup, { backgroundColor: C.surface, borderColor: C.surfaceBorder }]}>
+          <MenuItem icon="🔒" label={t('profile.contactAndPrivacy')} onPress={() => router.push('/contact-privacy')} colors={C} />
+          <View style={[styles.menuDivider, { backgroundColor: C.surfaceBorder }]} />
+          <MenuItem icon="💬" label={t('profile.contactUs')} onPress={() => router.push('/help')} colors={C} />
         </View>
 
         {/* Logout */}
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+        <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { backgroundColor: C.errorBg, borderColor: C.errorBorder }]}>
           <Text style={styles.logoutIcon}>🚪</Text>
-          <Text style={styles.logoutText}>{t('profile.signOut')}</Text>
+          <Text style={[styles.logoutText, { color: C.error }]}>{t('profile.signOut')}</Text>
         </TouchableOpacity>
 
         {/* Inline Activity Level Modal */}
         <Modal visible={showActivityModal} transparent animationType="fade">
           <View style={styles.activityOverlay}>
-            <View style={styles.activitySheet}>
-              <Text style={styles.activityTitle}>{t('profile.activityLevel')}</Text>
+            <View style={[styles.activitySheet, { backgroundColor: C.surface, borderColor: C.surfaceBorder }]}>
+              <Text style={[styles.activityTitle, { color: C.text }]}>{t('profile.activityLevel')}</Text>
               {([
                 { value: 'sedentary', label: t('profile.sedentary'), desc: t('profile.sedentaryDesc'), icon: '🪑' },
                 { value: 'light', label: t('profile.light'), desc: t('profile.lightDesc'), icon: '🚶' },
@@ -176,7 +181,8 @@ export default function ProfileTab() {
                   key={opt.value}
                   style={[
                     styles.activityOption,
-                    profile.activityLevel === opt.value && styles.activityOptionActive,
+                    { backgroundColor: C.surfaceElevated, borderColor: C.surfaceBorder },
+                    profile.activityLevel === opt.value && { backgroundColor: isDark ? '#0d2818' : '#dcfce7', borderColor: C.accent },
                   ]}
                   onPress={() => {
                     updateProfile({ activityLevel: opt.value });
@@ -187,15 +193,16 @@ export default function ProfileTab() {
                   <View style={{ flex: 1 }}>
                     <Text style={[
                       styles.activityOptionLabel,
-                      profile.activityLevel === opt.value && styles.activityOptionLabelActive,
+                      { color: C.text },
+                      profile.activityLevel === opt.value && { color: C.accent },
                     ]}>{opt.label}</Text>
-                    <Text style={styles.activityOptionDesc}>{opt.desc}</Text>
+                    <Text style={[styles.activityOptionDesc, { color: C.textMuted }]}>{opt.desc}</Text>
                   </View>
-                  {profile.activityLevel === opt.value && <Text style={styles.activityCheck}>✓</Text>}
+                  {profile.activityLevel === opt.value && <Text style={[styles.activityCheck, { color: C.accent }]}>✓</Text>}
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity style={styles.activityCloseBtn} onPress={() => setShowActivityModal(false)}>
-                <Text style={styles.activityCloseText}>{t('common.close')}</Text>
+              <TouchableOpacity style={[styles.activityCloseBtn, { backgroundColor: C.inputBg }]} onPress={() => setShowActivityModal(false)}>
+                <Text style={[styles.activityCloseText, { color: C.textSecondary }]}>{t('common.close')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -205,17 +212,17 @@ export default function ProfileTab() {
   );
 }
 
-function MenuItem({ icon, label, subtitle, onPress }: { icon: string; label: string; subtitle?: string; onPress: () => void }) {
+function MenuItem({ icon, label, subtitle, onPress, colors }: { icon: string; label: string; subtitle?: string; onPress: () => void; colors: ReturnType<typeof getColors> }) {
   return (
     <TouchableOpacity onPress={onPress} style={styles.menuItem}>
-      <View style={styles.menuIconBox}>
+      <View style={[styles.menuIconBox, { backgroundColor: colors.inputBg }]}>
         <Text style={styles.menuIcon}>{icon}</Text>
       </View>
       <View style={styles.menuLabelArea}>
-        <Text style={styles.menuLabel}>{label}</Text>
-        {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
+        <Text style={[styles.menuLabel, { color: colors.text }]}>{label}</Text>
+        {subtitle ? <Text style={[styles.menuSubtitle, { color: colors.textMuted }]}>{subtitle}</Text> : null}
       </View>
-      <Text style={styles.menuArrow}>›</Text>
+      <Text style={[styles.menuArrow, { color: colors.textDim }]}>›</Text>
     </TouchableOpacity>
   );
 }

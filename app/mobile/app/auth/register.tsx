@@ -7,13 +7,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { PrimaryButton } from '@/components/ui';
+import { PrimaryButton, PremiumModal, usePremiumModal } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '@/constants/theme';
 
@@ -26,17 +25,19 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const { modalProps, showError, showSuccess } = usePremiumModal();
+
   const handleRegister = async () => {
     if (!name || !email || !password) {
-      Alert.alert('Hata', 'Lütfen tüm alanları doldurun');
+      showError('Eksik Bilgi', 'Lütfen tüm alanları doldurun.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Hata', 'Şifreler eşleşmiyor');
+      showError('Şifre Hatası', 'Girdiğiniz şifreler birbiriyle eşleşmiyor. Lütfen kontrol edin.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Hata', 'Şifre en az 6 karakter olmalı');
+      showError('Şifre Çok Kısa', 'Şifreniz en az 6 karakter uzunluğunda olmalıdır.');
       return;
     }
 
@@ -44,21 +45,22 @@ export default function RegisterScreen() {
     try {
       const result = await register(name, email, password);
       if (result.success) {
-        Alert.alert(
+        showSuccess(
           'Kayıt Başarılı! 🎉',
-          'Hesabınız oluşturuldu. E-posta adresinize bir doğrulama bağlantısı gönderdik.\n\nLütfen e-postanızı kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın. Doğrulama sonrası giriş yapabilirsiniz.',
+          'Hesabınız oluşturuldu. E-posta adresinize bir doğrulama bağlantısı gönderdik.\n\nLütfen e-postanızı kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın.',
           [
             {
               text: 'Giriş Sayfasına Git',
+              style: 'primary',
               onPress: () => router.replace('/auth/login'),
             },
-          ],
+          ]
         );
       } else {
-        Alert.alert('Kayıt Başarısız', result.error ?? 'Tekrar deneyin.');
+        showError('Kayıt Başarısız', result.error ?? 'Tekrar deneyin.');
       }
     } catch {
-      Alert.alert('Hata', 'Bir sorun oluştu. Tekrar deneyin.');
+      showError('Bir Sorun Oluştu', 'Lütfen internet bağlantınızı kontrol edip tekrar deneyin.');
     } finally {
       setLoading(false);
     }
@@ -189,6 +191,9 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Premium Modal */}
+      <PremiumModal {...modalProps} />
     </SafeAreaView>
   );
 }

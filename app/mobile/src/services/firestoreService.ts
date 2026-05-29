@@ -211,6 +211,40 @@ export async function updateMeal(
   await updateDoc(doc(db, MEALS_COLLECTION, mealId), updates);
 }
 
+/**
+ * Get recent unique food names for a user (for search history dropdown)
+ * Returns up to `max` unique food names ordered by most recently used.
+ */
+export async function getRecentFoodNames(
+  uid: string,
+  max: number = 20
+): Promise<string[]> {
+  const q = query(
+    collection(db, MEALS_COLLECTION),
+    where('uid', '==', uid),
+    limit(100), // fetch enough to get unique names
+  );
+  const snapshot = await getDocs(q);
+  const meals = snapshot.docs.map(d => ({
+    foodName: (d.data().foodName as string) ?? '',
+    createdAt: (d.data().createdAt as Timestamp)?.toMillis?.() ?? 0,
+  }));
+  // Sort by most recent
+  meals.sort((a, b) => b.createdAt - a.createdAt);
+  // Unique food names preserving order
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const m of meals) {
+    const name = m.foodName.trim();
+    if (name && !seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
+      names.push(name);
+      if (names.length >= max) break;
+    }
+  }
+  return names;
+}
+
 // ─── Exercise Tracking ──────────────────────────────────────────────────────
 
 const EXERCISES_COLLECTION = 'daily_exercises';

@@ -16,6 +16,7 @@ import {
   Platform,
   Keyboard,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -674,6 +675,23 @@ function CreatePostModal({ visible, onClose, onSubmit }: CreatePostModalProps) {
 
   const handlePickImage = async () => {
     try {
+      // Check & request media library permission explicitly
+      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        if (!canAskAgain) {
+          Alert.alert(
+            'Galeri İzni Gerekli',
+            'Fotoğraf seçebilmek için galeri erişim izni gerekli. Lütfen uygulama ayarlarından izni açın.',
+            [
+              { text: 'İptal', style: 'cancel' },
+              { text: 'Ayarları Aç', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert('İzin Gerekli', 'Galeriden fotoğraf seçebilmek için erişim izni vermeniz gerekiyor.');
+        }
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -857,6 +875,9 @@ export function CommunityScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   // Load following UIDs once
   useEffect(() => {
@@ -961,11 +982,20 @@ export function CommunityScreen() {
     />
   );
 
-  const TABS: { key: FeedTab; label: string }[] = [
-    { key: 'forYou', label: 'For You' },
-    { key: 'following', label: 'Following' },
-    { key: 'trending', label: 'Trending' },
+  const TABS: { key: FeedTab; label: string; icon: string }[] = [
+    { key: 'forYou', label: 'Keşfet', icon: '✨' },
+    { key: 'following', label: 'Takip', icon: '👥' },
+    { key: 'trending', label: 'Popüler', icon: '🔥' },
   ];
+
+  // Filter posts by search query
+  const filteredPosts = searchQuery.trim()
+    ? posts.filter(p =>
+        (p.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.mealName || '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : posts;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -975,13 +1005,13 @@ export function CommunityScreen() {
           <View style={styles.headerLogoCircle}>
             <Text style={styles.headerLogoText}>N</Text>
           </View>
-          <Text style={styles.headerTitle}>NourishFeed</Text>
+          <Text style={styles.headerTitle}>Topluluk</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <Text style={styles.headerIconText}>🔍</Text>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => { setShowSearch(!showSearch); if (showSearch) setSearchQuery(''); }}>
+            <Text style={styles.headerIconText}>{showSearch ? '✕' : '🔍'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIconBtn}>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowNotifPanel(!showNotifPanel)}>
             <View style={styles.notifBadge} />
             <Text style={styles.headerIconText}>🔔</Text>
           </TouchableOpacity>
@@ -994,6 +1024,46 @@ export function CommunityScreen() {
         </View>
       </View>
 
+      {/* ── Search Bar ── */}
+      {showSearch && (
+        <Animated.View entering={FadeInDown.duration(200)} style={styles.searchBarContainer}>
+          <View style={styles.searchBar}>
+            <Text style={styles.searchBarIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchBarInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Kullanıcı, yemek veya paylaşım ara..."
+              placeholderTextColor={BRAND.textMuted}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Text style={styles.searchBarClear}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+      )}
+
+      {/* ── Notification Panel ── */}
+      {showNotifPanel && (
+        <Animated.View entering={FadeInDown.duration(200)} style={styles.notifPanel}>
+          <View style={styles.notifPanelHeader}>
+            <Text style={styles.notifPanelTitle}>🔔 Bildirimler</Text>
+            <TouchableOpacity onPress={() => setShowNotifPanel(false)}>
+              <Text style={styles.notifPanelClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.notifPanelEmpty}>
+            <Text style={styles.notifPanelEmptyIcon}>🔕</Text>
+            <Text style={styles.notifPanelEmptyText}>Henüz bildirim yok</Text>
+            <Text style={styles.notifPanelEmptyDesc}>Birisi seni takip ettiğinde veya paylaşımına{"\n"}yorum yaptığında burada göreceksin.</Text>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Upload progress */}
       {uploadProgress && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.uploadBanner}>
@@ -1003,7 +1073,7 @@ export function CommunityScreen() {
       )}
 
       <FlatList
-        data={loading ? [] : posts}
+        data={loading ? [] : filteredPosts}
         keyExtractor={item => item.id || Math.random().toString()}
         renderItem={renderPost}
         showsVerticalScrollIndicator={false}
@@ -1033,7 +1103,7 @@ export function CommunityScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>
-                    {tab.label}
+                    {tab.icon} {tab.label}
                   </Text>
                   {activeTab === tab.key && <View style={styles.tabIndicator} />}
                 </TouchableOpacity>
@@ -1899,5 +1969,98 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: BRAND.textSub,
+  },
+
+  // ── Search Bar ──────────────────────────────────────────────────────────
+  searchBarContainer: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    backgroundColor: BRAND.bg,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BRAND.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: BRAND.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  searchBarIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchBarInput: {
+    flex: 1,
+    fontSize: 15,
+    color: BRAND.text,
+    padding: 0,
+  },
+  searchBarClear: {
+    fontSize: 16,
+    color: BRAND.textMuted,
+    paddingLeft: 8,
+  },
+
+  // ── Notification Panel ──────────────────────────────────────────────────
+  notifPanel: {
+    marginHorizontal: Spacing.md,
+    marginVertical: 8,
+    backgroundColor: BRAND.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BRAND.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  notifPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.border,
+  },
+  notifPanelTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: BRAND.text,
+  },
+  notifPanelClose: {
+    fontSize: 18,
+    color: BRAND.textMuted,
+    padding: 4,
+  },
+  notifPanelEmpty: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  notifPanelEmptyIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  notifPanelEmptyText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: BRAND.text,
+    marginBottom: 4,
+  },
+  notifPanelEmptyDesc: {
+    fontSize: 13,
+    color: BRAND.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

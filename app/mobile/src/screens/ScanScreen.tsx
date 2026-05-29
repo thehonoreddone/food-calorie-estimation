@@ -13,13 +13,16 @@ import {
   Platform,
   KeyboardAvoidingView,
   TextInput,
+  Linking,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions, CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import Animated, {
   FadeIn,
+  FadeInDown,
   FadeInUp,
   ZoomIn,
   useSharedValue,
@@ -37,7 +40,7 @@ import { PredictionResponse, ImagePickerResult } from "../types";
 import { useUser } from "../contexts/UserContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors, FontSize, Spacing, BorderRadius } from "../constants/theme";
+import { Colors, FontSize, Spacing, BorderRadius, Shadows } from "../constants/theme";
 import { formatFoodWeight, gramsToOz, type UnitSystem } from "../utils/unitConversion";
 import Slider from "@react-native-community/slider";
 import { barcodeService, BarcodeResult } from "../services/barcodeService";
@@ -231,12 +234,14 @@ const HudOverlay: React.FC<{ active: boolean; detecting: boolean }> = ({ active,
 };
 
 // ─── Main ScanScreen ─────────────────────────────────────────────────────────
-export const ScanScreen: React.FC = () => {
-  // Camera state
-  const [permission, requestPermission] = useCameraPermissions();
+const ScanScreen: React.FC = () => {
+  // Camera permission — use all 3 values from the hook:
+  // [0] permission state, [1] requestPermission (prompts), [2] getPermission (silent check)
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing]  = useState<CameraType>("back");
   const [mode,   setMode]    = useState<ScanMode>("camera");
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   // Detection state
   const [liveResult,       setLiveResult]       = useState<PredictionResponse | null>(null);
@@ -278,6 +283,30 @@ export const ScanScreen: React.FC = () => {
   const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
   const barcodeScannedRef = useRef(false); // prevent duplicate scans
 
+  // Reset scan state when screen regains focus (e.g. phone back button press)
+  useFocusEffect(
+    useCallback(() => {
+      // Only reset if we're showing an old result
+      if (mode !== 'camera' && mode !== 'loading') {
+        setMode('camera'); setFullResult(null); setFullImageUri(null);
+        setLiveResult(null); setCapturedImageUri(null); setError(null);
+        setBarcodeResult(null);
+        barcodeScannedRef.current = false;
+      }
+    }, [])
+  );
+
+  // Re-check camera permission when app returns from background (e.g. after granting in Settings)
+  // Uses getPermission() which is a SILENT check — no prompt dialog, just refreshes the state
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        getPermission();
+      }
+    });
+    return () => subscription.remove();
+  }, [getPermission]);
+
   // Auto-select meal type by time
   useEffect(() => {
     const hour = new Date().getHours();
@@ -310,7 +339,7 @@ export const ScanScreen: React.FC = () => {
 
   // Quick capture for live overlay
   const captureAndDetect = async () => {
-    if (!cameraRef.current || detectingRef.current) return;
+    if (!cameraRef.current || detectingRef.current || !isCameraReady) return;
     detectingRef.current = true;
     setIsDetecting(true);
     try {
@@ -330,20 +359,30 @@ export const ScanScreen: React.FC = () => {
 
   // Manual capture
   const handleCapture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !isCameraReady) return;
     setAutoDetect(false);
-    setMode("loading");
-    setIsAnalyzing(true);
     setError(null);
     try {
+      // Take photo BEFORE switching mode to avoid unmounting the camera mid-capture
       let photo;
       try {
-        photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-      } catch (camErr) {
-        setError("Kamera fotoğraf çekemedi. Kamera izinlerini kontrol edin.");
-        setMode("camera"); setIsAnalyzing(false); return;
+        photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: false });
+      } catch (camErr: any) {
+        console.warn('Camera takePictureAsync error:', camErr?.message || camErr);
+        // Retry once with lower quality
+        try {
+          await new Promise(resolve => setTimeout(resolve, 200)); // Brief delay for camera recovery
+          photo = await cameraRef.current?.takePictureAsync({ quality: 0.5, skipProcessing: false });
+        } catch (retryErr: any) {
+          console.warn('Camera retry also failed:', retryErr?.message || retryErr);
+          setError("Kamera fotoğraf çekemedi. Uygulamayı yeniden başlatmayı deneyin.");
+          return;
+        }
       }
-      if (!photo) { setMode("camera"); setIsAnalyzing(false); return; }
+      if (!photo) return;
+      // NOW switch to loading mode after we have the photo safely
+      setMode("loading");
+      setIsAnalyzing(true);
       const image: ImagePickerResult = { uri: photo.uri, type: "image/jpeg", name: `capture_${Date.now()}.jpg` };
       const result = await predictionService.predict(image, language);
       setFullResult(result);
@@ -354,9 +393,9 @@ export const ScanScreen: React.FC = () => {
       const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
       let errorMessage: string;
       if (axiosErr.code === "ERR_NETWORK" || axiosErr.message?.includes("Network"))
-        errorMessage = "Backend'e bağlanılamıyor.\nAPI: " + process.env.EXPO_PUBLIC_API_URL;
+        errorMessage = "Backend'e bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.";
       else if (axiosErr.code === "ECONNABORTED" || axiosErr.message?.includes("timeout"))
-        errorMessage = "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.";
+        errorMessage = "Analiz zaman aşımına uğradı. Lütfen tekrar deneyin.";
       else if (axiosErr.response?.status === 503)
         errorMessage = "ML modeli henüz yüklenmedi. Birkaç saniye bekleyip tekrar deneyin.";
       else if (axiosErr.response?.status === 500)
@@ -375,6 +414,23 @@ export const ScanScreen: React.FC = () => {
   // Gallery pick
   const handlePickFromGallery = async () => {
     try {
+      // Check & request media library permission explicitly
+      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        if (!canAskAgain) {
+          Alert.alert(
+            'Galeri İzni Gerekli',
+            'Fotoğraf seçebilmek için galeri erişim izni gerekli. Lütfen uygulama ayarlarından izni açın.',
+            [
+              { text: 'İptal', style: 'cancel' },
+              { text: 'Ayarları Aç', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert('İzin Gerekli', 'Galeriden fotoğraf seçebilmek için erişim izni vermeniz gerekiyor.');
+        }
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: false, quality: 0.8 });
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
@@ -394,9 +450,9 @@ export const ScanScreen: React.FC = () => {
       const axiosErr = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string };
       let errorMessage: string;
       if (axiosErr.code === "ERR_NETWORK" || axiosErr.message?.includes("Network"))
-        errorMessage = "Backend'e bağlanılamıyor.\nAPI: " + process.env.EXPO_PUBLIC_API_URL;
+        errorMessage = "Backend'e bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.";
       else if (axiosErr.code === "ECONNABORTED" || axiosErr.message?.includes("timeout"))
-        errorMessage = "İstek zaman aşımına uğradı.";
+        errorMessage = "Analiz zaman aşımına uğradı. Lütfen tekrar deneyin.";
       else if (axiosErr.response?.status === 503)
         errorMessage = "ML modeli henüz yüklenmedi.";
       else if (axiosErr.response?.status === 500)
@@ -507,6 +563,7 @@ export const ScanScreen: React.FC = () => {
   if (!permission) return <SafeAreaView style={styles.centered}><ActivityIndicator size="large" color={SCAN_COLOR} /></SafeAreaView>;
 
   if (!permission.granted) {
+    const canAsk = permission.canAskAgain !== false;
     return (
       <SafeAreaView style={styles.centered}>
         <LinearGradient colors={[Colors.background, Colors.backgroundAlt]} style={StyleSheet.absoluteFill} />
@@ -515,12 +572,24 @@ export const ScanScreen: React.FC = () => {
             <Text style={styles.permissionIconEmoji}>📷</Text>
           </View>
           <Text style={styles.permissionTitle}>Kamera İzni Gerekli</Text>
-          <Text style={styles.permissionDesc}>Yemekleri AI ile taramak için kamera erişimine ihtiyacımız var</Text>
-          <TouchableOpacity onPress={requestPermission} activeOpacity={0.8}>
-            <LinearGradient colors={[SCAN_COLOR, "#65a30d"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.permissionBtn}>
-              <Text style={styles.permissionBtnText}>İzin Ver</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <Text style={styles.permissionDesc}>
+            {canAsk
+              ? 'Yemekleri AI ile taramak için kamera erişimine ihtiyacımız var'
+              : 'Kamera izni kalıcı olarak reddedildi. Lütfen uygulama ayarlarından kamera iznini açın.'}
+          </Text>
+          {canAsk ? (
+            <TouchableOpacity onPress={requestPermission} activeOpacity={0.8}>
+              <LinearGradient colors={[SCAN_COLOR, "#65a30d"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.permissionBtn}>
+                <Text style={styles.permissionBtnText}>İzin Ver</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => Linking.openSettings()} activeOpacity={0.8}>
+              <LinearGradient colors={['#f59e0b', '#d97706']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.permissionBtn}>
+                <Text style={styles.permissionBtnText}>⚙️  Ayarları Aç</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </SafeAreaView>
     );
@@ -594,15 +663,12 @@ export const ScanScreen: React.FC = () => {
   // ─── Loading ─────────────────────────────────────────────────────────────
   if (mode === "loading") {
     return (
-      <View style={{ flex: 1, backgroundColor: "#000" }}>
-        <LinearGradient colors={["#000", Colors.background]} style={StyleSheet.absoluteFill} />
-        {/* Scanning brackets even for loading */}
-        <ScanningBrackets active={true} />
-        <HudOverlay active={true} detecting={true} />
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <LinearGradient colors={[Colors.background, Colors.backgroundAlt]} style={StyleSheet.absoluteFill} />
         <SafeAreaView style={styles.loadingCenter}>
           <Animated.View entering={ZoomIn.duration(600)} style={styles.loadingCard}>
             <ActivityIndicator size="large" color={SCAN_COLOR} />
-            <Text style={styles.loadingTitle}>Yemek Analiz Ediliyor</Text>
+            <Text style={styles.loadingTitle}>Analiz Ediliyor</Text>
             <Text style={styles.loadingDesc}>Yapay zeka çalışıyor{"\n"}Bu biraz zaman alabilir</Text>
             <TouchableOpacity onPress={handleReset} style={styles.cancelBtn}>
               <Text style={styles.cancelBtnText}>İptal Et</Text>
@@ -737,23 +803,12 @@ export const ScanScreen: React.FC = () => {
               </View>
             </SafeAreaView>
 
-            {/* AI Analysis Complete badge + Source badge */}
+            {/* AI Analysis Complete badge */}
             <Animated.View entering={FadeIn.delay(200).duration(400)} style={styles.premiumAiBadgeWrap}>
               <View style={styles.premiumAiBadge}>
                 <View style={styles.premiumAiDot} />
                 <Text style={styles.premiumAiBadgeText}>
                   {fullResult.source === 'barcode' ? 'Barkod Veritabanı' : 'AI Analiz Tamamlandı'}
-                </Text>
-              </View>
-              {/* Source badge */}
-              <View style={[
-                styles.sourceBadge,
-                fullResult.source === 'barcode'  ? styles.sourceBadgeBarcode :
-                isGeminiSource                   ? styles.sourceBadgeGemini  :
-                                                   styles.sourceBadgeModel,
-              ]}>
-                <Text style={styles.sourceBadgeText}>
-                  {fullResult.source === 'barcode' ? '📦 Barkod' : isGeminiSource ? '✨ Gemini' : '🤖 Model'}
                 </Text>
               </View>
             </Animated.View>
@@ -764,22 +819,13 @@ export const ScanScreen: React.FC = () => {
             {/* Handle */}
             <View style={styles.premiumHandle} />
 
-            {/* Food name + confidence */}
+            {/* Food name */}
             <View style={styles.premiumFoodRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.premiumFoodName}>{displayName}</Text>
                 {fullResult.food_name_tr && displayNameEn !== displayName && (
                   <Text style={styles.premiumFoodSlug}>{displayNameEn}</Text>
                 )}
-                {fullResult.description ? (
-                  <Text style={styles.premiumFoodSub} numberOfLines={2}>{fullResult.description}</Text>
-                ) : (
-                  <Text style={styles.premiumFoodSub}>AI Tarafından Tespit Edildi</Text>
-                )}
-              </View>
-              <View style={styles.premiumConfidenceBadge}>
-                <Text style={styles.premiumConfidenceIcon}>✦</Text>
-                <Text style={styles.premiumConfidenceText}>{confidencePct}% Doğruluk</Text>
               </View>
             </View>
 
@@ -951,7 +997,9 @@ export const ScanScreen: React.FC = () => {
       try {
         let publicImageUrl: string | undefined;
         if (fullImageUri) {
-          try { publicImageUrl = await uploadCommunityImage(profile.uid, fullImageUri); } catch {}
+          try { publicImageUrl = await uploadCommunityImage(profile.uid, fullImageUri); } catch (imgErr) {
+            console.warn('[Share] Community image upload failed:', imgErr);
+          }
         }
         await createCommunityPost(
           profile.uid, profile.name || "Kullanıcı",
@@ -1061,13 +1109,15 @@ export const ScanScreen: React.FC = () => {
   // ─── Camera view ──────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing={facing}
+        onCameraReady={() => setIsCameraReady(true)}
+      />
 
-      {/* HUD overlay (grid, vignette, telemetry) */}
-      <HudOverlay active={autoDetect} detecting={isDetecting} />
-
-      {/* Scanning brackets */}
-      <ScanningBrackets active={autoDetect} />
+      {/* Minimal vignette only — brackets and HUD removed */}
+      <View style={styles.vignette} pointerEvents="none" />
 
       {/* Safe area overlay — top controls */}
       <SafeAreaView edges={["top"]} style={styles.cameraOverlay}>
@@ -1075,7 +1125,7 @@ export const ScanScreen: React.FC = () => {
         <Animated.View entering={FadeInDown.duration(500)} style={styles.topBar}>
           <TouchableOpacity
             style={styles.topBarBtn}
-            onPress={() => setFacing((f) => (f === "back" ? "front" : "back"))}
+            onPress={() => { setIsCameraReady(false); setFacing((f) => (f === "back" ? "front" : "back")); }}
           >
             <Text style={styles.topBarBtnText}>🔄</Text>
           </TouchableOpacity>
@@ -1165,7 +1215,7 @@ export const ScanScreen: React.FC = () => {
           </TouchableOpacity>
 
           {/* Shutter */}
-          <TouchableOpacity onPress={handleCapture} activeOpacity={0.7} style={styles.captureRingOuter}>
+          <TouchableOpacity onPress={handleCapture} activeOpacity={0.7} style={[styles.captureRingOuter, !isCameraReady && { opacity: 0.4 }]}>
             <LinearGradient
               colors={[SCAN_COLOR, "#65a30d"]}
               style={styles.captureRingGrad}
@@ -2238,4 +2288,3 @@ const styles = StyleSheet.create({
 });
 
 export default ScanScreen;
-export { ScanScreen };

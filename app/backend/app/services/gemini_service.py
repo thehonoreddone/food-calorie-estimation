@@ -93,6 +93,7 @@ Consider this hint but trust your own visual analysis over the hint if they conf
 - International branded foods: Fanta, Coca-Cola, Pepsi, Lay's, Pringles, Nutella, KitKat, etc.
 - All global cuisines: Italian, Japanese, Chinese, Mexican, Indian, American, etc.
 - Restaurant meals, street food, home-cooked meals, packaged snacks, beverages
+- Water brands: Erikli, Pinar Su, Hayat Su, Saka, Damla, Nestle Pure Life, Ayas, etc.
 {hint_section}
 Analyze this food/beverage image carefully and identify what it is.
 
@@ -105,12 +106,57 @@ IMPORTANT RULES:
 - If image has multiple foods, analyze the PRIMARY/LARGEST item
 - For food_name_local: provide the food name in **{language_name}** language
 
+CRITICAL — BEVERAGE & PACKAGED DRINK DETECTION:
+You MUST carefully read any labels, text, or volume markings visible on bottles and containers:
+1. **READ THE LABEL**: Look for volume info on the bottle/can (e.g., "5L", "1.5L", "500ml", "330ml", "200ml")
+2. **Water density**: 1 ml = 1 gram. So: 5L water = 5000g, 1.5L = 1500g, 500ml = 500g, 330ml = 330g
+3. **Common bottle sizes**: Recognize standard bottle sizes visually:
+   - Small water bottle: 200ml = 200g
+   - Standard water bottle: 500ml = 500g
+   - Medium water bottle: 1L = 1000g, 1.5L = 1500g
+   - Large water bottle/jug: 5L = 5000g, 10L = 10000g
+   - Water dispenser bottle: 19L = 19000g
+4. **For water**: calories = 0, protein = 0, carbs = 0, fat = 0, fiber = 0
+5. **For sugary drinks**: estimate based on volume × sugar content per 100ml
+6. **Brand detection**: Read brand names on bottles (Erikli, Pinar, Hayat, Saka, Ayas, Nestle, etc.)
+7. **Estimate fill level**: If bottle appears half-full, use half the labeled volume
+
+CRITICAL — PORTION SIZE DETECTION:
+You MUST carefully analyze the ACTUAL portion visible in the image. Pay close attention to:
+1. **Single piece vs whole**: Is this a single slice/piece or the entire item?
+   - A single pizza slice: ~80-130g, ~200-300 kcal
+   - A whole pizza (8 slices): ~600-1000g, ~1600-2400 kcal
+   - A single börek piece: ~80-120g vs a whole tray: ~800-1500g
+   - A single cookie: ~30-50g vs a plate of cookies: ~200-400g
+2. **Count visible pieces**: If you see 2 slices, estimate for 2 slices, not 1 and not a whole pizza.
+3. **Use visual cues for scale**: Compare food to plate size, hand, utensils, or other reference objects.
+4. **Close-up photos are NOT bigger portions**: A zoomed-in photo of a small portion does not mean more food.
+5. **Describe the portion in food_name**: Include portion info in the name, e.g.:
+   - "pizza_slice" NOT "pizza" (if it's a single slice)
+   - "water_5L" NOT "water" (if it's a 5L bottle)
+   - "cola_330ml_can" NOT "cola" (if it's a 330ml can)
+
+WEIGHT REFERENCE TABLE (use these as guidelines):
+- Single pizza slice: 80-130g | Whole pizza: 600-1000g
+- Single börek piece: 80-120g | Börek tray portion: 200-350g
+- Rice plate (1 serving): 150-250g | Pilav tabağı: 200-300g
+- Soup bowl (1 serving): 250-350g
+- Salad plate (1 serving): 150-250g
+- Bread slice: 25-40g | Pide piece: 100-200g
+- Steak/meat piece: 100-200g | Chicken breast: 120-180g
+- Pasta plate (1 serving): 200-350g
+- Single köfte: 30-50g | Plate of köfte (4-6): 150-300g
+- Water 500ml: 500g | Water 1.5L: 1500g | Water 5L: 5000g
+- Cola/Fanta can 330ml: 330g | Pet bottle 1L: 1000g | Pet bottle 2.5L: 2500g
+- Tea glass (typical): 100-150ml | Coffee cup: 150-200ml
+- Ayran: 200ml = 200g | Large ayran: 300ml = 300g
+
 Return a JSON object with EXACTLY this format (pure JSON, no markdown, no code blocks):
 {{
     "is_food": true,
-    "food_name_en": "food name in English lowercase with underscores (e.g. torku_favorimo_cake)",
-    "food_name_tr": "Türkçe yemek/ürün adı (örn: Torku Favorimo Kek)",
-    "food_name_local": "Food name in {language_name} (e.g. for English: Torku Favorimo Cake)",
+    "food_name_en": "food name in English lowercase with underscores — INCLUDE portion/volume info (e.g. water_5L, cola_330ml_can, pizza_slice)",
+    "food_name_tr": "Türkçe yemek/ürün adı — porsiyon/hacim bilgisi dahil (örn: 5L Su, 330ml Cola, Pizza Dilimi)",
+    "food_name_local": "Food name in {language_name} — include portion/volume info",
     "confidence": 0.92,
     "portion_grams": 45,
     "calories": 185,
@@ -120,15 +166,19 @@ Return a JSON object with EXACTLY this format (pure JSON, no markdown, no code b
     "carbs_g": 25.0,
     "fat_g": 8.0,
     "fiber_g": 0.5,
-    "description": "Brief description of the food/product in {language_name}",
+    "portion_count": 1,
+    "portion_type": "bottle",
+    "description": "Brief description of the food/product in {language_name}, including portion size and brand if visible",
     "is_branded": false
 }}
 
 Calorie estimation rules:
 - If NOT food/drink: set is_food=false, all numbers=0
+- Plain water: ALWAYS 0 kcal regardless of volume
 - Cola/Fanta 330ml can: ~139-148 kcal
 - Torku Favorimo kek (mini): ~160-200 kcal per piece
-- Always estimate realistic calories based on visible portion size
+- Always estimate realistic calories based on ACTUAL VISIBLE portion size
+- A close-up photo does NOT mean more food — estimate based on what the food actually IS
 - Provide min/max range of ±20%
 """
 
@@ -221,46 +271,63 @@ class GeminiService:
                 image = image.convert("RGB")
             
             # Call Gemini with retry for rate limits (429)
+            # Timeout: 30s max to avoid mobile client timing out (120s)
             import asyncio
             loop = asyncio.get_event_loop()
             
             use_new_sdk = getattr(self, '_use_new_sdk', False)
+            GEMINI_TIMEOUT = 30  # seconds — mobile has 120s, leave margin
             
-            max_retries = 3
+            max_retries = 2
             response = None
             for attempt in range(max_retries):
                 try:
                     if use_new_sdk and hasattr(self, '_client'):
-                        # New google.genai SDK
-                        response = await loop.run_in_executor(
-                            None,
-                            lambda: self._client.models.generate_content(
-                                model=self.model,
-                                contents=[prompt, image],
-                                config=genai_types.GenerateContentConfig(
-                                    temperature=0.1,
-                                    max_output_tokens=600,
+                        # New google.genai SDK — disable thinking for speed
+                        response = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                lambda: self._client.models.generate_content(
+                                    model=self.model,
+                                    contents=[prompt, image],
+                                    config=genai_types.GenerateContentConfig(
+                                        temperature=0.1,
+                                        max_output_tokens=600,
+                                        thinking_config=genai_types.ThinkingConfig(
+                                            thinking_budget=0,
+                                        ),
+                                    )
                                 )
-                            )
+                            ),
+                            timeout=GEMINI_TIMEOUT,
                         )
                     else:
                         # Legacy google.generativeai SDK
-                        response = await loop.run_in_executor(
-                            None,
-                            lambda: self.model.generate_content(
-                                [prompt, image],
-                                generation_config={
-                                    "temperature": 0.1,
-                                    "max_output_tokens": 600,
-                                }
-                            )
+                        response = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                lambda: self.model.generate_content(
+                                    [prompt, image],
+                                    generation_config={
+                                        "temperature": 0.1,
+                                        "max_output_tokens": 600,
+                                    }
+                                )
+                            ),
+                            timeout=GEMINI_TIMEOUT,
                         )
                     break  # Success, exit retry loop
+                except asyncio.TimeoutError:
+                    logger.warning(f"[Gemini] Timeout ({GEMINI_TIMEOUT}s) on attempt {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        continue
+                    logger.warning("[Gemini] All attempts timed out, skipping")
+                    return None
                 except Exception as retry_err:
                     err_str = str(retry_err).lower()
                     is_rate_limit = "429" in err_str or "resource_exhausted" in err_str or "rate" in err_str
                     if is_rate_limit and attempt < max_retries - 1:
-                        wait_time = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                        wait_time = 2 ** (attempt + 1)  # 2s, 4s
                         logger.warning(
                             f"[Gemini] Rate limited (attempt {attempt + 1}/{max_retries}), "
                             f"retrying in {wait_time}s..."

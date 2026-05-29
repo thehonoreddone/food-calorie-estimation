@@ -79,18 +79,20 @@ function MealRow({
   unitSystem,
   onDelete,
   index,
+  colors,
 }: {
   item: MealEntry;
   unitSystem: UnitSystem;
   onDelete: (id: string) => void;
   index: number;
+  colors: ReturnType<typeof getColors>;
 }) {
   const meta = MEAL_META[item.mealType] ?? MEAL_META.snack;
   const weightDisplay = formatFoodWeight(item.weight ?? 0, unitSystem);
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 40).duration(350)}>
-      <View style={styles.mealRow}>
+      <View style={[styles.mealRow, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
         {/* Left: meal type icon */}
         <View style={[styles.mealIconBubble, { backgroundColor: meta.bg }]}>
           <Text style={styles.mealIconText}>{meta.icon}</Text>
@@ -98,7 +100,7 @@ function MealRow({
 
         {/* Middle: name + macros */}
         <View style={styles.mealInfo}>
-          <Text style={styles.mealName} numberOfLines={1}>{item.foodName}</Text>
+          <Text style={[styles.mealName, { color: colors.text }]} numberOfLines={1}>{item.foodName}</Text>
           <View style={styles.pillsRow}>
             <View style={[styles.pill, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
               <Text style={[styles.pillText, { color: '#ef4444' }]}>🔥 {item.calories} kcal</Text>
@@ -112,7 +114,7 @@ function MealRow({
               </View>
             )}
           </View>
-          <Text style={styles.mealTypeLabel}>{meta.label}</Text>
+          <Text style={[styles.mealTypeLabel, { color: colors.textDim }]}>{meta.label}</Text>
         </View>
 
         {/* Right: delete */}
@@ -130,10 +132,10 @@ function MealRow({
 
 // ─── Section Header ──────────────────────────────────────────────────────────
 
-function SectionHeader({ title, totalCal }: { title: string; totalCal: number }) {
+function SectionHeader({ title, totalCal, colors }: { title: string; totalCal: number; colors: ReturnType<typeof getColors> }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
       <View style={styles.sectionCalBadge}>
         <Text style={styles.sectionCalText}>🔥 {totalCal} kcal</Text>
       </View>
@@ -143,12 +145,12 @@ function SectionHeader({ title, totalCal }: { title: string; totalCal: number })
 
 // ─── Empty State ─────────────────────────────────────────────────────────────
 
-function EmptyHistory() {
+function EmptyHistory({ colors }: { colors: ReturnType<typeof getColors> }) {
   return (
     <Animated.View entering={FadeIn.duration(600)} style={styles.emptyWrap}>
       <Text style={styles.emptyEmoji}>🍽️</Text>
-      <Text style={styles.emptyTitle}>Henüz kayıt yok</Text>
-      <Text style={styles.emptySubtitle}>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>Henüz kayıt yok</Text>
+      <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
         Yemek taradıkça geçmişin burada görünür.{'\n'}Hadi ilk öğününü ekle!
       </Text>
     </Animated.View>
@@ -159,7 +161,8 @@ function EmptyHistory() {
 
 export const HistoryScreen: React.FC = () => {
   const { profile } = useUser();
-  const { settings } = useTheme();
+  const { settings, isDark } = useTheme();
+  const C = getColors(isDark);
   const unitSystem: UnitSystem = settings.unitSystem ?? 'metric';
 
   const [meals, setMeals]       = useState<MealEntry[]>([]);
@@ -241,32 +244,32 @@ export const HistoryScreen: React.FC = () => {
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]} edges={['top']}>
       {/* Header */}
       <LinearGradient
-        colors={['#0D1F15', '#111']}
+        colors={isDark ? ['#0D1F15', '#111'] : [C.surface, C.background]}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>📋 Öğün Geçmişi</Text>
-        <Text style={styles.headerSub}>{meals.length} kayıt</Text>
+        <Text style={[styles.headerTitle, { color: C.text }]}>📋 Öğün Geçmişi</Text>
+        <Text style={[styles.headerSub, { color: C.textMuted }]}>{meals.length} kayıt</Text>
       </LinearGradient>
 
       {/* Stats bar */}
       {meals.length > 0 && (
-        <Animated.View entering={FadeIn.duration(400)} style={styles.statsBar}>
+        <Animated.View entering={FadeIn.duration(400)} style={[styles.statsBar, { backgroundColor: C.surfaceElevated, borderColor: C.surfaceBorder }]}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats.totalMeals}</Text>
-            <Text style={styles.statLabel}>Öğün</Text>
+            <Text style={[styles.statValue, { color: C.accent }]}>{stats.totalMeals}</Text>
+            <Text style={[styles.statLabel, { color: C.textMuted }]}>Öğün</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: C.surfaceBorder }]} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats.avgCal}</Text>
-            <Text style={styles.statLabel}>Ort. kcal/gün</Text>
+            <Text style={[styles.statValue, { color: C.accent }]}>{stats.avgCal}</Text>
+            <Text style={[styles.statLabel, { color: C.textMuted }]}>Ort. kcal/gün</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: C.surfaceBorder }]} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats.totalProt}g</Text>
-            <Text style={styles.statLabel}>Top. Protein</Text>
+            <Text style={[styles.statValue, { color: C.accent }]}>{stats.totalProt}g</Text>
+            <Text style={[styles.statLabel, { color: C.textMuted }]}>Top. Protein</Text>
           </View>
         </Animated.View>
       )}
@@ -279,11 +282,13 @@ export const HistoryScreen: React.FC = () => {
             onPress={() => setFilter(opt.key)}
             style={[
               styles.filterChip,
-              filter === opt.key && styles.filterChipActive,
+              { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' },
+              filter === opt.key && { backgroundColor: C.accent, borderColor: C.accent },
             ]}
           >
             <Text style={[
               styles.filterChipText,
+              { color: C.textMuted },
               filter === opt.key && styles.filterChipTextActive,
             ]}>
               {opt.label}
@@ -295,11 +300,11 @@ export const HistoryScreen: React.FC = () => {
       {/* Content */}
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={NEON} />
-          <Text style={styles.loadingText}>Yükleniyor...</Text>
+          <ActivityIndicator size="large" color={C.accent} />
+          <Text style={[styles.loadingText, { color: C.textMuted }]}>Yükleniyor...</Text>
         </View>
       ) : sections.length === 0 ? (
-        <EmptyHistory />
+        <EmptyHistory colors={C} />
       ) : (
         <SectionList
           sections={sections}
@@ -310,10 +315,11 @@ export const HistoryScreen: React.FC = () => {
               unitSystem={unitSystem}
               onDelete={handleDelete}
               index={index}
+              colors={C}
             />
           )}
           renderSectionHeader={({ section }) => (
-            <SectionHeader title={section.title} totalCal={section.totalCal} />
+            <SectionHeader title={section.title} totalCal={section.totalCal} colors={C} />
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -322,8 +328,8 @@ export const HistoryScreen: React.FC = () => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={NEON}
-              colors={[NEON]}
+              tintColor={C.accent}
+              colors={[C.accent]}
             />
           }
         />
