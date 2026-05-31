@@ -139,7 +139,7 @@ function MacroPill({ label, value, color }: MacroPillProps) {
 // ─── Stories Row (Daily Goals Hit) ──────────────────────────────────────────
 
 interface StoryUser {
-  id: string;
+  id?: string;
   name: string;
   uid: string;
   streak?: number;
@@ -188,7 +188,7 @@ function StoriesRow({ currentUserId, onUserPress }: StoriesRowProps) {
           const avatarColors = getAvatarColors(user.name);
           return (
             <TouchableOpacity
-              key={user.id}
+              key={user.uid}
               style={styles.storyItem}
               onPress={() => onUserPress(user.uid)}
               activeOpacity={0.7}

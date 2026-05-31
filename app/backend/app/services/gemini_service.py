@@ -73,6 +73,60 @@ class GeminiFoodResult:
 
 # ── Base prompt template ──────────────────────────────────────────────────────
 
+def clean_food_name(name: str) -> str:
+    """
+    Cleans up verbose food names by removing portion, volume, or container suffixes.
+    e.g. 'Yeşil Erik Kasesi' -> 'Yeşil Erik'
+         'Pizza Dilimi' -> 'Pizza'
+         '330ml Kola' -> 'Kola'
+    """
+    if not name:
+        return name
+    
+    # Remove volume/weight indicators (e.g., 330ml, 5L, 200g, 1.5l, etc.)
+    name = re.sub(r'\b\d+(?:\.\d+)?\s*(?:ml|l|g|gr|gram|kg|oz|cl)\b', '', name, flags=re.IGNORECASE)
+    
+    # Suffix patterns (in both Turkish and English) to remove
+    suffixes = [
+        r'\s*kasesi\b', r'\s*kase\b',
+        r'\s*dilimi\b', r'\s*dilim\b',
+        r'\s*porsiyonu\b', r'\s*porsiyon\b',
+        r'\s*şişesi\b', r'\s*şişe\b',
+        r'\s*kutusu\b', r'\s*kutu\b',
+        r'\s*tabağı\b', r'\s*tabak\b',
+        r'\s*bardağı\b', r'\s*bardak\b',
+        r'\s*adet\b', r'\s*tava\b',
+        r'\s*bowl\b', r'\s*slice\b',
+        r'\s*cup\b', r'\s*bottle\b',
+        r'\s*can\b', r'\s*plate\b',
+        r'\s*portion\b', r'\s*glass\b'
+    ]
+    
+    for pattern in suffixes:
+        name = re.sub(pattern, '', name, flags=re.IGNORECASE)
+    
+    # Clean up double spaces and strip
+    name = re.sub(r'\s+', ' ', name).strip()
+    
+    # Capitalize first letter of each word (Title Case)
+    if name:
+        words = name.split()
+        capitalized_words = []
+        for word in words:
+            if not word:
+                continue
+            if word[0] == 'i':
+                cap_word = 'İ' + word[1:]
+            elif word[0] == 'ı':
+                cap_word = 'I' + word[1:]
+            else:
+                cap_word = word[0].upper() + word[1:]
+            capitalized_words.append(cap_word)
+        name = " ".join(capitalized_words)
+        
+    return name
+
+
 def _build_prompt(language: str = "tr", hint_class: Optional[str] = None, hint_confidence: Optional[float] = None) -> str:
     """
     Build a single unified prompt with dynamic language support.
@@ -131,10 +185,8 @@ You MUST carefully analyze the ACTUAL portion visible in the image. Pay close at
 2. **Count visible pieces**: If you see 2 slices, estimate for 2 slices, not 1 and not a whole pizza.
 3. **Use visual cues for scale**: Compare food to plate size, hand, utensils, or other reference objects.
 4. **Close-up photos are NOT bigger portions**: A zoomed-in photo of a small portion does not mean more food.
-5. **Describe the portion in food_name**: Include portion info in the name, e.g.:
-   - "pizza_slice" NOT "pizza" (if it's a single slice)
-   - "water_5L" NOT "water" (if it's a 5L bottle)
-   - "cola_330ml_can" NOT "cola" (if it's a 330ml can)
+5. **Portion details in food_name_en only**: ONLY include portion, volume, or container info in `food_name_en` (e.g., "pizza_slice", "water_5L", "cola_330ml_can") for internal classification.
+6. **Keep food_name_tr and food_name_local clean and simple**: Do NOT include portion, volume, packaging, or serving vessel details (such as "Bowl", "Slice", "Can", "Bottle", "Kasesi", "Dilimi", "Kutusu", "Şişesi", "Porsiyon", "Bardak") in the Turkish and local food names. They must be clean, simple, and represent only the food/beverage itself (e.g. "Yeşil Erik" instead of "Yeşil Erik Kasesi", "Pizza" instead of "Domatesli Ve Baharatlı Pizza Dilimi", "Su" instead of "5L Su", "Kola" instead of "330ml Kola").
 
 WEIGHT REFERENCE TABLE (use these as guidelines):
 - Single pizza slice: 80-130g | Whole pizza: 600-1000g
@@ -155,8 +207,8 @@ Return a JSON object with EXACTLY this format (pure JSON, no markdown, no code b
 {{
     "is_food": true,
     "food_name_en": "food name in English lowercase with underscores — INCLUDE portion/volume info (e.g. water_5L, cola_330ml_can, pizza_slice)",
-    "food_name_tr": "Türkçe yemek/ürün adı — porsiyon/hacim bilgisi dahil (örn: 5L Su, 330ml Cola, Pizza Dilimi)",
-    "food_name_local": "Food name in {language_name} — include portion/volume info",
+    "food_name_tr": "Türkçe sade yemek/ürün adı — porsiyon, kap, kutu, hacim veya dilim bilgisi İÇERMEYEN, doğrudan yemeğin genel ismi (örn: 'Su' değil '5L Su' değil, 'Kola' değil '330ml Kola' değil, 'Pizza' değil 'Pizza Dilimi' değil, sadece 'Pizza' veya 'Yeşil Erik')",
+    "food_name_local": "Food name in {language_name} — clean and simple food name, do NOT include portion, container, or volume info",
     "confidence": 0.92,
     "portion_grams": 45,
     "calories": 185,
@@ -391,8 +443,8 @@ class GeminiService:
             
             result = GeminiFoodResult(
                 food_class=data.get("food_name_en", "unknown").lower().replace(" ", "_").replace("-", "_"),
-                food_class_tr=data.get("food_name_tr", "bilinmiyor"),
-                food_class_local=data.get("food_name_local", data.get("food_name_tr", "unknown")),
+                food_class_tr=clean_food_name(data.get("food_name_tr", "bilinmiyor")),
+                food_class_local=clean_food_name(data.get("food_name_local", data.get("food_name_tr", "unknown"))),
                 confidence=float(data.get("confidence", 0.7)),
                 portion_grams=float(data.get("portion_grams", 200)),
                 calories=float(data.get("calories", 200)),

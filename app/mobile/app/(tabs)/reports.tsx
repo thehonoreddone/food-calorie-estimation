@@ -336,7 +336,6 @@ function CaloriesReport({
         <MealRow icon="🟧" label="Akşam Yemeği" pct={mealBreakdown.dinner.pct} cal={mealBreakdown.dinner.cal} color="#f97316" colors={colors} />
         <MealRow icon="🟪" label="Aperatifler/Diğer" pct={mealBreakdown.snack.pct} cal={mealBreakdown.snack.cal} color="#8b5cf6" colors={colors} />
       </View>
-      </View>
     </View>
   );
 }

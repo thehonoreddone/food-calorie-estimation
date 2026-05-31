@@ -342,7 +342,10 @@ export async function scheduleSmartAdvice(payload: SmartAdvicePayload): Promise<
         sound: 'default',
         ...(Platform.OS === 'android' ? { channelId: 'meal-reminders' } : {}),
       },
-      trigger: tomorrow,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: tomorrow,
+      },
     });
     console.log('[Notifications] Smart advice scheduled:', payload.type);
   } catch (e) {
